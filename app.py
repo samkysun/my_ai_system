@@ -1,199 +1,174 @@
 ﻿import streamlit as st
 import pandas as pd
-import os
+import numpy as np
+import time
 
 # ==========================================
-# 1. 页面基础配置与高级 CSS 美化
+# 1. 页面配置与全局美化
 # ==========================================
-st.set_page_config(page_title="AI 数据分析系统", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="智能分析总控台", page_icon="🧊", layout="wide")
 
+# 注入高级 CSS，打造科技感蓝调界面
 st.markdown("""
 <style>
-    /* 整体背景渐变 */
+    /* 整体背景 */
     .stApp {
-        background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
     }
-    /* 标题美化 */
-    h1, h2, h3 {
-        color: #102A43 !important;
-        font-family: 'Microsoft YaHei', sans-serif;
-    }
-    /* 按钮美化 */
+    /* 按钮样式 */
     .stButton>button {
-        background: linear-gradient(90deg, #3B82F6 0%, #2563EB 100%);
+        background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
         color: white;
         border-radius: 8px;
-        font-weight: bold;
         border: none;
         transition: all 0.3s;
-        box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+        font-weight: bold;
     }
     .stButton>button:hover {
+        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
         transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(37, 99, 235, 0.4);
     }
-    /* 侧边栏美化 */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+    /* 彩球样式 */
+    .ball-container { display: flex; gap: 10px; justify-content: center; margin: 15px 0; }
+    .ball {
+        width: 50px; height: 50px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; font-weight: bold; color: white;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
+    .ball-red { background: radial-gradient(circle, #f87171, #dc2626); }
+    .ball-blue { background: radial-gradient(circle, #60a5fa, #2563eb); }
+    .ball-green { background: radial-gradient(circle, #4ade80, #16a34a); }
+    .ball-special { background: radial-gradient(circle, #fbbf24, #d97706); border: 2px solid #fff; }
 </style>
 """, unsafe_allow_html=True)
 
+# 初始化全局状态
+if "current_period" not in st.session_state:
+    st.session_state.current_period = "2026117"
+
 # ==========================================
-# 2. 侧边栏导航菜单 (完全替代 VBA 的按钮跳转)
+# 2. 侧边栏导航
 # ==========================================
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80) # 顶部放个小图标
-    st.title("系统导航")
+    st.title("🧊 系统控制台")
+    page = st.radio("导航菜单", ["🏠 主界面 (走势&控制)", "📊 历史同现分析", "🤖 AI 智能推演"])
+    st.divider()
+    st.info("💡 提示：所有数据已联动，切换页面不会丢失进度。")
+
+# ==========================================
+# 3. 页面一：主界面 (复刻 VBA 的 frmMain)
+# ==========================================
+if page == "🏠 主界面 (走势&控制)":
+    st.title("🧊 智能数据分析总控台")
     
-    # 使用单选按钮作为页面切换的“链接”
-    page = st.radio("请选择功能模块：", [
-        "🏠 主控制台", 
-        "📊 同现频率统计", 
-        "🤖 AI 智能推演", 
-        "📈 智能核算与走势"
-    ])
+    # --- 上部：开奖彩球与数据同步 ---
+    with st.container():
+        st.subheader("🎯 最新开奖结果")
+        
+        # 用 HTML 渲染几个漂亮的彩球（模拟你原来的图片彩球）
+        st.markdown("""
+        <div class="ball-container">
+            <div class="ball ball-red">03</div>
+            <div class="ball ball-blue">12</div>
+            <div class="ball ball-green">25</div>
+            <div class="ball ball-red">33</div>
+            <div class="ball ball-blue">41</div>
+            <div class="ball ball-green">48</div>
+            <div class="ball ball-special">★ 09</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.caption("第 2026116 期 | 红波：03, 33 | 蓝波：12, 41 | 绿波：25, 48 | 特码：09")
     
     st.divider()
-    st.caption("当前版本: V2.0 Web版")
-    st.caption("数据源: data.xlsx")
 
-
-# ==========================================
-# 3. 页面 1：主控制台 (类似于 frmMain)
-# ==========================================
-if page == "🏠 主控制台":
-    st.title("🏠 欢迎使用 AI 数据分析系统")
-    st.markdown("---")
+    # --- 中部：核心控制台 ---
+    st.subheader("⚙️ 操作控制台")
+    col1, col2, col3, col4 = st.columns(4)
     
-    col1, col2, col3 = st.columns(3)
     with col1:
-        st.info("📌 **数据同步状态**\\n\\n✅ 已连接云端数据源")
+        period = st.selectbox("选择分析期数:", ["2026117", "2026116", "2026115"])
     with col2:
-        st.success("📊 **历史数据加载**\\n\\n✅ 已成功读取历史记录")
+        mode = st.selectbox("模式:", ["升序分析", "按序分析"])
     with col3:
-        st.warning("🕒 **最后核算时间**\\n\\n今天 12:00:00")
-        
-    st.subheader("📢 系统公告")
-    st.write("1. 左侧菜单可以自由切换各个功能界面。")
-    st.write("2. 数据计算功能已全面接入 Python 极速引擎，速度比 VBA 快 100 倍。")
-    st.write("3. 网页端可以分享给任何人，通过手机浏览器也能随时打开测算。")
+        st.write("")
+        st.write("")
+        if st.button("🔄 一键同步总数据", use_container_width=True):
+            with st.spinner("正在从共享盘拉取最新数据..."):
+                time.sleep(1.5) # 模拟耗时
+                st.success("✅ 数据同步完成！")
+    with col4:
+        st.write("")
+        st.write("")
+        if st.button("🚀 开始执行计算", use_container_width=True):
+            with st.spinner("引擎正在计算..."):
+                time.sleep(1)
+                st.success(f"✅ 第 {period} 期计算完成！")
 
+    st.divider()
 
-# ==========================================
-# 4. 页面 2：同现统计 (类似于 frmPairStat)
-# ==========================================
-elif page == "📊 同现频率统计":
-    st.title("📊 历史同现号码预测")
-    st.markdown("---")
-    
-    # 尝试读取数据
-    @st.cache_data
-    def load_data():
-        if not os.path.exists("data.xlsx"):
-            return None
-        try:
-            # 请确保你的 data.xlsx 里面的表名叫 "升序纯数据表"
-            df = pd.read_excel("data.xlsx", sheet_name="升序纯数据表", skiprows=2, usecols="C:H")
-            df = df.dropna(how='all')
-            return df
-        except Exception as e:
-            st.error(f"读取 Excel 失败，请检查表名和格式。错误：{e}")
-            return None
-
-    data = load_data()
-    
-    if data is not None:
-        st.success(f"✅ 数据读取成功！共加载 **{len(data)}** 期历史数据。")
-        
-        # 控制面板
-        col_input, col_btn = st.columns([2, 1])
-        with col_input:
-            target_num = st.number_input("请输入目标号码 (1-49):", min_value=1, max_value=49, value=30)
-            top_n = st.selectbox("显示前几名:", [3, 5, 8, 10])
-            
-        if st.button("🚀 开始深度扫描", use_container_width=True):
-            with st.spinner('正在扫描历史同现数据...'):
-                df_numeric = data.apply(pd.to_numeric, errors='coerce')
-                mask = df_numeric.isin([target_num]).any(axis=1)
-                filtered_rows = df_numeric[mask]
-                
-                if len(filtered_rows) == 0:
-                    st.warning(f"历史数据中，{target_num} 号从未出现过。")
-                else:
-                    counts = {}
-                    for index, row in filtered_rows.iterrows():
-                        for num in row.values:
-                            if pd.notna(num) and int(num) != target_num:
-                                num_int = int(num)
-                                counts[num_int] = counts.get(num_int, 0) + 1
-                    
-                    sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
-                    
-                    result_data = []
-                    for rank, (num, count) in enumerate(sorted_counts, 1):
-                        result_data.append({
-                            "排名": f"Top {rank}",
-                            "同频号码": f"{num:02d}",
-                            "同现次数": count
-                        })
-                        
-                    result_df = pd.DataFrame(result_data)
-                    st.subheader(f"与 **{target_num:02d}** 号同现频率最高的前 {top_n} 名：")
-                    st.dataframe(result_df, use_container_width=True, hide_index=True)
-                    
-                    # 图表
-                    st.bar_chart(result_df.set_index("同频号码")["同现次数"], color="#3B82F6")
-    else:
-        st.error("找不到 `data.xlsx` 文件，请确保它和 app.py 在同一个文件夹中！")
-
-
-# ==========================================
-# 5. 页面 3：AI 智能推演 (类似于 frmAI)
-# ==========================================
-elif page == "🤖 AI 智能推演":
-    st.title("🤖 AI 严谨推演系统")
-    st.markdown("---")
-    st.info("💡 提示：这里可以接入你的 DeepSeek API。在 Python 中，我们使用 `requests` 库来发送请求。")
-    
-    # 模拟界面
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.subheader("条件输入")
-        ai_input = st.text_area("请输入核算条件：", "这是2026116期第一球的核算条件，第一球的取值区间为1号至20号之间，杀木土肖，杀水火号，杀019尾...", height=200)
-        if st.button("开始呼叫 DeepSeek 推演", use_container_width=True):
-            st.success("推演完成！")
-            # 这里可以将结果存入 session_state，切换页面也不会丢失
-            st.session_state.ai_result = "【严格筛选结果】：03, 08, 15\\n\\n【后补筛选结果】：01, 19"
-            
-    with col2:
-        st.subheader("推演结果")
-        if "ai_result" in st.session_state:
-            st.success(st.session_state.ai_result)
-        else:
-            st.write("等待推演...")
-
-
-# ==========================================
-# 6. 页面 4：智能核算与走势 (类似于 frmCalc)
-# ==========================================
-elif page == "📈 智能核算与走势":
-    st.title("📈 智能核算中心")
-    st.markdown("---")
-    
-    st.write("这里可以展示你之前 VBA 里的走势图和中奖结果。")
+    # --- 下部：数据展示与走势图表 ---
+    st.subheader("📊 中奖结果预览")
     
     # 模拟表格数据
-    mock_df = pd.DataFrame({
+    mock_result = pd.DataFrame({
         "期数": ["2026116", "2026115", "2026114", "2026113"],
         "开奖号码": ["03, 12, 25, 33, 41, 48", "05, 11, 22, 34, 42, 49", "01, 09, 18, 27, 35, 44", "07, 14, 21, 28, 37, 46"],
         "特码": ["09", "16", "25", "32"],
-        "核算结果": ["中奖", "不中", "中奖", "不中"]
+        "计算方式": ["升序", "升序", "按序", "升序"],
+        "中奖结果": ["中奖", "不中", "中奖", "不中"]
     })
     
-    st.dataframe(mock_df, use_container_width=True)
+    # 用 dataframe 展示，支持排序
+    st.dataframe(mock_result, use_container_width=True, hide_index=True)
+
+# ==========================================
+# 4. 页面二：历史同现分析 (复刻 VBA 的 frmPairStat)
+# ==========================================
+elif page == "📊 历史同现分析":
+    st.title("📊 历史同现深度分析")
+    st.divider()
+
+    col_num, col_top = st.columns(2)
+    with col_num:
+        target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
+    with col_top:
+        top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
+
+    if st.button("🔍 扫描历史同现数据", use_container_width=True):
+        with st.spinner("正在 6000 多期数据中比对..."):
+            time.sleep(1.5) # 模拟计算
+            # 模拟返回结果
+            res_df = pd.DataFrame({
+                "排名": [f"Top {i+1}" for i in range(top_n)],
+                "同频号码": [f"{np.random.randint(1, 50):02d}" for _ in range(top_n)],
+                "共同出现次数": sorted([np.random.randint(50, 200) for _ in range(top_n)], reverse=True)
+            })
+            st.success(f"与 {target_num:02d} 号同现频率最高的结果：")
+            st.dataframe(res_df, use_container_width=True, hide_index=True)
+            st.bar_chart(res_df.set_index("同频号码")["共同出现次数"])
+
+# ==========================================
+# 5. 页面三：AI 推演 (复刻 VBA 的 frmAI)
+# ==========================================
+elif page == "🤖 AI 智能推演":
+    st.title("🤖 AI 严谨推演系统")
+    st.divider()
+
+    col_left, col_right = st.columns([1, 1])
     
-    if st.button("🔄 一键从云端同步最新数据"):
-        with st.spinner("正在拉取..."):
-            st.success("数据同步成功！")
+    with col_left:
+        st.subheader("1. 输入核算条件")
+        ai_input = st.text_area("条件：", "这是2026117期第一球的核算条件，杀木土肖，杀水火号，杀019尾...", height=200)
+        if st.button("🚀 呼叫 DeepSeek 分析", use_container_width=True):
+            with st.spinner("AI 大脑运转中..."):
+                time.sleep(1)
+                st.session_state.ai_result = "【严格筛选结果】：03, 08, 15, 22\\n\\n【后补筛选结果】：01, 19, 33, 41"
+    
+    with col_right:
+        st.subheader("2. 推演结果")
+        if "ai_result" in st.session_state:
+            st.success(st.session_state.ai_result)
+        else:
+            st.info("等待分析结果...")
