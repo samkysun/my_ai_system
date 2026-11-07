@@ -5,7 +5,6 @@ import time
 import os
 import itertools
 from collections import Counter
-import requests
 
 
 # ==========================================
@@ -647,7 +646,6 @@ def render_ai():
     with col3: order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
 
     st.divider()
-    
     col_left, col_right = st.columns([1.2, 1])
 
     with col_left:
@@ -681,20 +679,11 @@ def render_ai():
                             
         with b2:
             if st.button("🗑️ 清理勾选", use_container_width=True):
-                # 1. 清空自定义状态
                 st.session_state.ai_checks = {}
                 st.session_state.ai_api_result = "等待推演..."
                 st.session_state.ai_ball_result = []
-                
-                # 2. 遍历并删除所有 Checkbox 绑定的底层 key
-                keys_to_delete = [k for k in st.session_state.keys() if k.startswith("ai_chk_")]
-                for k in keys_to_delete:
-                    del st.session_state[k]
-                    
-                # 3. 刷新页面
                 st.rerun()
 
-        # 展示推演结果 (彩球)
         if st.session_state.ai_ball_result:
             st.markdown("### 🎯 AI 提取的推演号码")
             balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
@@ -702,70 +691,63 @@ def render_ai():
                 balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
             balls_html += '</div>'
             st.markdown(balls_html, unsafe_allow_html=True)
-    with col_right:
-    # 这是一个回调占位函数
-    def toggle_cond(k): 
-        pass
-        
-    with st.expander("生肖与五行", expanded=True):
-        cols = st.columns(3)
-        for idx, key in enumerate(["金肖", "木肖", "水肖", "火肖", "土肖", "红肖", "蓝肖", "绿肖"]):
-            with cols[idx % 3]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-                
-    with st.expander("尾数杀号"):
-        cols = st.columns(5)
-        for i in range(10):
-            key = f"{i}尾"
-            with cols[i % 5]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-                
-    with st.expander("生肖专属"):
-        cols = st.columns(4)
-        for idx, z in enumerate(["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]):
-            key = f"杀{z}"
-            with cols[idx % 4]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-                
-    with st.expander("门数 / 段数 / 合数"):
-        cols = st.columns(4)
-        for i in range(1, 6):
-            key = f"{i}门"
-            with cols[(i-1) % 4]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-        for i in range(1, 8):
-            key = f"{i}段"
-            with cols[(i+4) % 4]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-        for i in range(1, 14):
-            key = f"{i:02d}合"
-            with cols[(i+11) % 4]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-                
-    with st.expander("波色 / 波单双"):
-        cols = st.columns(3)
-        for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
-            with cols[idx % 3]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
-                
-    with st.expander("其他属性"):
-        cols = st.columns(3)
-        others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
-        for idx, key in enumerate(others):
-            with cols[idx % 3]: 
-                val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
-                st.session_state.ai_checks[key] = val
 
-st.divider()
-st.markdown("### 📝 AI 完整推演结果")
-st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
+    with col_right:
+        def toggle_cond(k): pass
+        with st.expander("生肖与五行", expanded=True):
+            cols = st.columns(3)
+            for idx, key in enumerate(["金肖", "木肖", "水肖", "火肖", "土肖", "红肖", "蓝肖", "绿肖"]):
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+        with st.expander("尾数杀号"):
+            cols = st.columns(5)
+            for i in range(10):
+                key = f"{i}尾"
+                with cols[i % 5]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+        with st.expander("生肖专属"):
+            cols = st.columns(4)
+            for idx, z in enumerate(["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]):
+                key = f"杀{z}"
+                with cols[idx % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+        with st.expander("门数 / 段数 / 合数"):
+            cols = st.columns(4)
+            for i in range(1, 6):
+                key = f"{i}门"
+                with cols[(i-1) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+            for i in range(1, 8):
+                key = f"{i}段"
+                with cols[(i+4) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+            for i in range(1, 14):
+                key = f"{i:02d}合"
+                with cols[(i+11) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+        with st.expander("波色 / 波单双"):
+            cols = st.columns(3)
+            for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+        with st.expander("其他属性"):
+            cols = st.columns(3)
+            others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
+            for idx, key in enumerate(others):
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
+
+    st.divider()
+    st.markdown("### 📝 AI 完整推演结果")
+    st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
 # ==========================================
 # 主路由
 # ==========================================
