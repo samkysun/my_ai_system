@@ -215,7 +215,6 @@ def login_page():
                         new_user = pd.DataFrame({'username': [reg_user], 'password': [hashlib.sha256(reg_pwd.encode()).hexdigest()]})
                         pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
                         st.success("注册成功！请去左侧登录。")
-
 # ==========================================
 # 页面 2：主控制台
 # ==========================================
@@ -225,25 +224,33 @@ def render_console(df_data):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
 
+    # 🚨 关键：必须保证有这一行来生成期数列表
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
-    try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
-    except: unique_periods.sort(reverse=True)
+    try: 
+        unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+    except: 
+        unique_periods.sort(reverse=True)
     
     # 1. 控制面板
-col1, col2 = st.columns(2)
-with col1: 
-    selected_period = st.selectbox("🎯 选择期数：", unique_periods)
-with col2: 
-    analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
+    col1, col2 = st.columns(2)
+    with col1: 
+        selected_period = st.selectbox("🎯 选择期数：", unique_periods)
+    with col2: 
+        analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
+    
+    st.write("") 
+    
+    # 按钮布局
+    b1, b2, b3, b4, b5 = st.columns(5)
+    start_btn = b1.button("🚀 批量20组分析", use_container_width=True, type="primary", help="自动生成20组三码并扫描历史，提取最高频的前7套下期数字")
+    result_btn = b2.button("🏆 中奖结果", use_container_width=True)
+    clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
+    sync_btn = b4.button("🔄 同步数据", use_container_width=True)
+    trend_btn = b5.button("📈 走势图", use_container_width=True)
 
-# 按钮布局：去掉原来的空行对齐，改为同一行排布
-b1, b2, b3, b4, b5 = st.columns(5)
-start_btn = b1.button("🚀 批量20组分析(提取前7套)", use_container_width=True, type="primary", help="自动生成20组三码并扫描历史，提取最高频的前7套下期数字")
-result_btn = b2.button("🏆 中奖结果", use_container_width=True)
-clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
-sync_btn = b4.button("🔄 同步数据", use_container_width=True)
-trend_btn = b5.button("📈 走势图", use_container_width=True)
-
+    # ==========================================
+    # 接着往下就是你之前替换的“2. 彩球展示”代码了
+    # ==========================================
     # 2. 彩球展示 (自动计算下一期)
 st.divider()
 df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
