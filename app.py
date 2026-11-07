@@ -218,206 +218,113 @@ def main_app():
                     st.dataframe(result_df, use_container_width=True, hide_index=True)
                     st.bar_chart(result_df.set_index("同频号码")["同现次数"])
 
-    # ==========================================
-    # 页面 3：AI 智能推演 (100%完整版复选框)
-    # ==========================================
-    elif menu == "🤖 AI 智能推演":
-        st.title("🤖 AI 严谨推演系统")
-        
-        if "selected_period" not in st.session_state: st.session_state.selected_period = ""
-        if "selected_ball" not in st.session_state: st.session_state.selected_ball = "第一球"
-        if "order_mode" not in st.session_state: st.session_state.order_mode = "升序"
-            
-        period_list = []
-        if df_data is not None and not isinstance(df_data, str):
-            raw_periods = df_data.iloc[:, 18].apply(clean_period).tolist()
-            period_list = list(set([p for p in raw_periods if p != ""]))
-            try: period_list.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
-            except: period_list.sort(reverse=True)
-        if not period_list: period_list = ["暂无数据"]
-            
-        # 顶部控制栏
-        st.markdown("### 🎯 核算条件生成")
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-        with col1:
-            selected_period = st.selectbox("选择期数：", period_list, index=0)
-            st.session_state.selected_period = selected_period
-        with col2:
-            selected_ball = st.selectbox("选择球号：", [f"第{i}球" for i in range(1, 8)], index=0)
-            st.session_state.selected_ball = selected_ball
-        with col3:
-            order_mode = st.radio("计算方式：", ["升序", "按序"], horizontal=True)
-            st.session_state.order_mode = order_mode
-        with col4:
-            st.write(""); st.write("")
-            if st.button("🗑️ 一键清空", use_container_width=True):
-                for key in st.session_state.keys():
-                    if key.startswith("chk_"): st.session_state[key] = False
-                st.session_state.ai_input_text = ""
-                st.session_state.ai_result_text = "等待推演..."
-                st.rerun()
+    # ---------- 页面 3：AI 智能推演 ----------
+elif menu == "?? AI 智能推演":
+    st.title("?? AI 严谨推演系统")
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        period = st.selectbox("期数：", ["2026117", "2026116"])
+    with c2:
+        ball = st.selectbox("球号：", [f"第{i}球" for i in range(1, 8)])
+    with c3:
+        mode = st.radio("模式：", ["升序", "按序"], horizontal=True)
+    with c4:
+        if st.button("一键清空"):
+            st.session_state.ai_input_text = ""
+            st.session_state.ai_result_text = "等待推演..."
+            st.rerun()
 
-        def get_prefix(period, ball, mode):
-            interval = ""
-            if mode == "按序": interval = f"{ball}的取值区间为1号至49号之间，"
-            else:
-                ball_ranges = {
-                    "第一球": "第一球的取值区间为1号至20号之间，", "第二球": "第二球的取值区间为2号至25号之间，",
-                    "第三球": "第三球的取值区间为3号至30号之间，", "第四球": "第四球的取值区间为4号至40号之间，",
-                    "第五球": "第五球的取值区间为15号至48号之间，", "第六球": "第六球的取值区间为25号至49号之间，",
-                    "第七球": "第七球的取值区间为1号至49号之间，"
-                }
-                interval = ball_ranges.get(ball, "")
-            return f"这是{period}期{mode}{ball}的核算条件，{interval}"
+    # ★ 这里是所有的分类和对应的号码文本，完全和你 VBA 一模一样
+    CHECKBOX_MAP = {
+        "0尾": "杀0尾（10、20、30、40），", "1尾": "杀1尾（01、11、21、31、41），", "2尾": "杀2尾（02、12、22、32、42），",
+        "3尾": "杀3尾（03、13、23、33、43），", "4尾": "杀4尾（04、14、24、34、44），", "5尾": "杀5尾（05、15、25、35、45），",
+        "6尾": "杀6尾（06、16、26、36、46），", "7尾": "杀7尾（07、17、27、37、47），", "8尾": "杀8尾（08、18、28、38、48），", "9尾": "杀9尾（09、19、29、39、49），",
+        "金号": "杀金号（04、05、12、13、26、27、34、35、42、43），", "木号": "杀木号（08、09、16、17、24、25、38、39、46、47），",
+        "水号": "杀水号（01、14、15、22、23、30、31、44、45），", "火号": "杀火号（02、03、10、11、18、19、32、33、40、41、48、49），", "土号": "杀土号（06、07、20、21、28、29、36、37），",
+        "红波": "杀红波（01、02、07、08、12、13、18、19、23、24、29、30、34、35、40、45、46），", 
+        "蓝波": "杀蓝波（03、04、09、10、14、15、20、25、26、31、36、37、41、42、47、48），", 
+        "绿波": "杀绿波（05、06、11、16、17、21、22、27、28、32、33、38、39、43、44、49），",
+        "杀鼠": "杀鼠，", "杀牛": "杀牛，", "杀虎": "杀虎，", "杀兔": "杀兔，", "杀龙": "杀龙，", "杀蛇": "杀蛇，",
+        "杀马": "杀马，", "杀羊": "杀羊，", "杀猴": "杀猴，", "杀鸡": "杀鸡，", "杀狗": "杀狗，", "杀猪": "杀猪，",
+        "金肖": "杀金肖（猴鸡），", "木肖": "杀木肖（虎兔），", "水肖": "杀水肖（鼠猪），", "火肖": "杀火肖（蛇马），", "土肖": "杀土肖（牛龙羊狗），",
+        "阴天": "杀阴天（马龙猪），", "阳天": "杀阳天（兔牛猴），", "阴地": "杀阴地（蛇鼠狗），", "阳地": "杀阳地（虎鸡羊），",
+        "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），",
+        "家臣": "杀家臣（马牛猪狗），", "美女": "杀美女（蛇兔鸡羊），", "君王": "杀君王（龙虎），", "恶人": "杀恶人（鼠猴），",
+        "东": "杀东（虎兔龙），", "南": "杀南（蛇马羊），", "西": "杀西（猴鸡狗），", "北": "杀北（猪鼠牛），",
+        "3余0": "杀3余0（杀0，3，6，9尾），", "3余1": "杀3余1（杀1，4，7尾），", "3余2": "杀3余2（杀2，5，8尾），",
+        "1门": "杀1门（01、02、03、04、05、06、07、08、09），", "2门": "杀2门（10、11、12、13、14、15、16、17、18、19），",
+        "3门": "杀3门（20、21、22、23、24、25、26、27、28、29），", "4门": "杀4门（30、31、32、33、34、35、36、37、38、39），", "5门": "杀5门（40、41、42、43、44、45、46、47、48、49），",
+        "1段": "杀1段（01、02、03、04、05、06、07），", "2段": "杀2段（08、09、10、11、12、13、14），", "3段": "杀3段（15、16、17、18、19、20、21），",
+        "4段": "杀4段（22、23、24、25、26、27、28），", "5段": "杀5段（29、30、31、32、33、34、35），", "6段": "杀6段（36、37、38、39、40、41、42），", "7段": "杀7段（43、44、45、46、47、48、49），",
+        "01合": "杀01合（01、10），", "02合": "杀02合（02、11、20），", "03合": "杀03合（03、12、21、30），",
+        "04合": "杀04合（04、13、22、31、40），", "05合": "杀05合（05、14、23、32、41），", "06合": "杀06合（06、15、24、33、42），",
+        "07合": "杀07合（07、16、25、34、43），", "08合": "杀08合（08、17、26、35、44），", "09合": "杀09合（09、18、27、36、45），",
+        "10合": "杀10合（19、28、37、46），", "11合": "杀11合（29、38、47），", "12合": "杀12合（39、48），", "13合": "杀13合（49），",
+        "红肖": "杀红肖（马兔鼠鸡），", "蓝肖": "杀蓝肖（虎猴蛇猪），", "绿肖": "杀绿肖（龙狗牛羊），",
+        "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），",
+        "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），",
+        "红波单": "杀红波单（01、07、13、19、23、29、35、45），", "红波双": "杀红波双（02、08、12、18、24、30、34、40、46），",
+        "蓝波单": "杀蓝波单（03、09、15、25、31、37、41、47），", "蓝波双": "杀蓝波双（04、10、14、20、26、36、42、48），",
+        "绿波单": "杀绿波单（05、11、17、21、27、33、39、43、49），", "绿波双": "杀绿波双（06、16、22、28、32、38、44），",
+        "金尾": "杀金尾（04、09、14、19、24、29、34、39、44、49），", "木尾": "杀木尾（03、08、13、18、23、28、33、38、43、48），",
+        "水尾": "杀水尾（01、06、11、16、21、26、31、36、41、46），", "火尾": "杀火尾（02、07、12、17、22、27、32、37、42、47），", "土尾": "杀土尾（05、10、15、20、25、30、35、40、45），"
+    }
 
-        # ============================================================
-        # ★ 一字不落的超全字典
-        # ============================================================
-        checkbox_map = {
-            # 1. 尾数
-            "0尾": "杀0尾（10、20、30、40），", "1尾": "杀1尾（01、11、21、31、41），", "2尾": "杀2尾（02、12、22、32、42），",
-            "3尾": "杀3尾（03、13、23、33、43），", "4尾": "杀4尾（04、14、24、34、44），", "5尾": "杀5尾（05、15、25、35、45），",
-            "6尾": "杀6尾（06、16、26、36、46），", "7尾": "杀7尾（07、17、27、37、47），", "8尾": "杀8尾（08、18、28、38、48），", "9尾": "杀9尾（09、19、29、39、49），",
-            # 2. 号五行
-            "金号": "杀金号（04、05、12、13、26、27、34、35、42、43），", "木号": "杀木号（08、09、16、17、24、25、38、39、46、47），",
-            "水号": "杀水号（01、14、15、22、23、30、31、44、45），", "火号": "杀火号（02、03、10、11、18、19、32、33、40、41、48、49），", 
-            "土号": "杀土号（06、07、20、21、28、29、36、37），",
-            # 3. 波色
-            "红波": "杀红波（01、02、07、08、12、13、18、19、23、24、29、30、34、35、40、45、46），", 
-            "蓝波": "杀蓝波（03、04、09、10、14、15、20、25、26、31、36、37、41、42、47、48），", 
-            "绿波": "杀绿波（05、06、11、16、17、21、22、27、28、32、33、38、39、43、44、49），",
-            # 4. 生肖
-            "杀鼠": "杀鼠，", "杀牛": "杀牛，", "杀虎": "杀虎，", "杀兔": "杀兔，", "杀龙": "杀龙，", "杀蛇": "杀蛇，",
-            "杀马": "杀马，", "杀羊": "杀羊，", "杀猴": "杀猴，", "杀鸡": "杀鸡，", "杀狗": "杀狗，", "杀猪": "杀猪，",
-            # 5. 五行肖
-            "金肖": "杀金肖（猴鸡），", "木肖": "杀木肖（虎兔），", "水肖": "杀水肖（鼠猪），", "火肖": "杀火肖（蛇马），", "土肖": "杀土肖（牛龙羊狗），",
-            # 6. 常规属性
-            "阴天": "杀阴天（马龙猪），", "阳天": "杀阳天（兔牛猴），", "阴地": "杀阴地（蛇鼠狗），", "阳地": "杀阳地（虎鸡羊），",
-            "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），",
-            "家臣": "杀家臣（马牛猪狗），", "美女": "杀美女（蛇兔鸡羊），", "君王": "杀君王（龙虎），", "恶人": "杀恶人（鼠猴），",
-            "东": "杀东（虎兔龙），", "南": "杀南（蛇马羊），", "西": "杀西（猴鸡狗），", "北": "杀北（猪鼠牛），",
-            "3余0": "杀3余0（杀0，3，6，9尾），", "3余1": "杀3余1（杀1，4，7尾），", "3余2": "杀3余2（杀2，5，8尾），",
-            # 7. 门数
-            "1门": "杀1门（01、02、03、04、05、06、07、08、09），", "2门": "杀2门（10、11、12、13、14、15、16、17、18、19），",
-            "3门": "杀3门（20、21、22、23、24、25、26、27、28、29），", "4门": "杀4门（30、31、32、33、34、35、36、37、38、39），", "5门": "杀5门（40、41、42、43、44、45、46、47、48、49），",
-            # 8. 段数
-            "1段": "杀1段（01、02、03、04、05、06、07），", "2段": "杀2段（08、09、10、11、12、13、14），", "3段": "杀3段（15、16、17、18、19、20、21），",
-            "4段": "杀4段（22、23、24、25、26、27、28），", "5段": "杀5段（29、30、31、32、33、34、35），", "6段": "杀6段（36、37、38、39、40、41、42），", "7段": "杀7段（43、44、45、46、47、48、49），",
-            # 9. 合数
-            "01合": "杀01合（01、10），", "02合": "杀02合（02、11、20），", "03合": "杀03合（03、12、21、30），",
-            "04合": "杀04合（04、13、22、31、40），", "05合": "杀05合（05、14、23、32、41），", "06合": "杀06合（06、15、24、33、42），",
-            "07合": "杀07合（07、16、25、34、43），", "08合": "杀08合（08、17、26、35、44），", "09合": "杀09合（09、18、27、36、45），",
-            "10合": "杀10合（19、28、37、46），", "11合": "杀11合（29、38、47），", "12合": "杀12合（39、48），", "13合": "杀13合（49），",
-            # 10. 红蓝绿肖
-            "红肖": "杀红肖（马兔鼠鸡），", "蓝肖": "杀蓝肖（虎猴蛇猪），", "绿肖": "杀绿肖（龙狗牛羊），",
-            # 11. 琴棋书画
-            "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），",
-            # 12. 福禄寿
-            "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），",
-            # 13. 波单双
-            "红波单": "杀红波单（01、07、13、19、23、29、35、45），", "红波双": "杀红波双（02、08、12、18、24、30、34、40、46），",
-            "蓝波单": "杀蓝波单（03、09、15、25、31、37、41、47），", "蓝波双": "杀蓝波双（04、10、14、20、26、36、42、48），",
-            "绿波单": "杀绿波单（05、11、17、21、27、33、39、43、49），", "绿波双": "杀绿波双（06、16、22、28、32、38、44），",
-            # 14. 五行尾
-            "金尾": "杀金尾（04、09、14、19、24、29、34、39、44、49），", "木尾": "杀木尾（03、08、13、18、23、28、33、38、43、48），",
-            "水尾": "杀水尾（01、06、11、16、21、26、31、36、41、46），", "火尾": "杀火尾（02、07、12、17、22、27、32、37、42、47），", "土尾": "杀土尾（05、10、15、20、25、30、35、40、45），"
-        }
+    def toggle_chk(label):
+        txt = CHECKBOX_MAP[label]
+        if st.checkbox(label):
+            if txt not in st.session_state.ai_input_text:
+                st.session_state.ai_input_text += txt
+        else:
+            st.session_state.ai_input_text = st.session_state.ai_input_text.replace(txt, "")
 
-        def handle_checkbox(label, text_to_add):
-            chk_key = f"chk_{label}"
-            if st.checkbox(label, key=chk_key):
-                if text_to_add not in st.session_state.ai_input_text:
-                    st.session_state.ai_input_text += text_to_add
-            else:
-                st.session_state.ai_input_text = st.session_state.ai_input_text.replace(text_to_add, "")
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.text_area("条件输入：", value=st.session_state.ai_input_text, height=250)
+        st.text_area("推演结果：", value=st.session_state.ai_result_text, height=250, disabled=True)
+        if st.button("?? 开始推演", use_container_width=True):
+            st.session_state.ai_result_text = "推演完成！"
+            st.rerun()
 
-        st.divider()
-        col_left, col_right = st.columns([1.2, 1], gap="large")
-
-        # ---------------- 左侧 ----------------
-        with col_left:
-            current_prefix = get_prefix(selected_period, selected_ball, order_mode)
-            if current_prefix not in st.session_state.ai_input_text:
-                st.session_state.ai_input_text = current_prefix + st.session_state.ai_input_text.replace(current_prefix, "")
-
-            st.subheader("📝 核算条件输入")
-            user_input = st.text_area("生成的条件：", value=st.session_state.ai_input_text, height=250)
-            if user_input != st.session_state.ai_input_text: st.session_state.ai_input_text = user_input
-
-            st.subheader("🧠 分析结果")
-            st.text_area("推演结果：", value=st.session_state.ai_result_text, height=300, disabled=True)
-            
-            if st.button("🚀 呼叫 DeepSeek 推演", use_container_width=True, type="primary"):
-                with st.spinner("AI 深度推演中..."):
-                    time.sleep(1.5)
-                    st.session_state.ai_result_text = "【严格筛选结果】：03, 08, 15, 22\\n\\n【后补筛选结果】：01, 19, 33, 41"
-                    st.rerun()
-# ---------------- 右侧 ----------------
-        with col_right:
-            st.subheader("🎯 快捷条件勾选")
-            
-            with st.expander("🔴 生肖与五行", expanded=True):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    handle_checkbox("金肖", checkbox_map["金肖"]); handle_checkbox("木肖", checkbox_map["木肖"]); handle_checkbox("水肖", checkbox_map["水肖"])
-                with c2:
-                    handle_checkbox("火肖", checkbox_map["火肖"]); handle_checkbox("土肖", checkbox_map["土肖"]); handle_checkbox("红肖", checkbox_map["红肖"])
-                with c3:
-                    handle_checkbox("蓝肖", checkbox_map["蓝肖"]); handle_checkbox("绿肖", checkbox_map["绿肖"])
-                
-            with st.expander("🌈 波色 / 单双 / 五行号"):
-                b1, b2, b3 = st.columns(3)
-                with b1:
-                    handle_checkbox("红波", checkbox_map["红波"]); handle_checkbox("红波单", checkbox_map["红波单"]); handle_checkbox("红波双", checkbox_map["红波双"])
-                with b2:
-                    handle_checkbox("蓝波", checkbox_map["蓝波"]); handle_checkbox("蓝波单", checkbox_map["蓝波单"]); handle_checkbox("蓝波双", checkbox_map["蓝波双"])
-                with b3:
-                    handle_checkbox("绿波", checkbox_map["绿波"]); handle_checkbox("绿波单", checkbox_map["绿波单"]); handle_checkbox("绿波双", checkbox_map["绿波双"])
-                st.divider()
-                b4, b5 = st.columns(2)
-                with b4: handle_checkbox("金号", checkbox_map["金号"]); handle_checkbox("木号", checkbox_map["木号"]); handle_checkbox("水号", checkbox_map["水号"])
-                with b5: handle_checkbox("火号", checkbox_map["火号"]); handle_checkbox("土号", checkbox_map["土号"])
-
-            with st.expander("🔢 尾数 / 五行尾"):
-                t1, t2 = st.columns(2)
-                with t1:
-                    for i in range(10): handle_checkbox(f"{i}尾", checkbox_map[f"{i}尾"])
-                with t2:
-                    handle_checkbox("金尾", checkbox_map["金尾"]); handle_checkbox("木尾", checkbox_map["木尾"]); handle_checkbox("水尾", checkbox_map["水尾"]); handle_checkbox("火尾", checkbox_map["火尾"]); handle_checkbox("土尾", checkbox_map["土尾"])
-
-            with st.expander("📦 门数 / 段数 / 合数"):
-                d_cols = st.columns(3)
-                with d_cols[0]:
-                    st.write("**门数**")
-                    for i in range(1, 6): handle_checkbox(f"{i}门", checkbox_map[f"{i}门"])
-                with d_cols[1]:
-                    st.write("**段数**")
-                    for i in range(1, 8): handle_checkbox(f"{i}段", checkbox_map[f"{i}段"])
-                with d_cols[2]:
-                    st.write("**合数**")
-                    for i in range(1, 14): handle_checkbox(f"{i:02d}合", checkbox_map[f"{i:02d}合"])
-
-            with st.expander("🎭 生肖专属 / 琴棋书画 / 福禄寿"):
-                z1, z2 = st.columns(2)
-                with z1:
-                    st.write("**十二生肖**")
-                    for idx, z in enumerate(["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]):
-                        handle_checkbox(f"杀{z}", checkbox_map[f"杀{z}"])
-                with z2:
-                    st.write("**其他分类**")
-                    handle_checkbox("书肖", checkbox_map["书肖"]); handle_checkbox("琴肖", checkbox_map["琴肖"]); handle_checkbox("棋肖", checkbox_map["棋肖"]); handle_checkbox("画肖", checkbox_map["画肖"])
-                    handle_checkbox("福肖", checkbox_map["福肖"]); handle_checkbox("禄肖", checkbox_map["禄肖"]); handle_checkbox("寿肖", checkbox_map["寿肖"])
-
-            with st.expander("✨ 阴阳 / 人物 / 方位 / 大小"):
-                o1, o2 = st.columns(2)
-                with o1:
-                    handle_checkbox("阴天", checkbox_map["阴天"]); handle_checkbox("阳天", checkbox_map["阳天"]); handle_checkbox("阴地", checkbox_map["阴地"]); handle_checkbox("阳地", checkbox_map["阳地"])
-                    handle_checkbox("大肖", checkbox_map["大肖"]); handle_checkbox("中肖", checkbox_map["中肖"]); handle_checkbox("小肖", checkbox_map["小肖"])
-                with o2:
-                    handle_checkbox("家臣", checkbox_map["家臣"]); handle_checkbox("美女", checkbox_map["美女"]); handle_checkbox("君王", checkbox_map["君王"]); handle_checkbox("恶人", checkbox_map["恶人"])
-                    handle_checkbox("东", checkbox_map["东"]); handle_checkbox("南", checkbox_map["南"]); handle_checkbox("西", checkbox_map["西"]); handle_checkbox("北", checkbox_map["北"])
-                    handle_checkbox("3余0", checkbox_map["3余0"]); handle_checkbox("3余1", checkbox_map["3余1"]); handle_checkbox("3余2", checkbox_map["3余2"])
-
+    with col_right:
+        with st.expander("?? 生肖与五行", expanded=True):
+            cols = st.columns(3)
+            for idx, key in enumerate(["金肖", "木肖", "水肖", "火肖", "土肖", "红肖", "蓝肖", "绿肖"]):
+                with cols[idx % 3]:
+                    toggle_chk(key)
+        with st.expander("?? 尾数杀号"):
+            cols = st.columns(5)
+            for i in range(10):
+                with cols[i % 5]:
+                    toggle_chk(f"{i}尾")
+        with st.expander("?? 生肖专属"):
+            cols = st.columns(4)
+            for idx, z in enumerate(["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]):
+                with cols[idx % 4]:
+                    toggle_chk(f"杀{z}")
+        with st.expander("?? 门数 / 段数 / 合数"):
+            cols = st.columns(4)
+            for i in range(1, 6):
+                with cols[(i-1) % 4]:
+                    toggle_chk(f"{i}门")
+            for i in range(1, 8):
+                with cols[(i+4) % 4]:
+                    toggle_chk(f"{i}段")
+            for i in range(1, 14):
+                with cols[(i+11) % 4]:
+                    toggle_chk(f"{i:02d}合")
+        with st.expander("?? 波色 / 波单双"):
+            cols = st.columns(3)
+            for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
+                with cols[idx % 3]:
+                    toggle_chk(key)
+        with st.expander("? 其他属性"):
+            cols = st.columns(3)
+            others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
+            for idx, key in enumerate(others):
+                with cols[idx % 3]:
+                    toggle_chk(key)
 # ==========================================
 # 5. 路由控制
 # ==========================================
