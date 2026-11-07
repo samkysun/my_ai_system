@@ -89,12 +89,14 @@ def calculate_linkage(df_data, target_period, mode):
         
     base_idx = matched.index[0]
     current_row = matched.iloc[0]
+    
+    # 读取当前期的 6 个平码和 1 个特码
     base_nums = [int(clean_period(current_row.iloc[i])) for i in range(19, 25) if pd.notna(current_row.iloc[i]) and clean_period(current_row.iloc[i]) != ""]
+    special_num = int(clean_period(current_row.iloc[25])) if pd.notna(current_row.iloc[25]) and clean_period(current_row.iloc[25]) != "" else None
     
     if len(base_nums) < 6: return None, None, "基准期开奖号码不足6个"
         
-    combos_str = generate_20_combos(base_nums)
-    
+    # 判断升降序
     try:
         is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
     except:
@@ -108,35 +110,74 @@ def calculate_linkage(df_data, target_period, mode):
         end_idx = base_idx - 1
         
     if start_idx > end_idx: return None, None, "基准期附近没有可匹配的历史数据"
-        
+
     triggers = []
-    next_nums_list = []
-    
-    for idx in range(start_idx, end_idx + 1):
-        row_nums = [int(clean_period(df_data.iloc[idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[idx, j]) and clean_period(df_data.iloc[idx, j]) != ""]
-        row_period = clean_period(df_data.iloc[idx, 18])
+    total_counter = Counter() # 核心：用于累计多套或单套的频次
+
+    if mode == "单排分析":
+        # ============== 单排：一套组合直接跑 ==============
+        combos_str = generate_20_combos(base_nums)
         
-        for combo_str in combos_str:
-            combo = [int(x) for x in combo_str.split(",")]
-            if all(n in row_nums for n in combo):
-                triggers.append({
-                    "组合": combo_str,
-                    "触发行": idx + 1,
-                    "触发期数": row_period,
-                    "触发行号码": ",".join([f"{n:02d}" for n in row_nums])
-                })
-                
-                next_idx = idx - 1 if is_descending else idx + 1
-                if 0 <= next_idx < len(df_data):
-                    next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
-                    next_nums_list.append(next_row_nums)
-                    
-    counter = Counter()
-    for nums in next_nums_list:
-        for n in nums:
-            counter[n] += 1
+        for idx in range(start_idx, end_idx + 1):
+            row_nums = [int(clean_period(df_data.iloc[idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[idx, j]) and clean_period(df_data.iloc[idx, j]) != ""]
+            row_period = clean_period(df_data.iloc[idx, 18])
             
-    sorted_counts = sorted(counter.items(), key=lambda x: x[1], reverse=True)
+            for combo_str in combos_str:
+                combo = [int(x) for x in combo_str.split(",")]
+                if all(n in row_nums for n in combo):
+                    triggers.append({
+                        "组合": combo_str, "触发行": idx + 1, "触发期数": row_period,
+                        "触发行号码": ",".join([f"{n:02d}" for n in row_nums])
+                    })
+                    next_idx = idx - 1 if is_descending else idx + 1
+                    if 0 <= next_idx < len(df_data):
+                        next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
+                        for n in next_row_nums:
+                            total_counter[n] += 1
+    else:
+        # ============== 多排：7 套循环 + 抹除重复 ==============
+        dict_history = set() # 模拟 VBA 里的 dictHistory
+        
+        for i in range(7):
+            current_base = list(base_nums)
+            # 第 2 套(i=1) 开始，用特码依次替换平码
+            if i >= 1 and special_num is not None:
+                current_base[i-1] = special_num
+                
+            if len(current_base) < 6: continue
+                
+            new_combos = generate_20_combos(current_base)
+            valid_combos = []
+            
+            # 核心去重抹除逻辑
+            for c in new_combos:
+                if c not in dict_history:
+                    dict_history.add(c)
+                    valid_combos.append(c)
+                    
+            if not valid_combos:
+                continue # 如果这一套 20 组全被抹掉了，跳过本套
+                
+            # 跑这套的有效组合
+            for idx in range(start_idx, end_idx + 1):
+                row_nums = [int(clean_period(df_data.iloc[idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[idx, j]) and clean_period(df_data.iloc[idx, j]) != ""]
+                row_period = clean_period(df_data.iloc[idx, 18])
+                
+                for combo_str in valid_combos:
+                    combo = [int(x) for x in combo_str.split(",")]
+                    if all(n in row_nums for n in combo):
+                        triggers.append({
+                            "组合": combo_str, "触发行": idx + 1, "触发期数": row_period,
+                            "触发行号码": ",".join([f"{n:02d}" for n in row_nums])
+                        })
+                        next_idx = idx - 1 if is_descending else idx + 1
+                        if 0 <= next_idx < len(df_data):
+                            next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
+                            for n in next_row_nums:
+                                total_counter[n] += 1
+
+    # 最终排序提取结果
+    sorted_counts = sorted(total_counter.items(), key=lambda x: x[1], reverse=True)
     
     df_triggers = pd.DataFrame(triggers) if triggers else pd.DataFrame(columns=["组合", "触发行", "触发期数", "触发行号码"])
     df_counts = pd.DataFrame([{"下期数字": f"{n:02d}", "出现次数": c} for n, c in sorted_counts])
@@ -149,26 +190,14 @@ def calculate_prize(df_data, target_period, predicted_nums):
     if matched.empty: 
         return None, f"总数据里找不到本期 {target_period}！"
     
-    base_idx = matched.index[0]
+    # 获取选中期的物理位置（行号）
+    base_pos = df_data.index.get_loc(matched.index[0])
     
-    # 1. 判断降序还是升序（对照 VBA 比较第3行和第4行，这里用 0 和 1 行）
-    is_descending = True
-    try:
-        v1 = float(clean_period(df_data.iloc[0, 18]))
-        v2 = float(clean_period(df_data.iloc[1, 18]))
-        if v1 < v2:
-            is_descending = False
-    except:
-        pass
-        
-    # 2. 获取下一期的行号
-    if is_descending:
-        next_idx = base_idx - 1  # 降序：下期在上面
-    else:
-        next_idx = base_idx + 1  # 升序：下期在下面
-        
-    # 3. 越界检查（对应 VBA 的 nRow < 3，这里用 0 作为下界）
-    if next_idx < 0 or next_idx >= len(df_data):
+    # 你的数据是降序，所以下一期（118期）一定在正上方（行号 - 1）
+    next_pos = base_pos - 1
+    
+    # 如果越界，说明选的是最上面的一期（暂无下一期数据）
+    if next_pos < 0:
         res = {
             "下期期数": "待开奖", 
             "预测组合": ",".join(predicted_nums),
@@ -176,41 +205,41 @@ def calculate_prize(df_data, target_period, predicted_nums):
         }
         return res, "本期开奖数据未更新"
         
-    next_row = df_data.iloc[next_idx]
+    # 强行取上一行（即118期）的数据
+    next_row = df_data.iloc[next_pos]
     next_period = clean_period(next_row.iloc[18])
     
-    # 如果下一行没有期数，也视为未更新
+    # 如果上一行的期数没填，或者并不是比当前期更大的期数，说明未开奖
     if not next_period:
-        res = {
+        return {
             "下期期数": "待开奖", 
             "预测组合": ",".join(predicted_nums),
             "状态": "本期开奖数据未更新"
-        }
-        return res, "本期开奖数据未更新"
+        }, "本期开奖数据未更新"
         
-    # 4. 读取开奖号码 T:Y (平码), Z (特码)
+    # 读取 118 期的开奖号码（19-24为平码，25为特码）
     nums = [clean_period(next_row.iloc[i]) for i in range(19, 25)]
     z_val = clean_period(next_row.iloc[25]) if len(next_row) > 25 else ""
     
-    # 5. 平码匹配 (对应 VBA 里的去重和排序)
+    # 平码去重与排序
     match_nums = []
     for n in nums:
         if n and n in predicted_nums and n not in match_nums:
             match_nums.append(n)
-            
     try:
         match_nums.sort(key=lambda x: int(x))
     except:
         pass
         
-    # 6. 特码匹配
+    # 特码匹配
     z_matched = z_val in predicted_nums if z_val else False
     
-    # 7. 组装最终结果
+    # 状态判断
     status = "有命中" if (len(match_nums) > 0 or z_matched) else "本期无中任何数字"
     
+    # 组装最终表格
     result = {
-        "下期期数": next_period,
+        "下期期数": next_period,  # 这里一定会显示 2026118
         "预测组合": ",".join(predicted_nums),
         "中出平码1": match_nums[0] if len(match_nums) > 0 else "",
         "中出平码2": match_nums[1] if len(match_nums) > 1 else "",
@@ -339,7 +368,8 @@ def render_console(df_data):
 
     # 3. 操作逻辑
     if sync_btn: st.success("✅ 数据同步成功！")
-    if trend_btn: st.info("📈 网页版走势图正在生成中...")
+    if trend_btn: 
+    render_trend_chart(df_data)
     if clear_btn:
         st.session_state.calc_data_single = None
         st.session_state.calc_data_multi = None
@@ -548,3 +578,57 @@ if not st.session_state.logged_in:
     login_page()
 else:
     main_app()
+def render_trend_chart(df_data):
+    st.divider()
+    st.subheader("📈 历史走势图（最近30期）")
+    
+    # 限制显示最近 30 期，防止网页卡顿
+    recent_data = df_data.head(30).copy()
+    
+    if recent_data.empty:
+        st.warning("暂无数据可供生成走势图")
+        return
+
+    # 提取期数作为行索引
+    periods = recent_data.iloc[:, 18].apply(clean_period).tolist()
+    
+    tab1, tab2 = st.tabs(["平 码 区", "特 码 区"])
+    
+    with tab1:
+        # 构建 01-49 的列
+        cols = [f"{i:02d}" for i in range(1, 50)]
+        # 创建一个空的 DataFrame
+        matrix = pd.DataFrame("", index=periods, columns=cols)
+        
+        # 填入平码数据 (19-24列)
+        for idx, row in recent_data.iterrows():
+            period = clean_period(row.iloc[18])
+            for i in range(19, 25):
+                num_str = clean_period(row.iloc[i])
+                if num_str in cols:
+                    matrix.at[period, num_str] = "●" # 用实心圆点代表开出的号码
+                    
+        # 美化表格
+        st.dataframe(
+            matrix, 
+            use_container_width=True, 
+            height=600
+        )
+        
+    with tab2:
+        # 构建特码 01-49 的列
+        cols = [f"{i:02d}" for i in range(1, 50)]
+        matrix_special = pd.DataFrame("", index=periods, columns=cols)
+        
+        # 填入特码数据 (第25列)
+        for idx, row in recent_data.iterrows():
+            period = clean_period(row.iloc[18])
+            num_str = clean_period(row.iloc[25]) if len(row) > 25 else ""
+            if num_str in cols:
+                matrix_special.at[period, num_str] = "★" # 用五角星代表特码
+                
+        st.dataframe(
+            matrix_special, 
+            use_container_width=True, 
+            height=600
+        )
