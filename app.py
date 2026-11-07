@@ -224,7 +224,7 @@ def render_console(df_data):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
 
-    # 🚨 关键：必须保证有这一行来生成期数列表
+    # 生成期数列表 (修复 NameError: unique_periods)
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: 
         unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
@@ -248,7 +248,7 @@ def render_console(df_data):
     sync_btn = b4.button("🔄 同步数据", use_container_width=True)
     trend_btn = b5.button("📈 走势图", use_container_width=True)
 
-    # ==========================================
+    # 2. 彩球展示 (自动计算下一期) -> 从这里开始接你刚才替换的彩球代码    # ==========================================
     # 接着往下就是你之前替换的“2. 彩球展示”代码了
     # ==========================================
     # 2. 彩球展示 (自动计算下一期)
