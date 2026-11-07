@@ -702,7 +702,7 @@ def render_ai():
                 balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
             balls_html += '</div>'
             st.markdown(balls_html, unsafe_allow_html=True)
-with col_right:
+    with col_right:
     # 这是一个回调占位函数
     def toggle_cond(k): 
         pass
