@@ -357,7 +357,7 @@ def render_console(df_data):
         with st.spinner("正在比对下一期开奖号码..."):
             res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
             if err == "本期开奖数据未更新":
-                st.warning(f"⏳ {selected_period} 期的下期开奖数据未更新，请等待开奖！")
+                st.warning(f"? {selected_period} 期的下期开奖数据未更新，请等待开奖！")
                 st.session_state.calc_result_preview = pd.DataFrame([res_data])
             elif err: 
                 st.error(err)
