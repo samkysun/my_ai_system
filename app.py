@@ -453,7 +453,10 @@ def render_console(df_data):
 # ==========================================
 # 页面 3：同现统计
 # ==========================================
-def render_stats(df_data):
+# 这就是你刚才粘贴的新函数，必须顶格写
+def render_trend_chart(df_data):
+    st.divider()
+    # ... 里面的代码 ...
     st.title("📈 历史同现深度分析")
     if df_data is None or isinstance(df_data, str): return
     
