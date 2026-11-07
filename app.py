@@ -350,20 +350,20 @@ def render_console(df_data):
             st.success(f"✅ 分析完成！共扫描 {len(df_data)} 行历史数据，找到 {len(df_triggers)} 处触发。")
 
     if result_btn:
-    predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
-    if not predicted_nums: 
-        st.warning("请先点击【开始分析】计算数据！")
+        predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
+        if not predicted_nums: 
+             st.warning("请先点击【开始分析】计算数据！")
     else:
-        with st.spinner("正在比对下一期开奖号码..."):
-            res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
-            if err == "本期开奖数据未更新":
-                st.warning(f"? {selected_period} 期的下期开奖数据未更新，请等待开奖！")
-                st.session_state.calc_result_preview = pd.DataFrame([res_data])
-            elif err: 
-                st.error(err)
-            else:
-                st.success("预祝您中奖！请查看下方中出结果预览。")
-                st.session_state.calc_result_preview = pd.DataFrame([res_data])
+             with st.spinner("正在比对下一期开奖号码..."):
+                    res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
+                    if err == "本期开奖数据未更新":
+                         st.warning(f"? {selected_period} 期的下期开奖数据未更新，请等待开奖！")
+                         st.session_state.calc_result_preview = pd.DataFrame([res_data])
+                    elif err: 
+                         st.error(err)
+                    else:
+                         st.success("预祝您中奖！请查看下方中出结果预览。")
+                         st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     # 4. 底部展示区
     st.divider()
