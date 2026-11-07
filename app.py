@@ -216,45 +216,39 @@ if analysis_mode == "单排分析":
             elif analysis_mode == "多排分析" and st.session_state.calc_data_multi is not None:
                 st.success("正在查看多排分析的中奖结果...")
             else:
-                st.warning("请先点击【开始分析】计算数据，然后再查看中奖结果！")
+                st.warning("请先点击【开始分析】计算数据！")
 
     elif menu == "同现统计":
         st.title("历史同现深度分析")
         if df_data is None or isinstance(df_data, str):
             return
-            
         target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
         top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
-
         if st.button("开始扫描", use_container_width=True):
             with st.spinner("正在比对..."):
                 nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
                 mask = nums_df.isin([target_num]).any(axis=1)
                 filtered = nums_df[mask]
-                
                 if len(filtered) == 0:
-                    st.warning(f"历史数据中，{target_num} 号从未出现过。")
+                    st.warning("未出现过。")
                 else:
                     counts = {}
                     for _, row in filtered.iterrows():
                         for num in row.values:
                             if pd.notna(num) and int(num) != target_num:
                                 counts[int(num)] = counts.get(int(num), 0) + 1
-                    
                     sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
-                    res_data = [{"排名": i+1, "同频号码": f"{num:02d}", "同现次数": count} for i, (num, count) in enumerate(sorted_counts)]
-                    res_df = pd.DataFrame(res_data)
+                    res_df = pd.DataFrame([{"排名": i+1, "同频号码": f"{num:02d}", "同现次数": count} for i, (num, count) in enumerate(sorted_counts)])
                     st.dataframe(res_df, use_container_width=True)
                     st.bar_chart(res_df.set_index("同频号码")["同现次数"])
 
     elif menu == "AI推演":
         st.title("AI 严谨推演系统")
-        
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             period = st.selectbox("期数：", ["2026117", "2026116"])
         with c2:
-            ball = st.selectbox("球号：", [f"第{i}球" for i in range(1, 8)])
+            ball = st.selectbox("球号：", ["第1球", "第2球"])
         with c3:
             mode = st.radio("模式：", ["升序", "按序"], horizontal=True)
         with c4:
