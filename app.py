@@ -230,40 +230,71 @@ def render_console(df_data):
     except: unique_periods.sort(reverse=True)
     
     # 1. 控制面板
-    col1, col2, col3, col4 = st.columns([2, 2, 3, 2])
-    with col1: selected_period = st.selectbox("🎯 选择期数：", unique_periods)
-    with col2: analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
-    with col3:
-        st.write(""); st.write("")
-        b1, b2, b3 = st.columns(3)
-        start_btn = b1.button("🚀 开始分析", use_container_width=True, type="primary")
-        result_btn = b2.button("🏆 中奖结果", use_container_width=True)
-        clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
-    with col4:
-        st.write(""); st.write("")
-        b4, b5 = st.columns(2)
-        sync_btn = b4.button("🔄 同步数据", use_container_width=True)
-        trend_btn = b5.button("📈 走势图", use_container_width=True)
+col1, col2 = st.columns(2)
+with col1: 
+    selected_period = st.selectbox("🎯 选择期数：", unique_periods)
+with col2: 
+    analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
 
-    # 2. 彩球展示
-    st.divider()
-    flat_nums, special_num = [], 0
-    if unique_periods:
-        df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
-        matched_rows = df_data[df_data['_temp_period'] == selected_period]
-        if not matched_rows.empty:
-            row = matched_rows.iloc[0]
-            try:
-                flat_nums = [int(clean_period(row.iloc[i])) for i in range(19, 25) if pd.notna(row.iloc[i])]
-                special_num = int(clean_period(row.iloc[25])) if pd.notna(row.iloc[25]) else 0
-            except: pass
-                
-            st.subheader(f"🎯 {selected_period} 期开奖结果")
-            balls_html = '<div class="ball-container">'
-            for num in flat_nums: balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-            if special_num > 0: balls_html += f'<div class="ball {get_ball_color(special_num)} ball-special">★ {special_num:02d}</div>'
-            balls_html += '</div>'
-            st.markdown(balls_html, unsafe_allow_html=True)
+# 按钮布局：去掉原来的空行对齐，改为同一行排布
+b1, b2, b3, b4, b5 = st.columns(5)
+start_btn = b1.button("🚀 批量20组分析(提取前7套)", use_container_width=True, type="primary", help="自动生成20组三码并扫描历史，提取最高频的前7套下期数字")
+result_btn = b2.button("🏆 中奖结果", use_container_width=True)
+clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
+sync_btn = b4.button("🔄 同步数据", use_container_width=True)
+trend_btn = b5.button("📈 走势图", use_container_width=True)
+
+    # 2. 彩球展示 (自动计算下一期)
+st.divider()
+df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
+
+# 寻找当前选择期数在数据中的位置
+matched_rows = df_data[df_data['_temp_period'] == selected_period]
+
+# 判断数据是升序还是降序
+try:
+    is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
+except:
+    is_descending = True
+
+next_period_str = ""
+next_flat_nums = []
+next_special_num = 0
+has_next_data = False
+
+if not matched_rows.empty:
+    base_idx = matched_rows.index[0]
+    # 计算下一期的索引 (如果是降序，下一期在上面；如果是升序，下一期在下面)
+    next_idx = base_idx - 1 if is_descending else base_idx + 1
+    
+    if 0 <= next_idx < len(df_data):
+        # 找到了下一期数据
+        next_row = df_data.iloc[next_idx]
+        next_period_str = clean_period(next_row.iloc[18])
+        try:
+            next_flat_nums = [int(clean_period(next_row.iloc[i])) for i in range(19, 25) if pd.notna(next_row.iloc[i])]
+            next_special_num = int(clean_period(next_row.iloc[25])) if pd.notna(next_row.iloc[25]) else 0
+            if len(next_flat_nums) > 0:
+                has_next_data = True
+        except: pass
+
+if has_next_data:
+    # 如果有下一期开奖数据，渲染号码球
+    st.subheader(f"🎯 {next_period_str} 期开奖结果")
+    balls_html = '<div class="ball-container">'
+    for num in next_flat_nums: balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
+    if next_special_num > 0: balls_html += f'<div class="ball {get_ball_color(next_special_num)} ball-special">★ {next_special_num:02d}</div>'
+    balls_html += '</div>'
+    st.markdown(balls_html, unsafe_allow_html=True)
+else:
+    # 如果没找到下一期数据（未开奖或到了尽头），推算下一期期号并显示提示
+    try:
+        next_period_str = str(int(float(selected_period)) + 1) # 假设期号是连号的
+    except:
+        next_period_str = "下一期"
+        
+    st.subheader(f"🎯 {next_period_str} 期开奖结果")
+    st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
     # 3. 操作逻辑
     if sync_btn: st.success("✅ 数据同步成功！")
@@ -318,7 +349,7 @@ def render_console(df_data):
     col_lb1, col_lb2 = st.columns(2)
     
     with col_lb1:
-        st.subheader("📋 ListBox1：单排结果")
+        st.subheader("📋 ：单排结果")
         if st.session_state.calc_data_single is not None:
             df_t1, df_c1 = st.session_state.calc_data_single
             st.markdown("**【触发组合明细】**")
@@ -328,7 +359,7 @@ def render_console(df_data):
         else: st.info("暂无单排数据，请选择【单排分析】模式并点击【开始分析】。")
             
     with col_lb2:
-        st.subheader("📋 ListBox2：多排结果")
+        st.subheader("📋 ：多排结果")
         if st.session_state.calc_data_multi is not None:
             df_t2, df_c2 = st.session_state.calc_data_multi
             st.markdown("**【触发组合明细】**")
@@ -338,7 +369,7 @@ def render_console(df_data):
         else: st.info("暂无多排数据，请选择【多排分析】模式并点击【开始分析】。")
 
     st.divider()
-    st.subheader("🏆 ListBox3：中出结果预览")
+    st.subheader("🏆 ：中出结果预览")
     if st.session_state.calc_result_preview is not None:
         st.dataframe(st.session_state.calc_result_preview, use_container_width=True, hide_index=True)
     else:
