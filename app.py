@@ -203,7 +203,7 @@ if analysis_mode == "单排分析":
                 st.dataframe(st.session_state.calc_data_single, use_container_width=True, hide_index=True)
             else:
                 st.info("请点击【开始分析】生成单排数据。")
-        else:
+            else:
             st.subheader("多排分析结果")
             if st.session_state.calc_data_multi is not None:
                 st.dataframe(st.session_state.calc_data_multi, use_container_width=True, hide_index=True)
