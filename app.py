@@ -455,30 +455,62 @@ def render_console(df_data):
 # 这就是你刚才粘贴的新函数，必须顶格写
 def render_trend_chart(df_data):
     st.divider()
-    st.subheader("📈 历史走势图（最近30期）")  # 必须是这个标题
-    if df_data is None or isinstance(df_data, str): return
+    st.subheader("📈 历史走势图（最近30期）")
     
-    target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
-    top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
+    if df_data is None or isinstance(df_data, str):
+        st.error("数据读取失败，无法生成走势图")
+        return
+        
+    # 限制显示最近 30 期，防止网页卡顿
+    recent_data = df_data.head(30).copy()
+    
+    if recent_data.empty:
+        st.warning("暂无数据可供生成走势图")
+        return
 
-    if st.button("🔍 开始扫描", use_container_width=True):
-        with st.spinner("正在比对..."):
-            try:
-                nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
-                filtered = nums_df[nums_df.isin([target_num]).any(axis=1)]
-                if len(filtered) == 0: st.warning("未出现过。")
-                else:
-                    counts = {}
-                    for _, row in filtered.iterrows():
-                        for num in row.values:
-                            if pd.notna(num) and int(num) != target_num:
-                                counts[int(num)] = counts.get(int(num), 0) + 1
-                    sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
-                    res_df = pd.DataFrame([{"排名": i+1, "同频号码": f"{num:02d}", "同现次数": count} for i, (num, count) in enumerate(sorted_counts)])
-                    st.success(f"与 {target_num:02d} 号同现频率最高的结果：")
-                    st.dataframe(res_df, use_container_width=True, hide_index=True)
-                    st.bar_chart(res_df.set_index("同频号码")["同现次数"])
-            except Exception as e: st.error(f"出错：{e}")
+    # 提取期数作为行索引
+    periods = recent_data.iloc[:, 18].apply(clean_period).tolist()
+    
+    tab1, tab2 = st.tabs(["平 码 区", "特 码 区"])
+    
+    with tab1:
+        # 构建 01-49 的列
+        cols = [f"{i:02d}" for i in range(1, 50)]
+        # 创建一个空的 DataFrame
+        matrix = pd.DataFrame("", index=periods, columns=cols)
+        
+        # 填入平码数据 (19-24列)
+        for idx, row in recent_data.iterrows():
+            period = clean_period(row.iloc[18])
+            for i in range(19, 25):
+                num_str = clean_period(row.iloc[i])
+                if num_str in cols:
+                    matrix.at[period, num_str] = "●" # 用实心圆点代表开出的号码
+                    
+        # 美化表格
+        st.dataframe(
+            matrix, 
+            use_container_width=True, 
+            height=600
+        )
+        
+    with tab2:
+        # 构建特码 01-49 的列
+        cols = [f"{i:02d}" for i in range(1, 50)]
+        matrix_special = pd.DataFrame("", index=periods, columns=cols)
+        
+        # 填入特码数据 (第25列)
+        for idx, row in recent_data.iterrows():
+            period = clean_period(row.iloc[18])
+            num_str = clean_period(row.iloc[25]) if len(row) > 25 else ""
+            if num_str in cols:
+                matrix_special.at[period, num_str] = "★" # 用五角星代表特码
+                
+        st.dataframe(
+            matrix_special, 
+            use_container_width=True, 
+            height=600
+        )
 
 # ==========================================
 # 页面 4：AI 推演
