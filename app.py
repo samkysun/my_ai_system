@@ -647,6 +647,7 @@ def render_ai():
     with col3: order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
 
     st.divider()
+    
     col_left, col_right = st.columns([1.2, 1])
 
     with col_left:
@@ -679,29 +680,28 @@ def render_ai():
                             st.session_state.ai_ball_result = safe_nums
                             
         with b2:
-           if st.button("??? 清理勾选", use_container_width=True):
-            # 1. 清空自定义状态
-            st.session_state.ai_checks = {}
-            st.session_state.ai_api_result = "等待推演..."
-            st.session_state.ai_ball_result = []
-            
-            # 2. ?? 核心修复：遍历并删除所有 Checkbox 绑定的底层 key
-            keys_to_delete = [k for k in st.session_state.keys() if k.startswith("ai_chk_")]
-            for k in keys_to_delete:
-                del st.session_state[k]
+            if st.button("🗑️ 清理勾选", use_container_width=True):
+                # 1. 清空自定义状态
+                st.session_state.ai_checks = {}
+                st.session_state.ai_api_result = "等待推演..."
+                st.session_state.ai_ball_result = []
                 
-            # 3. 刷新页面
-            st.rerun()
+                # 2. 遍历并删除所有 Checkbox 绑定的底层 key
+                keys_to_delete = [k for k in st.session_state.keys() if k.startswith("ai_chk_")]
+                for k in keys_to_delete:
+                    del st.session_state[k]
+                    
+                # 3. 刷新页面
+                st.rerun()
 
-    # 展示推演结果 (彩球)
-    if st.session_state.ai_ball_result:
-        st.markdown("### ?? AI 提取的推演号码")
-        balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
-        for num in st.session_state.ai_ball_result:
-            balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-        balls_html += '</div>'
-        st.markdown(balls_html, unsafe_allow_html=True)
-
+        # 展示推演结果 (彩球)
+        if st.session_state.ai_ball_result:
+            st.markdown("### 🎯 AI 提取的推演号码")
+            balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
+            for num in st.session_state.ai_ball_result:
+                balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
+            balls_html += '</div>'
+            st.markdown(balls_html, unsafe_allow_html=True)
 with col_right:
     # 这是一个回调占位函数
     def toggle_cond(k): 
@@ -763,9 +763,8 @@ with col_right:
                 val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
                 st.session_state.ai_checks[key] = val
 
-# 底部：展示 API 返回的完整文本
 st.divider()
-st.markdown("### ?? AI 完整推演结果")
+st.markdown("### 📝 AI 完整推演结果")
 st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
 # ==========================================
 # 主路由
