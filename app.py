@@ -315,7 +315,7 @@ def render_console(df_data):
     
     # 按钮布局
     b1, b2, b3, b4, b5 = st.columns(5)
-    start_btn = b1.button("🚀 批量20组分析", use_container_width=True, type="primary", help="自动生成20组三码并扫描历史，提取最高频的前7套下期数字")
+    start_btn = b1.button("🚀 批量联动分析", use_container_width=True, type="primary", help="自动生成批量组合三码并扫描历史，提取最高频的前7套下期数字")
     result_btn = b2.button("🏆 中奖结果", use_container_width=True)
     clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
     sync_btn = b4.button("🔄 同步数据", use_container_width=True)
@@ -455,8 +455,7 @@ def render_console(df_data):
 # 这就是你刚才粘贴的新函数，必须顶格写
 def render_trend_chart(df_data):
     st.divider()
-    # ... 里面的代码 ...
-    st.title("📈 历史同现深度分析")
+    st.subheader("📈 历史走势图（最近30期）")  # 必须是这个标题
     if df_data is None or isinstance(df_data, str): return
     
     target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
