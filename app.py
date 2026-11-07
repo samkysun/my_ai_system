@@ -5,6 +5,8 @@ import time
 import os
 import itertools
 from collections import Counter
+import requests
+
 
 # ==========================================
 # ⚙️ 配置区
@@ -14,6 +16,10 @@ SHEET_NAME = "总数据"
 USER_FILE = "users.csv"
 
 st.set_page_config(page_title="智能数据分析系统", layout="wide")
+# ==========================================
+# ⚙️ DeepSeek 配置区
+# ==========================================
+DEEPSEEK_API_KEY = "sk-03230269b092411eb4db85a4ea906dd3"
 
 # ==========================================
 # CSS 美化
@@ -515,78 +521,234 @@ def render_trend_chart(df_data):
 # ==========================================
 # 页面 4：AI 推演
 # ==========================================
+# ==========================================
+# AI 推演底层辅助函数
+# ==========================================
+
+def build_rule_database():
+    """从 Excel 的'规则'表读取 49 个号码的完整属性"""
+    try:
+        df = pd.read_excel(EXCEL_FILE, sheet_name="规则")
+        db = {}
+        col_num = next((c for c in df.columns if "号码" in str(c)), "号码")
+        col_zodiac = next((c for c in df.columns if "生肖" in str(c)), "生肖")
+        col_wuxing = next((c for c in df.columns if "肖五行" in str(c)), "肖五行")
+        col_element = next((c for c in df.columns if "号五行" in str(c)), "号五行")
+        col_tail = next((c for c in df.columns if "尾五行" in str(c)), "尾五行")
+        col_color = next((c for c in df.columns if "波色" in str(c)), "波色")
+        col_size = next((c for c in df.columns if "大小" in str(c)), "大小")
+        col_obj = next((c for c in df.columns if "物象" in str(c)), "物象")
+        col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
+        col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
+
+        for _, row in df.iterrows():
+            num_str = str(row[col_num]).strip()
+            if num_str.replace('.', '', 1).isdigit():
+                n = str(int(float(num_str)))
+                db[n] = {
+                    "生肖": str(row[col_zodiac]), "肖五行": str(row[col_wuxing]),
+                    "号五行": str(row[col_element]), "尾五行": str(row[col_tail]),
+                    "波色": str(row[col_color]), "大小": str(row[col_size]),
+                    "物象": str(row[col_obj]), "人物": str(row[col_role]),
+                    "合数": str(row[col_sum])
+                }
+        return db
+    except Exception as e:
+        st.error(f"读取规则表失败: {e}")
+        return None
+
+def build_full_table_text(db):
+    """把规则库打包成紧凑文本发送给 AI"""
+    result = "【1-49号完整属性表（绝对权威）】\\n"
+    for i in range(1, 50):
+        if str(i) in db:
+            info = db[str(i)]
+            result += f"{i}号:{{{info['生肖']},{info['肖五行']},{info['号五行']},{info['尾五行']},{info['物象']},{info['人物']},{info['大小']},{info['波色']},{info['合数']}}}\\n"
+    return result
+
+def get_analysis_prompt(full_table):
+    """生成强约束的推演提示词"""
+    return f"""你是一个精通集合运算与条件排除的推演助手。以下是 1-49 号号码的绝对属性参照表：
+{full_table}
+【推演与输出规则】
+1. 用户的提问已明确给出了排杀条件，请严格从 1-49 中剔除不符合条件的号码。
+2. 注意多重条件叠加，比如一个号码可能同时触犯了多个排杀条件。
+3. 如果严格剔除后，剩下的号码大于 0 个，直接输出剩下的生肖和号码。
+4. 如果严格剔除后，剩下 0 个号码（即全被杀光），请触发后补机制：筛选出【只触犯了一个排杀条件】的号码作为候补，【触犯两个及以上条件】的号码绝对不能作为候补。
+5. 格式要求：请先在心中默默推演，直接给出结果。最后输出格式必须包含：'【严格筛选结果】'和'【后补筛选结果】(如果有的话)。
+6. 绝对禁止复述属性表，直接给出最终号码和生肖。"""
+
+def call_deepseek_api(question, system_prompt):
+    """发送 POST 请求给 DeepSeek"""
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": "你是一个严谨的数据推演与集合运算助手。"},
+            {"role": "user", "content": question},
+            {"role": "system", "content": system_prompt}
+        ]
+    }
+    try:
+        response = requests.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=60)
+        if response.status_code == 200:
+            data = response.json()
+            answer = data['choices'][0]['message']['content']
+            answer = answer.replace("**", "").replace("###", "").replace("##", "").replace("#", "").replace("`", "")
+            return answer
+        else:
+            return f"请求失败：{response.status_code}\\n{response.text}"
+    except Exception as e:
+        return f"运行错误：{e}"
 def render_ai():
     st.title("🤖 AI 严谨推演系统")
+    
     CHECKBOX_MAP = {
+        "金肖": "杀金肖（猴鸡），", "木肖": "杀木肖（虎兔），", "水肖": "杀水肖（鼠猪），", "火肖": "杀火肖（蛇马），", "土肖": "杀土肖（牛龙羊狗），",
+        "红肖": "杀红肖（马兔鼠鸡），", "蓝肖": "杀蓝肖（虎猴蛇猪），", "绿肖": "杀绿肖（龙狗牛羊），",
         "0尾": "杀0尾（10、20、30、40），", "1尾": "杀1尾（01、11、21、31、41），", "2尾": "杀2尾（02、12、22、32、42），",
         "3尾": "杀3尾（03、13、23、33、43），", "4尾": "杀4尾（04、14、24、34、44），", "5尾": "杀5尾（05、15、25、35、45），",
         "6尾": "杀6尾（06、16、26、36、46），", "7尾": "杀7尾（07、17、27、37、47），", "8尾": "杀8尾（08、18、28、38、48），", "9尾": "杀9尾（09、19、29、39、49），",
-        "金号": "杀金号（04、05、12、13、26、27、34、35、42、43），", "木号": "杀木号（08、09、16、17、24、25、38、39、46、47），",
-        "水号": "杀水号（01、14、15、22、23、30、31、44、45），", "火号": "杀火号（02、03、10、11、18、19、32、33、40、41、48、49），", "土号": "杀土号（06、07、20、21、28、29、36、37），",
-        "红波": "杀红波（01、02、07、08、12、13、18、19、23、24、29、30、34、35、40、45、46），", "蓝波": "杀蓝波（03、04、09、10、14、15、20、25、26、31、36、37、41、42、47、48），", "绿波": "杀绿波（05、06、11、16、17、21、22、27、28、32、33、38、39、43、44、49），",
         "杀鼠": "杀鼠，", "杀牛": "杀牛，", "杀虎": "杀虎，", "杀兔": "杀兔，", "杀龙": "杀龙，", "杀蛇": "杀蛇，", "杀马": "杀马，", "杀羊": "杀羊，", "杀猴": "杀猴，", "杀鸡": "杀鸡，", "杀狗": "杀狗，", "杀猪": "杀猪，",
-        "金肖": "杀金肖（猴鸡），", "木肖": "杀木肖（虎兔），", "水肖": "杀水肖（鼠猪），", "火肖": "杀火肖（蛇马），", "土肖": "杀土肖（牛龙羊狗），",
-        "阴天": "杀阴天（马龙猪），", "阳天": "杀阳天（兔牛猴），", "阴地": "杀阴地（蛇鼠狗），", "阳地": "杀阳地（虎鸡羊），",
-        "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），",
-        "家臣": "杀家臣（马牛猪狗），", "美女": "杀美女（蛇兔鸡羊），", "君王": "杀君王（龙虎），", "恶人": "杀恶人（鼠猴），",
-        "东": "杀东（虎兔龙），", "南": "杀南（蛇马羊），", "西": "杀西（猴鸡狗），", "北": "杀北（猪鼠牛），",
-        "3余0": "杀3余0（杀0，3，6，9尾），", "3余1": "杀3余1（杀1，4，7尾），", "3余2": "杀3余2（杀2，5，8尾），",
         "1门": "杀1门（01、02、03、04、05、06、07、08、09），", "2门": "杀2门（10、11、12、13、14、15、16、17、18、19），", "3门": "杀3门（20、21、22、23、24、25、26、27、28、29），", "4门": "杀4门（30、31、32、33、34、35、36、37、38、39），", "5门": "杀5门（40、41、42、43、44、45、46、47、48、49），",
         "1段": "杀1段（01、02、03、04、05、06、07），", "2段": "杀2段（08、09、10、11、12、13、14），", "3段": "杀3段（15、16、17、18、19、20、21），", "4段": "杀4段（22、23、24、25、26、27、28），", "5段": "杀5段（29、30、31、32、33、34、35），", "6段": "杀6段（36、37、38、39、40、41、42），", "7段": "杀7段（43、44、45、46、47、48、49），",
         "01合": "杀01合（01、10），", "02合": "杀02合（02、11、20），", "03合": "杀03合（03、12、21、30），", "04合": "杀04合（04、13、22、31、40），", "05合": "杀05合（05、14、23、32、41），", "06合": "杀06合（06、15、24、33、42），", "07合": "杀07合（07、16、25、34、43），", "08合": "杀08合（08、17、26、35、44），", "09合": "杀09合（09、18、27、36、45），", "10合": "杀10合（19、28、37、46），", "11合": "杀11合（29、38、47），", "12合": "杀12合（39、48），", "13合": "杀13合（49），",
-        "红肖": "杀红肖（马兔鼠鸡），", "蓝肖": "杀蓝肖（虎猴蛇猪），", "绿肖": "杀绿肖（龙狗牛羊），",
-        "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），",
-        "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），",
+        "红波": "杀红波（01、02、07、08、12、13、18、19、23、24、29、30、34、35、40、45、46），", "蓝波": "杀蓝波（03、04、09、10、14、15、20、25、26、31、36、37、41、42、47、48），", "绿波": "杀绿波（05、06、11、16、17、21、22、27、28、32、33、38、39、43、44、49），",
         "红波单": "杀红波单（01、07、13、19、23、29、35、45），", "红波双": "杀红波双（02、08、12、18、24、30、34、40、46），", "蓝波单": "杀蓝波单（03、09、15、25、31、37、41、47），", "蓝波双": "杀蓝波双（04、10、14、20、26、36、42、48），", "绿波单": "杀绿波单（05、11、17、21、27、33、39、43、49），", "绿波双": "杀绿波双（06、16、22、28、32、38、44），",
-        "金尾": "杀金尾（04、09、14、19、24、29、34、39、44、49），", "木尾": "杀木尾（03、08、13、18、23、28、33、38、43、48），", "水尾": "杀水尾（01、06、11、16、21、26、31、36、41、46），", "火尾": "杀火尾（02、07、12、17、22、27、32、37、42、47），", "土尾": "杀土尾（05、10、15、20、25、30、35、40、45），"
+        "金号": "杀金号（04、05、12、13、26、27、34、35、42、43），", "木号": "杀木号（08、09、16、17、24、25、38、39、46、47），", "水号": "杀水号（01、14、15、22、23、30、31、44、45），", "火号": "杀火号（02、03、10、11、18、19、32、33、40、41、48、49），", "土号": "杀土号（06、07、20、21、28、29、36、37），",
+        "金尾": "杀金尾（04、09、14、19、24、29、34、39、44、49），", "木尾": "杀木尾（03、08、13、18、23、28、33、38、43、48），", "水尾": "杀水尾（01、06、11、16、21、26、31、36、41、46），", "火尾": "杀火尾（02、07、12、17、22、27、32、37、42、47），", "土尾": "杀土尾（05、10、15、20、25、30、35、40、45），",
+        "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），", "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），", "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），"
     }
 
-    def toggle_chk(label):
-        txt = CHECKBOX_MAP[label]
-        if st.checkbox(label):
-            if txt not in st.session_state.ai_input_text: st.session_state.ai_input_text += txt
-        else:
-            st.session_state.ai_input_text = st.session_state.ai_input_text.replace(txt, "")
+    if "ai_checks" not in st.session_state: st.session_state.ai_checks = {}
+    if "ai_api_result" not in st.session_state: st.session_state.ai_api_result = "等待推演..."
+    if "ai_ball_result" not in st.session_state: st.session_state.ai_ball_result = []
 
-    col_left, col_right = st.columns(2)
+    def get_prefix(qishu, qiu, order_type):
+        if order_type == "按序":
+            interval = f"{qiu}的取值区间为1号至49号之间，"
+        else:
+            if qiu == "第1球": interval = "第一球的取值区间为1号至20号之间，"
+            elif qiu == "第2球": interval = "第二球的取值区间为2号至25号之间，"
+            elif qiu == "第3球": interval = "第三球的取值区间为3号至30号之间，"
+            elif qiu == "第4球": interval = "第四球的取值区间为4号至40号之间，"
+            elif qiu == "第5球": interval = "第五球的取值区间为15号至48号之间，"
+            elif qiu == "第6球": interval = "第六球的取值区间为25号至49号之间，"
+            else: interval = "第七球的取值区间为1号至49号之间，"
+        return f"这是{qishu}期{order_type}{qiu}的核算条件，{interval}"
+
+    col1, col2, col3 = st.columns(3)
+    with col1: qishu = st.selectbox("选择期数：", ["2026116", "2026117", "2026118"], index=1)
+    with col2: qiu = st.selectbox("选择球数：", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"], index=0)
+    with col3: order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
+
+    st.divider()
+    col_left, col_right = st.columns([1.2, 1])
+
     with col_left:
-        st.text_area("条件输入：", value=st.session_state.ai_input_text, height=250)
-        st.text_area("推演结果：", value=st.session_state.ai_result_text, height=250, disabled=True)
-        if st.button("开始推演", use_container_width=True):
-            st.session_state.ai_result_text = "推演完成！"
-            st.rerun()
+        prefix = get_prefix(qishu, qiu, order_type)
+        checked_texts = [CHECKBOX_MAP[k] for k, v in st.session_state.ai_checks.items() if v]
+        full_text = prefix + "".join(checked_texts)
+        
+        st.text_area("已选核算条件：", value=full_text, height=200, disabled=True)
+        
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
+                if not checked_texts:
+                    st.warning("请先勾选核算条件！")
+                else:
+                    question = full_text + f"请根据以上触犯条件全面分析{qiu}剩余什么生肖与号码。如果全部触犯，那么请将触犯次数最少的作为后补。请开始精准核算。"
+                    with st.spinner("正在呼叫 DeepSeek 进行全量推演，请稍候..."):
+                        db = build_rule_database()
+                        if not db:
+                            st.error("规则表读取失败，无法推演！")
+                        else:
+                            full_table_text = build_full_table_text(db)
+                            system_prompt = get_analysis_prompt(full_table_text)
+                            answer = call_deepseek_api(question, system_prompt)
+                            st.session_state.ai_api_result = answer
+                            
+                            import re
+                            nums = re.findall(r'\\b([0-4][0-9])\\b', answer)
+                            safe_nums = sorted(list(set(int(n) for n in nums if 1 <= int(n) <= 49)))
+                            st.session_state.ai_ball_result = safe_nums
+                            
+        with b2:
+            if st.button("🗑️ 清理勾选", use_container_width=True):
+                st.session_state.ai_checks = {}
+                st.session_state.ai_api_result = "等待推演..."
+                st.session_state.ai_ball_result = []
+                st.rerun()
+
+        if st.session_state.ai_ball_result:
+            st.markdown("### 🎯 AI 提取的推演号码")
+            balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
+            for num in st.session_state.ai_ball_result:
+                balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
+            balls_html += '</div>'
+            st.markdown(balls_html, unsafe_allow_html=True)
 
     with col_right:
+        def toggle_cond(k): pass
         with st.expander("生肖与五行", expanded=True):
             cols = st.columns(3)
             for idx, key in enumerate(["金肖", "木肖", "水肖", "火肖", "土肖", "红肖", "蓝肖", "绿肖"]):
-                with cols[idx % 3]: toggle_chk(key)
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
         with st.expander("尾数杀号"):
             cols = st.columns(5)
             for i in range(10):
-                with cols[i % 5]: toggle_chk(f"{i}尾")
+                key = f"{i}尾"
+                with cols[i % 5]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
         with st.expander("生肖专属"):
             cols = st.columns(4)
             for idx, z in enumerate(["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]):
-                with cols[idx % 4]: toggle_chk(f"杀{z}")
+                key = f"杀{z}"
+                with cols[idx % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
         with st.expander("门数 / 段数 / 合数"):
             cols = st.columns(4)
             for i in range(1, 6):
-                with cols[(i-1) % 4]: toggle_chk(f"{i}门")
+                key = f"{i}门"
+                with cols[(i-1) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
             for i in range(1, 8):
-                with cols[(i+4) % 4]: toggle_chk(f"{i}段")
+                key = f"{i}段"
+                with cols[(i+4) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
             for i in range(1, 14):
-                with cols[(i+11) % 4]: toggle_chk(f"{i:02d}合")
+                key = f"{i:02d}合"
+                with cols[(i+11) % 4]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
         with st.expander("波色 / 波单双"):
             cols = st.columns(3)
             for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
-                with cols[idx % 3]: toggle_chk(key)
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
         with st.expander("其他属性"):
             cols = st.columns(3)
             others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
             for idx, key in enumerate(others):
-                with cols[idx % 3]: toggle_chk(key)
+                with cols[idx % 3]: 
+                    val = st.checkbox(key, key=f"ai_chk_{key}", value=st.session_state.ai_checks.get(key, False), on_change=toggle_cond, args=(key,))
+                    st.session_state.ai_checks[key] = val
 
+    st.divider()
+    st.markdown("### 📝 AI 完整推演结果")
+    st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
 # ==========================================
 # 主路由
 # ==========================================
