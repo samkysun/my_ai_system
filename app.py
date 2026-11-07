@@ -146,22 +146,42 @@ def calculate_linkage(df_data, target_period, mode):
 def calculate_prize(df_data, target_period, predicted_nums):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
-    if matched.empty: return None, "未找到当期数据"
+    if matched.empty: 
+        return None, "未找到当期数据"
     
     base_idx = matched.index[0]
-    try:
-        is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
-    except:
-        is_descending = True
-        
-    next_idx = base_idx - 1 if is_descending else base_idx + 1
-    if next_idx < 0 or next_idx >= len(df_data): return None, "已到数据尽头，找不到下一期"
+    
+    # 根据你的说明，工作表是降序排列（最新的在最上面），所以下一期在上一行
+    next_idx = base_idx - 1
+    
+    # 1. 如果越界（比如选了最上面最新的一期），说明还没开出下一期
+    if next_idx < 0:
+        result = {
+            "下期期数": "未开奖", "预测组合": ",".join(predicted_nums),
+            "中出平码1": "", "中出平码2": "", "中出平码3": "", "中出平码4": "", "中出平码5": "", "中出平码6": "", "中出特码": "",
+            "状态": "本期开奖数据未更新"
+        }
+        return result, "本期开奖数据未更新"
         
     next_row = df_data.iloc[next_idx]
     next_period = clean_period(next_row.iloc[18])
+    
+    # 2. 加一层保险：如果取到的上一行期数比目标期数还要小，说明下一期没录入
+    try:
+        if float(next_period) <= float(target_period):
+            result = {
+                "下期期数": "未开奖", "预测组合": ",".join(predicted_nums),
+                "中出平码1": "", "中出平码2": "", "中出平码3": "", "中出平码4": "", "中出平码5": "", "中出平码6": "", "中出特码": "",
+                "状态": "本期开奖数据未更新"
+            }
+            return result, "本期开奖数据未更新"
+    except:
+        pass
+        
     next_nums = [clean_period(next_row.iloc[i]) for i in range(19, 25) if clean_period(next_row.iloc[i]) != ""]
     next_special = clean_period(next_row.iloc[25]) if len(next_row) > 25 else ""
     
+    # 3. 将下一期（新的一期）的号码与预测组合进行对比
     matched_flat = [n for n in next_nums if n in predicted_nums]
     is_special_matched = next_special in predicted_nums
     
@@ -178,7 +198,6 @@ def calculate_prize(df_data, target_period, predicted_nums):
         "状态": "有命中" if (len(matched_flat) > 0 or is_special_matched) else "本期无中任何数字"
     }
     return result, None
-
 # ==========================================
 # 页面 1：登录
 # ==========================================
@@ -331,15 +350,20 @@ def render_console(df_data):
             st.success(f"✅ 分析完成！共扫描 {len(df_data)} 行历史数据，找到 {len(df_triggers)} 处触发。")
 
     if result_btn:
-        predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
-        if not predicted_nums: st.warning("请先点击【开始分析】计算数据！")
-        else:
-            with st.spinner("正在比对下一期开奖号码..."):
-                res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
-                if err: st.error(err)
-                else:
-                    st.success("预祝您中奖！请查看下方中出结果预览。")
-                    st.session_state.calc_result_preview = pd.DataFrame([res_data])
+    predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
+    if not predicted_nums: 
+        st.warning("请先点击【开始分析】计算数据！")
+    else:
+        with st.spinner("正在比对下一期开奖号码..."):
+            res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
+            if err == "本期开奖数据未更新":
+                st.warning(f"⏳ {selected_period} 期的下期开奖数据未更新，请等待开奖！")
+                st.session_state.calc_result_preview = pd.DataFrame([res_data])
+            elif err: 
+                st.error(err)
+            else:
+                st.success("预祝您中奖！请查看下方中出结果预览。")
+                st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     # 4. 底部展示区
     st.divider()
