@@ -1,174 +1,177 @@
 ﻿import streamlit as st
 import pandas as pd
-import numpy as np
-import time
+import random
 
 # ==========================================
-# 1. 页面配置与全局美化
+# 1. 页面配置与高级 CSS 美化（完美复刻你的界面质感）
 # ==========================================
 st.set_page_config(page_title="智能分析总控台", page_icon="🧊", layout="wide")
 
-# 注入高级 CSS，打造科技感蓝调界面
 st.markdown("""
 <style>
     /* 整体背景 */
-    .stApp {
-        background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-    }
-    /* 按钮样式 */
+    .stApp { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); }
+    /* 标题美化 */
+    h1, h2, h3 { color: #0369a1 !important; font-family: 'Microsoft YaHei', sans-serif; }
+    /* 按钮样式（模仿 VBA 里的蓝色按钮） */
     .stButton>button {
         background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
-        color: white;
-        border-radius: 8px;
-        border: none;
-        transition: all 0.3s;
-        font-weight: bold;
+        color: white; border-radius: 6px; border: none; transition: all 0.3s; font-weight: bold;
     }
-    .stButton>button:hover {
-        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
-        transform: translateY(-2px);
-    }
-    /* 彩球样式 */
-    .ball-container { display: flex; gap: 10px; justify-content: center; margin: 15px 0; }
+    .stButton>button:hover { box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4); transform: translateY(-2px); }
+    
+    /* 完美复刻 VBA 里的 3D 彩球 */
+    .ball-container { display: flex; gap: 12px; justify-content: center; margin: 20px 0; align-items: center; }
     .ball {
-        width: 50px; height: 50px; border-radius: 50%;
+        width: 55px; height: 55px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-size: 22px; font-weight: bold; color: white;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        font-size: 24px; font-weight: bold; color: white;
+        box-shadow: 2px 4px 8px rgba(0,0,0,0.3);
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     }
-    .ball-red { background: radial-gradient(circle, #f87171, #dc2626); }
-    .ball-blue { background: radial-gradient(circle, #60a5fa, #2563eb); }
-    .ball-green { background: radial-gradient(circle, #4ade80, #16a34a); }
-    .ball-special { background: radial-gradient(circle, #fbbf24, #d97706); border: 2px solid #fff; }
+    /* 红波、蓝波、绿波、特码 的渐变颜色 */
+    .ball-red { background: radial-gradient(circle at 30% 30%, #fca5a5, #dc2626); }
+    .ball-blue { background: radial-gradient(circle at 30% 30%, #93c5fd, #2563eb); }
+    .ball-green { background: radial-gradient(circle at 30% 30%, #86efac, #16a34a); }
+    .ball-special { background: radial-gradient(circle at 30% 30%, #fde047, #ca8a04); border: 2px solid #fff; }
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化全局状态
-if "current_period" not in st.session_state:
-    st.session_state.current_period = "2026117"
+# ==========================================
+# 2. 模拟数据（代替你的“总数据”工作表）
+# ==========================================
+@st.cache_data
+def load_mock_data():
+    # 生成模拟的期数和开奖数据
+    data = []
+    periods = [str(2026120 - i) for i in range(20)]
+    for p in periods:
+        nums = [random.randint(1, 49) for _ in range(6)]
+        special = random.randint(1, 49)
+        data.append({
+            "期数": p,
+            "平码": nums,
+            "特码": special
+        })
+    return data
+
+mock_data = load_mock_data()
+
+# 辅助函数：判断波色（模仿你的 VBA 逻辑）
+def get_ball_color(num):
+    red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46]
+    blue = [3, 4, 9, 10, 14, 15, 20, 25, 26, 31, 36, 37, 41, 42, 47, 48]
+    if num in red: return "ball-red"
+    elif num in blue: return "ball-blue"
+    else: return "ball-green"
 
 # ==========================================
-# 2. 侧边栏导航
+# 3. 侧边栏导航（模仿你的界面跳转）
 # ==========================================
 with st.sidebar:
-    st.title("🧊 系统控制台")
-    page = st.radio("导航菜单", ["🏠 主界面 (走势&控制)", "📊 历史同现分析", "🤖 AI 智能推演"])
+    st.image("https://cdn-icons-png.flaticon.com/512/1055/1055666.png", width=60)
+    st.title("系统导航")
+    menu = st.radio("请选择功能模块：", [
+        "🏠 主控制台", 
+        "📊 走势图分析", 
+        "🤖 AI 智能推演", 
+        "📈 同现频率统计",
+        "⚙️ 多维分析"
+    ])
     st.divider()
-    st.info("💡 提示：所有数据已联动，切换页面不会丢失进度。")
+    st.caption("数据状态：✅ 已加载 20 期")
 
 # ==========================================
-# 3. 页面一：主界面 (复刻 VBA 的 frmMain)
+# 4. 页面 1：主控制台 (高仿 frmMain)
 # ==========================================
-if page == "🏠 主界面 (走势&控制)":
+if menu == "🏠 主控制台":
     st.title("🧊 智能数据分析总控台")
     
-    # --- 上部：开奖彩球与数据同步 ---
-    with st.container():
-        st.subheader("🎯 最新开奖结果")
-        
-        # 用 HTML 渲染几个漂亮的彩球（模拟你原来的图片彩球）
-        st.markdown("""
-        <div class="ball-container">
-            <div class="ball ball-red">03</div>
-            <div class="ball ball-blue">12</div>
-            <div class="ball ball-green">25</div>
-            <div class="ball ball-red">33</div>
-            <div class="ball ball-blue">41</div>
-            <div class="ball ball-green">48</div>
-            <div class="ball ball-special">★ 09</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.caption("第 2026116 期 | 红波：03, 33 | 蓝波：12, 41 | 绿波：25, 48 | 特码：09")
+    # 顶部控制区
+    col_period, col_btn = st.columns([2, 1])
+    with col_period:
+        periods = [d["期数"] for d in mock_data]
+        selected_period = st.selectbox("🎯 请选择期数：", periods)
     
+    with col_btn:
+        st.write("")
+        st.write("")
+        if st.button("🔄 同步最新数据", use_container_width=True):
+            with st.spinner("正在从云端拉取..."):
+                st.success("✅ 数据同步成功！")
+
+    # 查找当前期数的数据
+    current_data = next(item for item in mock_data if item["期数"] == selected_period)
+    
+    # ==========================================
+    # ★★★ 核心视觉：顶部开奖彩球展示 ★★★
+    # ==========================================
+    st.subheader(f"🎯 {selected_period} 期开奖结果")
+    
+    # 生成 HTML 彩球
+    balls_html = '<div class="ball-container">'
+    for num in current_data["平码"]:
+        color_class = get_ball_color(num)
+        balls_html += f'<div class="ball {color_class}">{num:02d}</div>'
+    
+    # 特码球
+    sp_color = get_ball_color(current_data["特码"])
+    balls_html += f'<div class="ball {sp_color} ball-special">★ {current_data["特码"]:02d}</div>'
+    balls_html += '</div>'
+    
+    st.markdown(balls_html, unsafe_allow_html=True)
+
     st.divider()
 
-    # --- 中部：核心控制台 ---
-    st.subheader("⚙️ 操作控制台")
+    # 中部操作按钮区
+    st.subheader("⚙️ 核心操作区")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        period = st.selectbox("选择分析期数:", ["2026117", "2026116", "2026115"])
+        if st.button("📊 生成/查看走势图", use_container_width=True):
+            st.info("请点击左侧菜单栏的【走势图分析】进入该功能。")
     with col2:
-        mode = st.selectbox("模式:", ["升序分析", "按序分析"])
+        if st.button("🚀 开始核心分析", use_container_width=True):
+            with st.spinner("正在计算..."):
+                st.success("✅ 分析执行完毕！")
     with col3:
-        st.write("")
-        st.write("")
-        if st.button("🔄 一键同步总数据", use_container_width=True):
-            with st.spinner("正在从共享盘拉取最新数据..."):
-                time.sleep(1.5) # 模拟耗时
-                st.success("✅ 数据同步完成！")
+        if st.button("📥 导出中出结果", use_container_width=True):
+            st.success("导出成功！")
     with col4:
-        st.write("")
-        st.write("")
-        if st.button("🚀 开始执行计算", use_container_width=True):
-            with st.spinner("引擎正在计算..."):
-                time.sleep(1)
-                st.success(f"✅ 第 {period} 期计算完成！")
+        if st.button("💾 一键保存下推", use_container_width=True):
+            st.success("走势图已自动下推，所有数据已保存！")
 
     st.divider()
 
-    # --- 下部：数据展示与走势图表 ---
-    st.subheader("📊 中奖结果预览")
+    # 底部数据展示区（模仿你的列表框）
+    st.subheader("📋 实时数据镜像预览")
     
-    # 模拟表格数据
-    mock_result = pd.DataFrame({
-        "期数": ["2026116", "2026115", "2026114", "2026113"],
-        "开奖号码": ["03, 12, 25, 33, 41, 48", "05, 11, 22, 34, 42, 49", "01, 09, 18, 27, 35, 44", "07, 14, 21, 28, 37, 46"],
-        "特码": ["09", "16", "25", "32"],
-        "计算方式": ["升序", "升序", "按序", "升序"],
-        "中奖结果": ["中奖", "不中", "中奖", "不中"]
+    # 构造表格数据
+    df_preview = pd.DataFrame({
+        "期数": [d["期数"] for d in mock_data[:10]],
+        "开奖号码 (平码)": [", ".join(f"{n:02d}" for n in d["平码"]) for d in mock_data[:10]],
+        "特码": [f"{d['特码']:02d}" for d in mock_data[:10]]
     })
     
-    # 用 dataframe 展示，支持排序
-    st.dataframe(mock_result, use_container_width=True, hide_index=True)
+    st.dataframe(df_preview, use_container_width=True, hide_index=True)
 
 # ==========================================
-# 4. 页面二：历史同现分析 (复刻 VBA 的 frmPairStat)
+# 5. 其他页面占位（后续可逐渐把 VBA 代码搬进去）
 # ==========================================
-elif page == "📊 历史同现分析":
-    st.title("📊 历史同现深度分析")
-    st.divider()
+elif menu == "📊 走势图分析":
+    st.title("📊 历史走势图分析")
+    st.info("在网页版中，原来用图片画的走势图，我们可以直接生成极其清晰的动态图表。")
+    # 这里用散点图演示走势
+    st.write("图表加载中...")
 
-    col_num, col_top = st.columns(2)
-    with col_num:
-        target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
-    with col_top:
-        top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
+elif menu == "🤖 AI 智能推演":
+    st.title("🤖 AI 智能推演系统")
+    st.info("这里是你之前对接 DeepSeek 的 AI 界面。")
 
-    if st.button("🔍 扫描历史同现数据", use_container_width=True):
-        with st.spinner("正在 6000 多期数据中比对..."):
-            time.sleep(1.5) # 模拟计算
-            # 模拟返回结果
-            res_df = pd.DataFrame({
-                "排名": [f"Top {i+1}" for i in range(top_n)],
-                "同频号码": [f"{np.random.randint(1, 50):02d}" for _ in range(top_n)],
-                "共同出现次数": sorted([np.random.randint(50, 200) for _ in range(top_n)], reverse=True)
-            })
-            st.success(f"与 {target_num:02d} 号同现频率最高的结果：")
-            st.dataframe(res_df, use_container_width=True, hide_index=True)
-            st.bar_chart(res_df.set_index("同频号码")["共同出现次数"])
+elif menu == "📈 同现频率统计":
+    st.title("📈 同现频率统计")
+    st.info("这里是你之前做的同现前 N 名分析界面。")
 
-# ==========================================
-# 5. 页面三：AI 推演 (复刻 VBA 的 frmAI)
-# ==========================================
-elif page == "🤖 AI 智能推演":
-    st.title("🤖 AI 严谨推演系统")
-    st.divider()
-
-    col_left, col_right = st.columns([1, 1])
-    
-    with col_left:
-        st.subheader("1. 输入核算条件")
-        ai_input = st.text_area("条件：", "这是2026117期第一球的核算条件，杀木土肖，杀水火号，杀019尾...", height=200)
-        if st.button("🚀 呼叫 DeepSeek 分析", use_container_width=True):
-            with st.spinner("AI 大脑运转中..."):
-                time.sleep(1)
-                st.session_state.ai_result = "【严格筛选结果】：03, 08, 15, 22\\n\\n【后补筛选结果】：01, 19, 33, 41"
-    
-    with col_right:
-        st.subheader("2. 推演结果")
-        if "ai_result" in st.session_state:
-            st.success(st.session_state.ai_result)
-        else:
-            st.info("等待分析结果...")
+elif menu == "⚙️ 多维分析":
+    st.title("⚙️ 多维分析控制台")
+    st.info("这里是你的多维分析系统。")
