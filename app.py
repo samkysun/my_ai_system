@@ -147,56 +147,81 @@ def calculate_prize(df_data, target_period, predicted_nums):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
     if matched.empty: 
-        return None, "未找到当期数据"
+        return None, f"总数据里找不到本期 {target_period}！"
     
     base_idx = matched.index[0]
     
-    # 根据你的说明，工作表是降序排列（最新的在最上面），所以下一期在上一行
-    next_idx = base_idx - 1
-    
-    # 1. 如果越界（比如选了最上面最新的一期），说明还没开出下一期
-    if next_idx < 0:
-        result = {
-            "下期期数": "未开奖", "预测组合": ",".join(predicted_nums),
-            "中出平码1": "", "中出平码2": "", "中出平码3": "", "中出平码4": "", "中出平码5": "", "中出平码6": "", "中出特码": "",
+    # 1. 判断降序还是升序（对照 VBA 比较第3行和第4行，这里用 0 和 1 行）
+    is_descending = True
+    try:
+        v1 = float(clean_period(df_data.iloc[0, 18]))
+        v2 = float(clean_period(df_data.iloc[1, 18]))
+        if v1 < v2:
+            is_descending = False
+    except:
+        pass
+        
+    # 2. 获取下一期的行号
+    if is_descending:
+        next_idx = base_idx - 1  # 降序：下期在上面
+    else:
+        next_idx = base_idx + 1  # 升序：下期在下面
+        
+    # 3. 越界检查（对应 VBA 的 nRow < 3，这里用 0 作为下界）
+    if next_idx < 0 or next_idx >= len(df_data):
+        res = {
+            "下期期数": "待开奖", 
+            "预测组合": ",".join(predicted_nums),
             "状态": "本期开奖数据未更新"
         }
-        return result, "本期开奖数据未更新"
+        return res, "本期开奖数据未更新"
         
     next_row = df_data.iloc[next_idx]
     next_period = clean_period(next_row.iloc[18])
     
-    # 2. 加一层保险：如果取到的上一行期数比目标期数还要小，说明下一期没录入
+    # 如果下一行没有期数，也视为未更新
+    if not next_period:
+        res = {
+            "下期期数": "待开奖", 
+            "预测组合": ",".join(predicted_nums),
+            "状态": "本期开奖数据未更新"
+        }
+        return res, "本期开奖数据未更新"
+        
+    # 4. 读取开奖号码 T:Y (平码), Z (特码)
+    nums = [clean_period(next_row.iloc[i]) for i in range(19, 25)]
+    z_val = clean_period(next_row.iloc[25]) if len(next_row) > 25 else ""
+    
+    # 5. 平码匹配 (对应 VBA 里的去重和排序)
+    match_nums = []
+    for n in nums:
+        if n and n in predicted_nums and n not in match_nums:
+            match_nums.append(n)
+            
     try:
-        if float(next_period) <= float(target_period):
-            result = {
-                "下期期数": "未开奖", "预测组合": ",".join(predicted_nums),
-                "中出平码1": "", "中出平码2": "", "中出平码3": "", "中出平码4": "", "中出平码5": "", "中出平码6": "", "中出特码": "",
-                "状态": "本期开奖数据未更新"
-            }
-            return result, "本期开奖数据未更新"
+        match_nums.sort(key=lambda x: int(x))
     except:
         pass
         
-    next_nums = [clean_period(next_row.iloc[i]) for i in range(19, 25) if clean_period(next_row.iloc[i]) != ""]
-    next_special = clean_period(next_row.iloc[25]) if len(next_row) > 25 else ""
+    # 6. 特码匹配
+    z_matched = z_val in predicted_nums if z_val else False
     
-    # 3. 将下一期（新的一期）的号码与预测组合进行对比
-    matched_flat = [n for n in next_nums if n in predicted_nums]
-    is_special_matched = next_special in predicted_nums
+    # 7. 组装最终结果
+    status = "有命中" if (len(match_nums) > 0 or z_matched) else "本期无中任何数字"
     
     result = {
         "下期期数": next_period,
         "预测组合": ",".join(predicted_nums),
-        "中出平码1": matched_flat[0] if len(matched_flat) > 0 else "",
-        "中出平码2": matched_flat[1] if len(matched_flat) > 1 else "",
-        "中出平码3": matched_flat[2] if len(matched_flat) > 2 else "",
-        "中出平码4": matched_flat[3] if len(matched_flat) > 3 else "",
-        "中出平码5": matched_flat[4] if len(matched_flat) > 4 else "",
-        "中出平码6": matched_flat[5] if len(matched_flat) > 5 else "",
-        "中出特码": next_special if is_special_matched else "",
-        "状态": "有命中" if (len(matched_flat) > 0 or is_special_matched) else "本期无中任何数字"
+        "中出平码1": match_nums[0] if len(match_nums) > 0 else "",
+        "中出平码2": match_nums[1] if len(match_nums) > 1 else "",
+        "中出平码3": match_nums[2] if len(match_nums) > 2 else "",
+        "中出平码4": match_nums[3] if len(match_nums) > 3 else "",
+        "中出平码5": match_nums[4] if len(match_nums) > 4 else "",
+        "中出平码6": match_nums[5] if len(match_nums) > 5 else "",
+        "中出特码": z_val if z_matched else "",
+        "状态": status
     }
+    
     return result, None
 # ==========================================
 # 页面 1：登录
