@@ -4,33 +4,18 @@ import hashlib
 import time
 import os
 
-# ==========================================
-# ⚙️ 配置区
-# ==========================================
 EXCEL_FILE = "数据分析系统最终版本（智能全套）.xlsm" 
 SHEET_NAME = "总数据" 
 
-# ==========================================
-# 1. 页面配置与高级 CSS 美化
-# ==========================================
-st.set_page_config(page_title="智能数据分析系统", page_icon="🧊", layout="wide")
+st.set_page_config(page_title="智能数据分析系统", layout="wide")
 
 st.markdown("""
 <style>
     .stApp { background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%); }
-    h1, h2, h3 { color: #102A43 !important; font-family: 'Microsoft YaHei', sans-serif; }
-    .stButton>button {
-        background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
-        color: white; border-radius: 6px; border: none; transition: all 0.3s; font-weight: bold;
-    }
-    .stButton>button:hover { box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4); transform: translateY(-2px); }
-    .ball-container { display: flex; gap: 12px; justify-content: center; margin: 20px 0; align-items: center; }
-    .ball {
-        width: 55px; height: 55px; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 24px; font-weight: bold; color: white;
-        box-shadow: 2px 4px 8px rgba(0,0,0,0.3); text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    }
+    h1, h2, h3 { color: #102A43 !important; }
+    .stButton>button { background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%); color: white; border-radius: 6px; border: none; font-weight: bold; }
+    .ball-container { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
+    .ball { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: white; box-shadow: 2px 4px 8px rgba(0,0,0,0.3); }
     .ball-red { background: radial-gradient(circle at 30% 30%, #fca5a5, #dc2626); }
     .ball-blue { background: radial-gradient(circle at 30% 30%, #93c5fd, #2563eb); }
     .ball-green { background: radial-gradient(circle at 30% 30%, #86efac, #16a34a); }
@@ -38,32 +23,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化状态
-if "logged_in" not in st.session_state: st.session_state.logged_in = False
-if "username" not in st.session_state: st.session_state.username = ""
-if "ai_input_text" not in st.session_state: st.session_state.ai_input_text = ""
-if "ai_result_text" not in st.session_state: st.session_state.ai_result_text = "等待推演..."
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "username" not in st.session_state:
+    st.session_state.username = ""
+if "ai_input_text" not in st.session_state:
+    st.session_state.ai_input_text = ""
+if "ai_result_text" not in st.session_state:
+    st.session_state.ai_result_text = "等待推演..."
+if "calc_data_single" not in st.session_state:
+    st.session_state.calc_data_single = None
+if "calc_data_multi" not in st.session_state:
+    st.session_state.calc_data_multi = None
 
-# ==========================================
-# 2. 用户系统 (登录/注册)
-# ==========================================
 USER_FILE = "users.csv"
-
-def hash_password(password): return hashlib.sha256(password.encode()).hexdigest()
 
 def load_users():
     if not os.path.exists(USER_FILE):
         pd.DataFrame(columns=['username', 'password']).to_csv(USER_FILE, index=False)
     return pd.read_csv(USER_FILE)
 
-def save_user(username, password):
-    df = load_users()
-    new_user = pd.DataFrame({'username': [username], 'password': [hash_password(password)]})
-    pd.concat([df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
-
 def login_page():
-    st.title("🔐 智能系统客户端登录")
-    tab1, tab2 = st.tabs(["已有账号？登录", "没有账号？立即注册"])
+    st.title("智能系统客户端登录")
+    tab1, tab2 = st.tabs(["登录", "注册新账号"])
     
     with tab1:
         login_user = st.text_input("用户名", key="login_user")
@@ -71,23 +53,20 @@ def login_page():
         if st.button("登录", use_container_width=True):
             if login_user and login_pass:
                 users_df = load_users()
-                match = users_df[(users_df['username'] == login_user) & (users_df['password'] == hash_password(login_pass))]
+                hashed = hashlib.sha256(login_pass.encode()).hexdigest()
+                match = users_df[(users_df['username'] == login_user) & (users_df['password'] == hashed)]
                 if not match.empty:
                     st.session_state.logged_in = True
                     st.session_state.username = login_user
-                    st.success("登录成功！")
-                    time.sleep(1)
                     st.rerun()
                 else:
                     st.error("用户名或密码错误！")
-            else:
-                st.warning("请输入完整信息")
                 
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
         reg_pass = st.text_input("设置密码", type="password", key="reg_pass")
         reg_confirm = st.text_input("确认密码", type="password", key="reg_confirm")
-        if st.button("注册账号", use_container_width=True):
+        if st.button("注册", use_container_width=True):
             if reg_user and reg_pass:
                 if reg_pass != reg_confirm:
                     st.error("两次密码不一致")
@@ -96,17 +75,14 @@ def login_page():
                     if reg_user in users_df['username'].values:
                         st.error("该用户名已被注册")
                     else:
-                        save_user(reg_user, reg_pass)
-                        st.success("🎉 注册成功！请去左侧登录。")
-            else:
-                st.warning("请填写完整信息")
+                        new_user = pd.DataFrame({'username': [reg_user], 'password': [hashlib.sha256(reg_pass.encode()).hexdigest()]})
+                        pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
+                        st.success("注册成功！请去左侧登录。")
 
-# ==========================================
-# 3. 数据读取与辅助函数
-# ==========================================
 @st.cache_data
 def load_real_data():
-    if not os.path.exists(EXCEL_FILE): return None
+    if not os.path.exists(EXCEL_FILE):
+        return None
     try:
         df = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME)
         return df.dropna(how='all')
@@ -116,34 +92,32 @@ def load_real_data():
 def get_ball_color(num):
     red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46]
     blue = [3, 4, 9, 10, 14, 15, 20, 25, 26, 31, 36, 37, 41, 42, 47, 48]
-    if num in red: return "ball-red"
-    elif num in blue: return "ball-blue"
-    else: return "ball-green"
+    if num in red:
+        return "ball-red"
+    elif num in blue:
+        return "ball-blue"
+    else:
+        return "ball-green"
 
 def clean_period(val):
-    if pd.isna(val): return ""
+    if pd.isna(val):
+        return ""
     s = str(val).strip()
-    if s.endswith(".0"): s = s[:-2]
+    if s.endswith(".0"):
+        s = s[:-2]
     return s
 
-# ==========================================
-# 4. 核心业务页面
-# ==========================================
 def main_app():
     with st.sidebar:
-        st.write(f"👤 欢迎，**{st.session_state.username}**")
+        st.write(f"欢迎，{st.session_state.username}")
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
-        st.divider()
-        st.image("https://cdn-icons-png.flaticon.com/512/1055/1055666.png", width=60)
-        menu = st.radio("功能导航：", ["🏠 主控制台", "📈 同现频率统计", "🤖 AI 智能推演"])
-        st.divider()
+        menu = st.radio("功能导航：", ["主控制台", "同现统计", "AI推演"])
 
     df_data = load_real_data()
 
-    
-         if menu == "主控制台":
+    if menu == "主控制台":
         st.title("智能数据分析总控台")
         
         if df_data is None or isinstance(df_data, str):
@@ -223,8 +197,7 @@ def main_app():
                 balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
             balls_html += '</div>'
             st.markdown(balls_html, unsafe_allow_html=True)
-
-        if analysis_mode == "单排分析":
+if analysis_mode == "单排分析":
             st.subheader("单排分析结果")
             if st.session_state.calc_data_single is not None:
                 st.dataframe(st.session_state.calc_data_single, use_container_width=True, hide_index=True)
