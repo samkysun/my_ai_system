@@ -5,10 +5,11 @@ import time
 import os
 
 # ==========================================
-# ⚙️ 配置区（必须修改）
+# ⚙️ 配置区
 # ==========================================
-EXCEL_FILE = "数据分析系统最终版本（智能全套）.xlsm"  # ★ 注意：必须加上后缀名 .xlsm
-SHEET_NAME = "总数据"  # ★ 请确保这个表名和你 Excel 底部的标签名字一字不差
+EXCEL_FILE = "数据分析系统最终版本（智能全套）.xlsm"  # 你的 Excel 文件名
+SHEET_NAME = "总数据"  # 你的工作表名
+
 # ==========================================
 # 1. 页面配置与高级 CSS 美化
 # ==========================================
@@ -51,7 +52,7 @@ if "ai_result_text" not in st.session_state:
     st.session_state.ai_result_text = "等待推演..."
 
 # ==========================================
-# 2. 用户系统（本地 CSV 版，为了兼容你之前的代码）
+# 2. 用户系统
 # ==========================================
 USER_FILE = "users.csv"
 
@@ -83,7 +84,7 @@ def login_page():
                 if not match.empty:
                     st.session_state.logged_in = True
                     st.session_state.username = login_user
-                    st.success("登录成功！")
+                    st.success("登录成功！正在进入系统...")
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -102,10 +103,10 @@ def login_page():
                 else:
                     users_df = load_users()
                     if reg_user in users_df['username'].values:
-                        st.error("该用户名已被注册")
+                        st.error("该用户名已被注册，请换一个")
                     else:
                         save_user(reg_user, reg_pass)
-                        st.success("🎉 注册成功！请去左侧登录。")
+                        st.success("🎉 注册成功！请点击左侧【登录】标签。")
             else:
                 st.warning("请填写完整信息")
 
@@ -132,7 +133,7 @@ def get_ball_color(num):
     else: return "ball-green"
 
 # ==========================================
-# 4. 核心业务页面 (登录后展示)
+# 4. 核心业务页面
 # ==========================================
 def main_app():
     with st.sidebar:
@@ -142,7 +143,6 @@ def main_app():
             st.rerun()
         st.divider()
         
-        # 导航
         st.image("https://cdn-icons-png.flaticon.com/512/1055/1055666.png", width=60)
         menu = st.radio("功能导航：", ["🏠 主控制台", "📈 同现频率统计", "🤖 AI 智能推演"])
         st.divider()
@@ -154,45 +154,59 @@ def main_app():
         st.title("🧊 智能数据分析总控台")
         
         if df_data is None:
-            st.error(f"找不到数据文件：{EXCEL_FILE}，请检查是否上传到 GitHub。")
+            st.error(f"❌ 找不到数据文件：{EXCEL_FILE}，请检查是否上传到 GitHub。")
             return
         elif isinstance(df_data, str):
-            st.error(f"读取失败：{df_data}")
+            st.error(f"❌ 读取失败：{df_data}")
             return
 
-        # 假设期数在第19列(S)，平码20-25(T-Y)，特码26(Z)
-        try:
-            periods = df_data.iloc[:, 18].dropna().astype(str).unique().tolist()
-        except:
-            periods = []
+        # ---- 完美修复期数清洗与排序 ----
+        def clean_period(val):
+            if pd.isna(val): return ""
+            s = str(val).strip()
+            if s.endswith(".0"): s = s[:-2]
+            return s
 
-        if periods:
+        # 提取 S 列（第19列，索引18）
+        raw_periods = df_data.iloc[:, 18].apply(clean_period).tolist()
+        unique_periods = list(set([p for p in raw_periods if p != ""]))
+        
+        # 强制按数字大小降序排列（最新的在第一）
+        try:
+            unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+        except:
+            unique_periods.sort(reverse=True)
+
+        if unique_periods:
             col_period, col_btn = st.columns([2, 1])
             with col_period:
-                selected_period = st.selectbox("🎯 请选择期数：", periods[::-1])
+                selected_period = st.selectbox("🎯 请选择期数：", unique_periods)
             
-            current_row = df_data[df_data.iloc[:, 18].astype(str) == selected_period].iloc[0]
+            df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
+            matched_rows = df_data[df_data['_temp_period'] == selected_period]
             
-            # 提取号码
-            try:
-                flat_nums = [int(current_row.iloc[i]) for i in range(19, 25) if pd.notna(current_row.iloc[i])]
-                special_num = int(current_row.iloc[25]) if pd.notna(current_row.iloc[25]) else 0
-            except:
-                flat_nums, special_num = [], 0
+            if not matched_rows.empty:
+                current_row = matched_rows.iloc[0]
+                
+                try:
+                    flat_nums = [int(current_row.iloc[i]) for i in range(19, 25) if pd.notna(current_row.iloc[i])]
+                    special_num = int(current_row.iloc[25]) if pd.notna(current_row.iloc[25]) else 0
+                except:
+                    flat_nums, special_num = [], 0
 
-            # 彩球渲染
-            st.subheader(f"🎯 {selected_period} 期开奖结果")
-            balls_html = '<div class="ball-container">'
-            for num in flat_nums:
-                balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-            if special_num > 0:
-                balls_html += f'<div class="ball {get_ball_color(special_num)} ball-special">★ {special_num:02d}</div>'
-            balls_html += '</div>'
-            st.markdown(balls_html, unsafe_allow_html=True)
-            
+                st.subheader(f"🎯 {selected_period} 期开奖结果")
+                balls_html = '<div class="ball-container">'
+                for num in flat_nums:
+                    balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
+                if special_num > 0:
+                    balls_html += f'<div class="ball {get_ball_color(special_num)} ball-special">★ {special_num:02d}</div>'
+                balls_html += '</div>'
+                st.markdown(balls_html, unsafe_allow_html=True)
+
             st.divider()
             st.subheader("📋 历史数据预览 (最新10期)")
-            st.dataframe(df_data.tail(10), use_container_width=True, hide_index=True)
+            show_df = df_data.drop(columns=['_temp_period']).tail(10)
+            st.dataframe(show_df, use_container_width=True, hide_index=True)
 
     # ---------- 页面 2：同现频率统计 ----------
     elif menu == "📈 同现频率统计":
@@ -210,10 +224,7 @@ def main_app():
 
         if st.button("🔍 开始扫描", use_container_width=True):
             with st.spinner("正在 6000 多期数据中比对..."):
-                # 提取平码区域（第20列到25列）的数据参与计算
                 nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
-                
-                # 找出包含目标号码的所有行
                 mask = nums_df.isin([target_num]).any(axis=1)
                 filtered_rows = nums_df[mask]
                 
