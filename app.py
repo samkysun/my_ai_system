@@ -201,14 +201,12 @@ def render_ai():
     
     with c_mat:
         items = ["鼠","金肖","红肖","金号","东肖","1段","1门", "牛","木肖","蓝肖","木号","南肖","2段","2门", "虎","水肖","绿肖","水号","西肖","3段","3门", "兔","火肖","阴天","火号","北肖","4段","4门", "龙","土肖","阳天","土号","1门","5段","5门", "蛇","君王","阳地","红波","2门","6段","0合", "马","美女","阴地","蓝波","3门","7段","1合", "羊","家臣","金尾","绿波","4门","8段","2合", "猴","恶人","木尾","大肖","5门","9段","3合", "鸡","福肖","水尾","中肖","0尾","10段","4合", "狗","禄肖","火尾","小肖","1尾","11段","5合", "猪","寿肖","土尾","红波单","2尾","12段","6合"]
-        for i in range(0, len(items), 7):
-            cols = st.columns(7)
-            for j in range(7):
-                if i + j < len(items):
-                    with cols[j]:
-                        key = f"chk_{items[i+j]}"
-                        if key not in st.session_state: st.session_state[key] = False
-                        st.checkbox(items[i+j], key=key)
+        # ✅ 修复后的代码
+for i in range(...):
+    for j in range(...):
+        # 将原来的 key 替换成这样，确保每个 checkbox 的 key 绝对唯一
+        key = f"checkbox_{i}_{j}" 
+        st.checkbox(items[i+j], key=key)
                         
     with c_btn:
         st.markdown("### 操作")
