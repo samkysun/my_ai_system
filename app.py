@@ -368,8 +368,7 @@ def render_console(df_data):
 
     # 3. 操作逻辑
     if sync_btn: st.success("✅ 数据同步成功！")
-    if trend_btn:
-    render_trend_chart(df_data)
+    if trend_btn: render_trend_chart(df_data)
     if clear_btn:
         st.session_state.calc_data_single = None
         st.session_state.calc_data_multi = None
