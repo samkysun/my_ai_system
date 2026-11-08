@@ -372,7 +372,41 @@ def render_console(df_data):
         st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
     # 3. 操作逻辑
-    if sync_btn: st.success("✅ 数据同步成功！")
+    if sync_btn:
+    with st.spinner("正在从源文件同步数据到总数据..."):
+        import openpyxl
+        import os
+        MAIN_FILE = "数据分析系统最终版本（智能全套）.xlsm"
+        FILE_SORTED = "升序源文件.xlsm"
+        
+        if os.path.exists(MAIN_FILE) and os.path.exists(FILE_SORTED):
+            # 1. 读取升序源文件的数据
+            wb_src = openpyxl.load_workbook(FILE_SORTED, read_only=True, data_only=True)
+            ws_src = wb_src["数据源"]
+            data_rows = []
+            for row in ws_src.iter_rows(min_row=2, max_col=27):
+                if all(cell.value is None for cell in row): break
+                data_rows.append([cell.value for cell in row])
+            wb_src.close()
+            
+            # 2. 覆盖写入主文件
+            if data_rows:
+                wb_dst = openpyxl.load_workbook(MAIN_FILE, keep_vba=True)
+                ws_dst = wb_dst["总数据"]
+                if ws_dst.max_row > 1:
+                    ws_dst.delete_rows(2, ws_dst.max_row)
+                for r_idx, row_data in enumerate(data_rows, start=2):
+                    for c_idx, value in enumerate(row_data, start=1):
+                        ws_dst.cell(row=r_idx, column=c_idx).value = value
+                wb_dst.save(MAIN_FILE)
+                
+                # 3. 强制清空网页缓存，并重新刷新页面
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.warning("源文件没有数据！")
+        else:
+            st.error("找不到主文件或升序源文件！")
     if trend_btn: render_trend_chart(df_data)
     if clear_btn:
         st.session_state.calc_data_single = None
