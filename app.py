@@ -604,9 +604,21 @@ def call_deepseek_api(question, system_prompt):
     except Exception as e:
         return f"运行错误：{e}"
 def render_ai():
-    st.title("?? AI 严谨推演系统")
+    st.title("🤖 AI 严谨推演系统")
     
-    # ?? 版本号机制：用于一键清理所有复选框
+    # ================= 1. 读取真实的期数数据 =================
+    df_data = load_real_data()
+    if df_data is not None and not isinstance(df_data, str):
+        unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
+        try: 
+            unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+        except: 
+            unique_periods.sort(reverse=True)
+    else:
+        unique_periods = ["暂无数据"]
+    # ======================================================
+
+    # ================= 2. 版本号与字典 =================
     if "reset_version" not in st.session_state:
         st.session_state.reset_version = 0
     v_prefix = f"v{st.session_state.reset_version}_chk_"
@@ -643,29 +655,14 @@ def render_ai():
             else: interval = "第七球的取值区间为1号至49号之间，"
         return f"这是{qishu}期{order_type}{qiu}的核算条件，{interval}"
 
-    # 🔥 动态读取 Excel 中的真实期数
-df_data = load_real_data() # 调用我们之前写好的读取数据的函数
-unique_periods = []
-if df_data is not None and not isinstance(df_data, str):
-    # 提取第 19 列（索引18）的期数，去重、去空
-    unique_periods = list(set([str(p).strip() for p in df_data.iloc[:, 18] if pd.notna(p) and str(p).strip() != ""]))
-    # 降序排列，让最新的期数排在最前面
-    try:
-        unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
-    except:
-        unique_periods.sort(reverse=True)
-
-# 兜底：如果没读到数据，给个提示
-if not unique_periods:
-    unique_periods = ["暂无数据"]
-
-col1, col2, col3 = st.columns(3)
-with col1: 
-    qishu = st.selectbox("选择期数：", unique_periods, index=0)
-with col2: 
-    qiu = st.selectbox("选择球数：", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"], index=0)
-with col3: 
-    order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
+    # ================= 3. 顶部控制栏 =================
+    col1, col2, col3 = st.columns(3)
+    with col1: 
+        qishu = st.selectbox("选择期数：", unique_periods, index=0)
+    with col2: 
+        qiu = st.selectbox("选择球数：", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"], index=0)
+    with col3: 
+        order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
 
     st.divider()
     
@@ -682,7 +679,7 @@ with col3:
         
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("?? 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
+            if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
                 if not checked_texts: 
                     st.warning("请先勾选核算条件！")
                 else:
@@ -696,18 +693,18 @@ with col3:
                             answer = call_deepseek_api(question, system_prompt)
                             st.session_state.ai_api_result = answer
                             import re
-                            nums = re.findall(r'\\\\b([0-4][0-9])\\\\b', answer)
+                            nums = re.findall(r'\\b([0-4][0-9])\\b', answer)
                             st.session_state.ai_ball_result = sorted(list(set(int(n) for n in nums if 1 <= int(n) <= 49)))
                             
         with b2:
-            if st.button("??? 清理勾选", use_container_width=True):
+            if st.button("🗑️ 清理勾选", use_container_width=True):
                 st.session_state.reset_version += 1
                 st.session_state.ai_api_result = "等待推演..."
                 st.session_state.ai_ball_result = []
                 st.rerun()
 
         if st.session_state.ai_ball_result:
-            st.markdown("### ?? AI 提取的推演号码")
+            st.markdown("### 🎯 AI 提取的推演号码")
             balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
             for num in st.session_state.ai_ball_result:
                 balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
@@ -715,7 +712,6 @@ with col3:
             st.markdown(balls_html, unsafe_allow_html=True)
 
     with col_right:
-        # 调整了这里的列数，确保文字能完全显示
         with st.expander("生肖与五行", expanded=True):
             cols = st.columns(3)
             for idx, key in enumerate(["金肖", "木肖", "水肖", "火肖", "土肖", "红肖", "蓝肖", "绿肖"]):
@@ -752,7 +748,7 @@ with col3:
                 with cols[idx % 3]: st.checkbox(key, key=f"{v_prefix}{key}")
 
     st.divider()
-    st.markdown("### ?? AI 完整推演结果")
+    st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
 # ==========================================
 # 主路由
