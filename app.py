@@ -372,12 +372,12 @@ def render_console(df_data):
         st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
     # 3. 操作逻辑
-    if sync_btn:
-    with st.spinner("正在从源文件同步数据到总数据..."):
-        import openpyxl
-        import os
-        MAIN_FILE = "数据分析系统最终版本（智能全套）.xlsm"
-        FILE_SORTED = "升序源文件.xlsm"
+         if sync_btn:
+            with st.spinner("正在从源文件同步数据到总数据..."):
+            import openpyxl
+            import os
+            MAIN_FILE = "数据分析系统最终版本（智能全套）.xlsm"
+            FILE_SORTED = "升序源文件.xlsm"
         
         if os.path.exists(MAIN_FILE) and os.path.exists(FILE_SORTED):
             # 1. 读取升序源文件的数据
