@@ -499,7 +499,9 @@ def render_ai():
         "红波单": "杀红波单（01、07、13、19、23、29、35、45），", "红波双": "杀红波双（02、08、12、18、24、30、34、40、46），", "蓝波单": "杀蓝波单（03、09、15、25、31、37、41、47），", "蓝波双": "杀蓝波双（04、10、14、20、26、36、42、48），", "绿波单": "杀绿波单（05、11、17、21、27、33、39、43、49），", "绿波双": "杀绿波双（06、16、22、28、32、38、44），",
         "金号": "杀金号（04、05、12、13、26、27、34、35、42、43），", "木号": "杀木号（08、09、16、17、24、25、38、39、46、47），", "水号": "杀水号（01、14、15、22、23、30、31、44、45），", "火号": "杀火号（02、03、10、11、18、19、32、33、40、41、48、49），", "土号": "杀土号（06、07、20、21、28、29、36、37），",
         "金尾": "杀金尾（04、09、14、19、24、29、34、39、44、49），", "木尾": "杀木尾（03、08、13、18、23、28、33、38、43、48），", "水尾": "杀水尾（01、06、11、16、21、26、31、36、41、46），", "火尾": "杀火尾（02、07、12、17、22、27、32、37、42、47），", "土尾": "杀土尾（05、10、15、20、25、30、35、40、45），",
-        "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），", "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），", "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），"
+        "大肖": "杀大肖（牛虎龙马），", "中肖": "杀中肖（羊猴狗猪），", "小肖": "杀小肖（鼠兔蛇鸡），", "书肖": "杀书肖（马龙虎），", "琴肖": "杀琴肖（蛇兔鸡），", "棋肖": "杀棋肖（牛鼠狗），", "画肖": "杀画肖（猪猴羊），", "福肖": "杀福肖（马龙虎鼠），", "禄肖": "杀禄肖（兔牛猪猴），", "寿肖": "杀寿肖（蛇狗鸡羊），",
+        # 🔥 新增物象专属
+        "家臣": "杀家臣（马牛猪狗），", "美女": "杀美女（蛇兔鸡羊），", "君王": "杀君王（龙虎），", "恶人": "杀恶人（鼠猴），"
     }
 
     if "ai_api_result" not in st.session_state: st.session_state.ai_api_result = "等待推演..."
@@ -538,18 +540,28 @@ def render_ai():
         b1, b2 = st.columns(2)
         with b1:
             if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
-                if not checked_texts: st.warning("请先勾选！")
+                if not checked_texts: 
+                    st.warning("请先勾选！")
                 else:
                     question = full_text + f"请根据以上触犯条件全面分析{qiu}剩余什么生肖与号码。如果全部触犯，那么请将触犯次数最少的作为后补。请开始精准核算。"
                     with st.spinner("正在呼叫 DeepSeek 进行全量推演..."):
                         db = build_rule_database()
-                        if not db: st.error("规则表读取失败！")
+                        if not db: 
+                            st.error("规则表读取失败！")
                         else:
                             system_prompt = get_analysis_prompt(build_full_table_text(db))
-                            st.session_state.ai_api_result = call_deepseek_api(question, system_prompt)
-                            import re
-                            nums = re.findall(r'\\b([0-4][0-9])\\b', st.session_state.ai_api_result)
-                            st.session_state.ai_ball_result = sorted(list(set(int(n) for n in nums if 1 <= int(n) <= 49)))
+                            answer = call_deepseek_api(question, system_prompt)
+                            st.session_state.ai_api_result = answer
+                            
+                            # 🔥 修复没结果的问题：如果接口报错，直接弹红框提示，不让它傻等
+                            if "请求失败" in answer or "运行错误" in answer:
+                                st.error(f"AI 接口报错：{answer}")
+                                st.session_state.ai_ball_result = []
+                            else:
+                                st.success("✅ AI 推演成功！")
+                                import re
+                                nums = re.findall(r'\\b([0-4][0-9])\\b', answer)
+                                st.session_state.ai_ball_result = sorted(list(set(int(n) for n in nums if 1 <= int(n) <= 49)))
                             
         with b2:
             if st.button("🗑️ 清理勾选", use_container_width=True):
@@ -595,6 +607,11 @@ def render_ai():
             cols = st.columns(3)
             others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
             for idx, key in enumerate(others):
+                with cols[idx % 3]: st.checkbox(key, key=f"{v_prefix}{key}")
+        # 🔥 新增物象专属复选框
+        with st.expander("物象专属"):
+            cols = st.columns(3)
+            for idx, key in enumerate(["家臣", "美女", "君王", "恶人"]):
                 with cols[idx % 3]: st.checkbox(key, key=f"{v_prefix}{key}")
 
     st.divider()
