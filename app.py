@@ -491,7 +491,7 @@ def render_ai(df_data):
 
     with col_left:
         full_text = get_prefix(qishu, qiu, order_type) + "".join(checked_texts)
-        st.text_area("已选核算条件：", value=full_text, height=200, disabled=True)
+        st.text_area("已选核算条件：", value=full_text, height=200)
         
         b1, b2 = st.columns(2)
         with b1:
@@ -567,7 +567,7 @@ def render_ai(df_data):
 
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
-    st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300, disabled=True)
+    st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 def main_app():
     with st.sidebar:
