@@ -221,10 +221,12 @@ def login_page():
                         pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
                         st.success("注册成功！请去左侧登录。")
 def render_console(df_data):
-    # 🔥 优先检查内存中是否有同步过来的最新数据
+    st.title("🧊 智能数据分析总控台")
+    
+    # 🔥 优先读取内存中的同步数据
     if "synced_df" in st.session_state and st.session_state.synced_df is not None:
         df_data = st.session_state.synced_df
-    st.title("🧊 智能数据分析总控台")
+        
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
@@ -238,6 +240,8 @@ def render_console(df_data):
     with col2: analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
     
     st.write("") 
+    
+    # 🔥 就是下面这 6 行定义按钮的代码，绝对不能丢！
     b1, b2, b3, b4, b5 = st.columns(5)
     start_btn = b1.button("🚀 批量联动分析", use_container_width=True, type="primary")
     result_btn = b2.button("🏆 中奖结果", use_container_width=True)
