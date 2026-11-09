@@ -424,7 +424,7 @@ def call_deepseek_api(question, system_prompt):
 
 def render_ai():
     st.title("🤖 AI 严谨推演系统")
-    df_data = load_real_data()
+    
     if df_data is not None and not isinstance(df_data, str):
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
         try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
@@ -573,7 +573,7 @@ def main_app():
     
     if menu == "主控制台": render_console(df_data)
     elif menu == "同现统计": render_stats(df_data)
-    elif menu == "AI推演": render_ai()
+    elif menu == "AI推演": render_ai(df_data)  # 🔥 核心修改：传参进去
 
 if not st.session_state.logged_in: login_page()
 else: main_app()
