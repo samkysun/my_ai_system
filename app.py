@@ -65,8 +65,8 @@ def load_real_data():
     except Exception as e:
         return str(e)
         def generate_20_combos(nums):
-    combos = list(itertools.combinations(nums, 3))
-    return [",".join([str(x).zfill(2) for x in c]) for c in combos]
+            combos = list(itertools.combinations(nums, 3))
+            return [",".join([str(x).zfill(2) for x in c]) for c in combos]
 
 def calculate_linkage(df_data, target_period, mode):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
