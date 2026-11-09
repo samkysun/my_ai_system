@@ -348,11 +348,11 @@ def render_trend_chart(df_data):
         st.dataframe(matrix_special, use_container_width=True, height=600)
 
 def render_stats(df_data):
-    st.title("📈 历史同现深度分析")
+    st.title("?? 历史同现深度分析")
     if df_data is None or isinstance(df_data, str): return
     target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
     top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
-    if st.button("🔍 开始扫描", use_container_width=True):
+    if st.button("?? 开始扫描", use_container_width=True):
         with st.spinner("正在比对..."):
             try:
                 nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
@@ -369,6 +369,8 @@ def render_stats(df_data):
                     st.dataframe(res_df, use_container_width=True, hide_index=True)
                     st.bar_chart(res_df.set_index("同频号码")["同现次数"])
             except Exception as e: st.error(f"出错：{e}")
+
+def build_rule_database():
   def build_rule_database():
     try:
         df = pd.read_excel(EXCEL_FILE, sheet_name="规则")
