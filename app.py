@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 import hashlib
 import time
@@ -372,9 +372,8 @@ def render_console(df_data):
         st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
     # 3. 操作逻辑
-     
-     if sync_btn:
-        with st.spinner("正在从源文件同步数据到总数据..."):
+if sync_btn:
+    with st.spinner("正在从源文件同步数据到总数据..."):
         import openpyxl
         import os
         MAIN_FILE = "数据分析系统最终版本（智能全套）.xlsm"
@@ -386,7 +385,8 @@ def render_console(df_data):
             ws_src = wb_src["数据源"]
             data_rows = []
             for row in ws_src.iter_rows(min_row=2, max_col=27):
-                if all(cell.value is None for cell in row): break
+                if all(cell.value is None for cell in row): 
+                    break
                 data_rows.append([cell.value for cell in row])
             wb_src.close()
             
@@ -418,49 +418,49 @@ if clear_btn:
     st.session_state.calc_result_preview = None
     st.session_state.predicted_nums_single = None
     st.session_state.predicted_nums_multi = None
-    st.success("✅ 数据已清空！")    
-
-    if start_btn:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        status_text.text("进度: 10% | 正在生成 20 组核心三码...")
-        time.sleep(0.2); progress_bar.progress(20)
-        status_text.text("进度: 40% | 正在执行[批量分析20组] (防未来函数)...")
-        time.sleep(0.2)
-        
-        df_triggers, df_counts, error_msg = calculate_linkage(df_data, selected_period, analysis_mode)
-        
-        progress_bar.progress(80)
-        status_text.text("进度: 80% | 正在统计下期频次...")
-        time.sleep(0.2); progress_bar.progress(100)
-        status_text.text("进度: 100% | 完成")
-        
-        if error_msg: st.error(error_msg)
-        else:
-            predicted_nums = df_counts.head(7)["下期数字"].tolist() if df_counts is not None and not df_counts.empty else []
-            if analysis_mode == "单排分析":
-                st.session_state.calc_data_single = (df_triggers, df_counts)
-                st.session_state.predicted_nums_single = predicted_nums
-            else:
-                st.session_state.calc_data_multi = (df_triggers, df_counts)
-                st.session_state.predicted_nums_multi = predicted_nums
-            st.success(f"✅ 分析完成！共扫描 {len(df_data)} 行历史数据，找到 {len(df_triggers)} 处触发。")
-
-    if result_btn:
-        predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
-        if not predicted_nums: 
-             st.warning("请先点击【开始分析】计算数据！")
+    st.success("✅ 数据已清空！")
+    
+if start_btn:
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    status_text.text("进度: 10% | 正在生成 20 组核心三码...")
+    time.sleep(0.2); progress_bar.progress(20)
+    status_text.text("进度: 40% | 正在执行[批量分析20组] (防未来函数)...")
+    time.sleep(0.2)
+    
+    df_triggers, df_counts, error_msg = calculate_linkage(df_data, selected_period, analysis_mode)
+    
+    progress_bar.progress(80)
+    status_text.text("进度: 80% | 正在统计下期频次...")
+    time.sleep(0.2); progress_bar.progress(100)
+    status_text.text("进度: 100% | 完成")
+    
+    if error_msg: st.error(error_msg)
     else:
-             with st.spinner("正在比对下一期开奖号码..."):
-                    res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
-                    if err == "本期开奖数据未更新":
-                         st.warning(f"? {selected_period} 期的下期开奖数据未更新，请等待开奖！")
-                         st.session_state.calc_result_preview = pd.DataFrame([res_data])
-                    elif err: 
-                         st.error(err)
-                    else:
-                         st.success("预祝您中奖！请查看下方中出结果预览。")
-                         st.session_state.calc_result_preview = pd.DataFrame([res_data])
+        predicted_nums = df_counts.head(7)["下期数字"].tolist() if df_counts is not None and not df_counts.empty else []
+        if analysis_mode == "单排分析":
+            st.session_state.calc_data_single = (df_triggers, df_counts)
+            st.session_state.predicted_nums_single = predicted_nums
+        else:
+            st.session_state.calc_data_multi = (df_triggers, df_counts)
+            st.session_state.predicted_nums_multi = predicted_nums
+        st.success(f"✅ 分析完成！共扫描 {len(df_data)} 行历史数据，找到 {len(df_triggers)} 处触发。")
+
+if result_btn:
+    predicted_nums = st.session_state.predicted_nums_single if analysis_mode == "单排分析" else st.session_state.predicted_nums_multi
+    if not predicted_nums: 
+        st.warning("请先点击【开始分析】计算数据！")
+    else:
+        with st.spinner("正在比对下一期开奖号码..."):
+            res_data, err = calculate_prize(df_data, selected_period, predicted_nums)
+            if err == "本期开奖数据未更新":
+                st.warning(f"⏳ {selected_period} 期的下期开奖数据未更新，请等待开奖！")
+                st.session_state.calc_result_preview = pd.DataFrame([res_data])
+            elif err: 
+                st.error(err)
+            else:
+                st.success("预祝您中奖！请查看下方中出结果预览。")
+                st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     # 4. 底部展示区
     st.divider()
