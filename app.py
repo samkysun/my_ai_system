@@ -16,7 +16,7 @@ USER_FILE = "users.csv"
 
 st.set_page_config(page_title="智能数据分析系统", layout="wide")
 
-DEEPSEEK_API_KEY = "sk-03230269b092411eb4db85a4ea906dd3"
+DEEPSEEK_API_KEY = st.secrets["DEEPSEEK_API_KEY"]
 
 st.markdown("""
 <style>
