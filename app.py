@@ -185,7 +185,7 @@ def calculate_prize(df_data, target_period, predicted_nums):
                       st.session_state.logged_in = True
                       st.session_state.username = user
                       st.rerun()
-                   else: 
+                    else: 
                         st.error("用户名或密码错误！")
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
@@ -457,27 +457,35 @@ def call_deepseek_api(question, system_prompt):
         else: return f"请求失败：{response.status_code}\\n{response.text}"
     except Exception as e: return f"运行错误：{e}"
     def render_stats(df_data):
-    st.title("?? 历史同现深度分析")
-    if df_data is None or isinstance(df_data, str): return
-    target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
-    top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
-    if st.button("?? 开始扫描", use_container_width=True):
-        with st.spinner("正在比对..."):
-            try:
-                nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
-                filtered = nums_df[nums_df.isin([target_num]).any(axis=1)]
-                if len(filtered) == 0: st.warning("未出现过。")
+        st.title("?? 历史同现深度分析")
+        if df_data is None or isinstance(df_data, str): 
+            st.error("数据读取失败")
+            return
+    
+        target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
+        top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
+
+        if st.button("?? 开始扫描", use_container_width=True):
+            with st.spinner("正在比对..."):
+                try:
+                    nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
+                    filtered = nums_df[nums_df.isin([target_num]).any(axis=1)]
+                    if len(filtered) == 0: 
+                        st.warning("未出现过。")
                 else:
                     counts = {}
                     for _, row in filtered.iterrows():
                         for num in row.values:
-                            if pd.notna(num) and int(num) != target_num: counts[int(num)] = counts.get(int(num), 0) + 1
+                            if pd.notna(num) and int(num) != target_num:
+                                counts[int(num)] = counts.get(int(num), 0) + 1
                     sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
                     res_df = pd.DataFrame([{"排名": i+1, "同频号码": f"{num:02d}", "同现次数": count} for i, (num, count) in enumerate(sorted_counts)])
                     st.success(f"与 {target_num:02d} 号同现频率最高的结果：")
                     st.dataframe(res_df, use_container_width=True, hide_index=True)
                     st.bar_chart(res_df.set_index("同频号码")["同现次数"])
-            except Exception as e: st.error(f"出错：{e}")
+            except Exception as e: 
+                st.error(f"出错：{e}")
+    
 
 def render_trend_chart(df_data):
     st.divider()
