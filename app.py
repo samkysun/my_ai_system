@@ -10,7 +10,7 @@ import requests
 # ==========================================
 # ?? 配置区
 # ==========================================
-EXCEL_FILE = "数据分析系统最终版本（智能全套）.xlsm" 
+EXCEL_FILE = "数据分析系统最终版本(智能全套).xlsm" 
 SHEET_NAME = "总数据" 
 USER_FILE = "users.csv"
 
@@ -278,8 +278,8 @@ def render_console(df_data):
     if sync_btn:
         with st.spinner("正在同步数据..."):
             import openpyxl
-            MAIN_FILE = "数据分析系统最终版本（智能全套）.xlsm"
-            FILE_SORTED = "升序源文件.xlsm"
+            MAIN_FILE = "数据分析系统最终版本(智能全套).xlsm"
+            FILE_SORTED = "升序源文件.xlsx"
             if os.path.exists(MAIN_FILE) and os.path.exists(FILE_SORTED):
                 wb_src = openpyxl.load_workbook(FILE_SORTED, read_only=True, data_only=True)
                 ws_src = wb_src["数据源"]
