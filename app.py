@@ -171,39 +171,38 @@ def calculate_prize(df_data, target_period, predicted_nums):
     }
     return result, None
     def login_page():
-        st.title("?? 智能系统客户端登录")
-        tab1, tab2 = st.tabs(["登录", "注册新账号"])
-        with tab1:
-            user = st.text_input("用户名", key="login_user")
-            pwd = st.text_input("密码", type="password", key="login_pass")
-            if st.button("登录", use_container_width=True):
-                if user and pwd:
-                   users_df = load_users()
-                   hashed = hashlib.sha256(pwd.encode()).hexdigest()
-                   match = users_df[(users_df['username'] == user) & (users_df['password'] == hashed)]
-                   if not match.empty:
-                      st.session_state.logged_in = True
-                      st.session_state.username = user
-                      st.rerun()
-                  else: 
-                      st.error("用户名或密码错误！")
+    st.title("?? 智能系统客户端登录")
+    tab1, tab2 = st.tabs(["登录", "注册新账号"])
+    with tab1:
+        user = st.text_input("用户名", key="login_user")
+        pwd = st.text_input("密码", type="password", key="login_pass")
+        if st.button("登录", use_container_width=True):
+            if user and pwd:
+                users_df = load_users()
+                hashed = hashlib.sha256(pwd.encode()).hexdigest()
+                match = users_df[(users_df['username'] == user) & (users_df['password'] == hashed)]
+                if not match.empty:
+                    st.session_state.logged_in = True
+                    st.session_state.username = user
+                    st.rerun()
+                else:
+                    st.error("用户名或密码错误！")
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
         reg_pwd = st.text_input("设置密码", type="password", key="reg_pass")
         reg_confirm = st.text_input("确认密码", type="password", key="reg_confirm")
         if st.button("注册", use_container_width=True):
             if reg_user and reg_pwd:
-                if reg_pwd != reg_confirm: 
+                if reg_pwd != reg_confirm:
                     st.error("两次密码不一致")
                 else:
                     users_df = load_users()
-                    if reg_user in users_df['username'].values: 
+                    if reg_user in users_df['username'].values:
                         st.error("该用户名已被注册")
                     else:
                         new_user = pd.DataFrame({'username': [reg_user], 'password': [hashlib.sha256(reg_pwd.encode()).hexdigest()]})
                         pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
                         st.success("注册成功！请去左侧登录。")
-
 def render_console(df_data):
     st.title("🧊 智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
