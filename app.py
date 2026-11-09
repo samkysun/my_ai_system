@@ -422,7 +422,7 @@ def call_deepseek_api(question, system_prompt):
         else: return f"请求失败：{response.status_code}\\n{response.text}"
     except Exception as e: return f"运行错误：{e}"
 
-def render_ai():
+def render_ai(df_data):
     st.title("🤖 AI 严谨推演系统")
     
     if df_data is not None and not isinstance(df_data, str):
