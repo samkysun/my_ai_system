@@ -185,7 +185,7 @@ def calculate_prize(df_data, target_period, predicted_nums):
                       st.session_state.logged_in = True
                       st.session_state.username = user
                       st.rerun()
-                    else: 
+                   else: 
                         st.error("用户名或密码错误！")
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
