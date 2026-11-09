@@ -371,9 +371,10 @@ def render_stats(df_data):
             except Exception as e: st.error(f"出错：{e}")
 
 def build_rule_database():
-  def build_rule_database():
     try:
-        df = pd.read_excel(EXCEL_FILE, sheet_name="规则")
+        # 🔥 确保后缀是 .xlsm，括号是英文
+        file_name = "数据分析系统最终版本(智能全套).xlsm" 
+        df = pd.read_excel(file_name, sheet_name="规则")
         db = {}
         col_num = next((c for c in df.columns if "号码" in str(c)), "号码")
         col_zodiac = next((c for c in df.columns if "生肖" in str(c)), "生肖")
@@ -385,13 +386,23 @@ def build_rule_database():
         col_obj = next((c for c in df.columns if "物象" in str(c)), "物象")
         col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
         col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
+        
         for _, row in df.iterrows():
             num_str = str(row[col_num]).strip()
             if num_str.replace('.', '', 1).isdigit():
                 n = str(int(float(num_str)))
-                db[n] = {"生肖": str(row[col_zodiac]), "肖五行": str(row[col_wuxing]), "号五行": str(row[col_element]), "尾五行": str(row[col_tail]), "波色": str(row[col_color]), "大小": str(row[col_size]), "物象": str(row[col_obj]), "人物": str(row[col_role]), "合数": str(row[col_sum])}
+                db[n] = {
+                    "生肖": str(row[col_zodiac]), "肖五行": str(row[col_wuxing]), 
+                    "号五行": str(row[col_element]), "尾五行": str(row[col_tail]), 
+                    "波色": str(row[col_color]), "大小": str(row[col_size]), 
+                    "物象": str(row[col_obj]), "人物": str(row[col_role]), 
+                    "合数": str(row[col_sum])
+                }
         return db
-    except Exception as e: return None
+    except Exception as e: 
+        # 遇到错误直接把真实原因打印出来
+        st.error(f"底层读取失败，真实原因：{e}")
+        return None
 
 def build_full_table_text(db):
     result = "【1-49号完整属性表（绝对权威）】\\n"
