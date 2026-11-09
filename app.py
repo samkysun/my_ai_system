@@ -278,7 +278,7 @@ def render_console(df_data):
         st.subheader(f"🎯 {next_period_str} 期开奖结果")
         st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
-    if sync_btn:
+if sync_btn:
     with st.spinner("正在从源文件同步数据..."):
         import openpyxl
         FILE_SORTED = "升序源文件.xlsx" # 请确保文件名完全一致
