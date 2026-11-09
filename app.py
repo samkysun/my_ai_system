@@ -221,6 +221,9 @@ def login_page():
                         pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
                         st.success("注册成功！请去左侧登录。")
 def render_console(df_data):
+    # 🔥 优先检查内存中是否有同步过来的最新数据
+    if "synced_df" in st.session_state and st.session_state.synced_df is not None:
+        df_data = st.session_state.synced_df
     st.title("🧊 智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
@@ -276,31 +279,65 @@ def render_console(df_data):
         st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
 
     if sync_btn:
-        with st.spinner("正在同步数据..."):
-            import openpyxl
-            MAIN_FILE = "数据分析系统最终版本(智能全套).xlsm"
-            FILE_SORTED = "升序源文件.xlsx"
-            if os.path.exists(MAIN_FILE) and os.path.exists(FILE_SORTED):
-                wb_src = openpyxl.load_workbook(FILE_SORTED, read_only=True, data_only=True)
+    with st.spinner("正在从源文件同步数据..."):
+        import openpyxl
+        FILE_SORTED = "升序源文件.xlsx" # 请确保文件名完全一致
+        
+        if os.path.exists(FILE_SORTED):
+            # 打开源文件，并读取名为“数据源”的工作表
+            wb_src = openpyxl.load_workbook(FILE_SORTED, read_only=True, data_only=True)
+            if "数据源" in wb_src.sheetnames:
                 ws_src = wb_src["数据源"]
-                data_rows = []
-                for row in ws_src.iter_rows(min_row=2, max_col=27):
-                    if all(cell.value is None for cell in row): break
-                    data_rows.append([cell.value for cell in row])
-                wb_src.close()
+            else:
+                st.error("源文件里找不到名为“数据源”的工作表！")
+                st.stop()
+            
+            synced_rows = []
+            # 从第3行开始读取，读取前 17 列（A到Q）
+            for row in ws_src.iter_rows(min_row=3, max_col=17):
+                if all(cell.value is None for cell in row): break
                 
-                if data_rows:
-                    wb_dst = openpyxl.load_workbook(MAIN_FILE, keep_vba=True)
-                    ws_dst = wb_dst["总数据"]
-                    if ws_dst.max_row > 1: ws_dst.delete_rows(2, ws_dst.max_row)
-                    for r_idx, row_data in enumerate(data_rows, start=2):
-                        for c_idx, value in enumerate(row_data, start=1):
-                            ws_dst.cell(row=r_idx, column=c_idx).value = value
-                    wb_dst.save(MAIN_FILE)
-                    st.cache_data.clear()
-                    st.rerun()
-                else: st.warning("源文件没有数据！")
-            else: st.error("找不到文件！")
+                # 1. 拼装期数 (A, B, C 列)
+                p1, p2, p3 = row[0].value, row[1].value, row[2].value
+                if p1 is None: continue
+                try:
+                    period_str = f"{int(p1)}{int(p2)}{int(p3)}" if p3 is not None else f"{int(p1)}{int(p2)}"
+                except:
+                    period_str = f"{p1}{p2}{p3}"
+                
+                # 2. 拼装 7 个号码 (十位、个位)
+                nums = []
+                for i in range(7):
+                    tens = row[3 + i*2].value
+                    units = row[4 + i*2].value
+                    if tens is not None and units is not None:
+                        nums.append(int(tens)*10 + int(units))
+                    else:
+                        nums.append(None)
+                
+                # 3. 组装成网页系统需要的格式
+                new_row = [None]*30
+                new_row[18] = period_str # 第19列：期数
+                for i in range(6):
+                    new_row[19+i] = nums[i] # 第20-25列：6个平码
+                new_row[25] = nums[6] # 第26列：特码
+                synced_rows.append(new_row)
+                
+            wb_src.close()
+            
+            if synced_rows:
+                synced_df = pd.DataFrame(synced_rows)
+                # 按期数降序排列（最新的在最上面）
+                synced_df = synced_df.sort_values(by=18, ascending=False).reset_index(drop=True)
+                
+                # 🔥 关键步骤：把读取到的数据存入网页内存，彻底绕开云端文件“只读”限制
+                st.session_state.synced_df = synced_df
+                st.success("✅ 数据同步成功！已加载最新源文件。")
+                st.rerun()
+            else:
+                st.warning("【数据源】工作表没有数据！")
+        else: 
+            st.error(f"找不到文件！请确认 {FILE_SORTED} 在根目录。")
 
     if trend_btn: render_trend_chart(df_data)
     if clear_btn:
