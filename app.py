@@ -7,11 +7,15 @@ import itertools
 from collections import Counter
 import requests
 
+# ==========================================
+# ?? 配置区
+# ==========================================
 EXCEL_FILE = "数据分析系统最终版本（智能全套）.xlsm" 
 SHEET_NAME = "总数据" 
 USER_FILE = "users.csv"
 
 st.set_page_config(page_title="智能数据分析系统", layout="wide")
+
 DEEPSEEK_API_KEY = "sk-03230269b092411eb4db85a4ea906dd3"
 
 st.markdown("""
@@ -64,9 +68,10 @@ def load_real_data():
         return df.dropna(how='all')
     except Exception as e:
         return str(e)
-        def generate_20_combos(nums):
-            combos = list(itertools.combinations(nums, 3))
-            return [",".join([str(x).zfill(2) for x in c]) for c in combos]
+
+def generate_20_combos(nums):
+    combos = list(itertools.combinations(nums, 3))
+    return [",".join([str(x).zfill(2) for x in c]) for c in combos]
 
 def calculate_linkage(df_data, target_period, mode):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
@@ -81,8 +86,10 @@ def calculate_linkage(df_data, target_period, mode):
     
     if len(base_nums) < 6: return None, None, "基准期开奖号码不足6个"
         
-    try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
-    except: is_descending = True
+    try:
+        is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
+    except:
+        is_descending = True
         
     if is_descending:
         start_idx = base_idx + 1
@@ -104,16 +111,21 @@ def calculate_linkage(df_data, target_period, mode):
             for combo_str in combos_str:
                 combo = [int(x) for x in combo_str.split(",")]
                 if all(n in row_nums for n in combo):
-                    triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
+                    triggers.append({
+                        "组合": combo_str, "触发行": idx + 1, "触发期数": row_period,
+                        "触发行号码": ",".join([f"{n:02d}" for n in row_nums])
+                    })
                     next_idx = idx - 1 if is_descending else idx + 1
                     if 0 <= next_idx < len(df_data):
                         next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
-                        for n in next_row_nums: total_counter[n] += 1
+                        for n in next_row_nums:
+                            total_counter[n] += 1
     else:
         dict_history = set() 
         for i in range(7):
             current_base = list(base_nums)
-            if i >= 1 and special_num is not None: current_base[i-1] = special_num
+            if i >= 1 and special_num is not None:
+                current_base[i-1] = special_num
             if len(current_base) < 6: continue
             new_combos = generate_20_combos(current_base)
             valid_combos = [c for c in new_combos if c not in dict_history]
@@ -125,11 +137,15 @@ def calculate_linkage(df_data, target_period, mode):
                 for combo_str in valid_combos:
                     combo = [int(x) for x in combo_str.split(",")]
                     if all(n in row_nums for n in combo):
-                        triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
+                        triggers.append({
+                            "组合": combo_str, "触发行": idx + 1, "触发期数": row_period,
+                            "触发行号码": ",".join([f"{n:02d}" for n in row_nums])
+                        })
                         next_idx = idx - 1 if is_descending else idx + 1
                         if 0 <= next_idx < len(df_data):
                             next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
-                            for n in next_row_nums: total_counter[n] += 1
+                            for n in next_row_nums:
+                                total_counter[n] += 1
 
     sorted_counts = sorted(total_counter.items(), key=lambda x: x[1], reverse=True)
     df_triggers = pd.DataFrame(triggers) if triggers else pd.DataFrame(columns=["组合", "触发行", "触发期数", "触发行号码"])
@@ -170,7 +186,8 @@ def calculate_prize(df_data, target_period, predicted_nums):
         "中出特码": z_val if z_matched else "", "状态": status
     }
     return result, None
-    def login_page():
+
+def login_page():
     st.title("?? 智能系统客户端登录")
     tab1, tab2 = st.tabs(["登录", "注册新账号"])
     with tab1:
@@ -354,6 +371,7 @@ def render_console(df_data):
     if st.session_state.calc_result_preview is not None:
         st.dataframe(st.session_state.calc_result_preview, use_container_width=True, hide_index=True)
     else: st.info("暂无中出结果。")
+
 def render_stats(df_data):
     st.title("📈 历史同现深度分析")
     if df_data is None or isinstance(df_data, str): return
@@ -455,116 +473,7 @@ def call_deepseek_api(question, system_prompt):
             return response.json()['choices'][0]['message']['content'].replace("**", "").replace("###", "").replace("##", "").replace("#", "").replace("`", "")
         else: return f"请求失败：{response.status_code}\\n{response.text}"
     except Exception as e: return f"运行错误：{e}"
-    def render_stats(df_data):
-        st.title("?? 历史同现深度分析")
-        if df_data is None or isinstance(df_data, str): 
-            st.error("数据读取失败")
-            return
-    
-        target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
-        top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
-
-        if st.button("?? 开始扫描", use_container_width=True):
-            with st.spinner("正在比对..."):
-                try:
-                    nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
-                    filtered = nums_df[nums_df.isin([target_num]).any(axis=1)]
-                    if len(filtered) == 0: 
-                        st.warning("未出现过。")
-                else:
-                    counts = {}
-                    for _, row in filtered.iterrows():
-                        for num in row.values:
-                            if pd.notna(num) and int(num) != target_num:
-                                counts[int(num)] = counts.get(int(num), 0) + 1
-                    sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:top_n]
-                    res_df = pd.DataFrame([{"排名": i+1, "同频号码": f"{num:02d}", "同现次数": count} for i, (num, count) in enumerate(sorted_counts)])
-                    st.success(f"与 {target_num:02d} 号同现频率最高的结果：")
-                    st.dataframe(res_df, use_container_width=True, hide_index=True)
-                    st.bar_chart(res_df.set_index("同频号码")["同现次数"])
-            except Exception as e: 
-                st.error(f"出错：{e}")
-    
-
-def render_trend_chart(df_data):
-    st.divider()
-    st.subheader("?? 历史走势图（最近30期）")
-    if df_data is None or isinstance(df_data, str): return
-    recent_data = df_data.head(30).copy()
-    if recent_data.empty: return
-    periods = recent_data.iloc[:, 18].apply(clean_period).tolist()
-    tab1, tab2 = st.tabs(["平 码 区", "特 码 区"])
-    with tab1:
-        cols = [f"{i:02d}" for i in range(1, 50)]
-        matrix = pd.DataFrame("", index=periods, columns=cols)
-        for idx, row in recent_data.iterrows():
-            period = clean_period(row.iloc[18])
-            for i in range(19, 25):
-                num_str = clean_period(row.iloc[i])
-                if num_str in cols: matrix.at[period, num_str] = "●"
-        st.dataframe(matrix, use_container_width=True, height=600)
-    with tab2:
-        cols = [f"{i:02d}" for i in range(1, 50)]
-        matrix_special = pd.DataFrame("", index=periods, columns=cols)
-        for idx, row in recent_data.iterrows():
-            period = clean_period(row.iloc[18])
-            num_str = clean_period(row.iloc[25]) if len(row) > 25 else ""
-            if num_str in cols: matrix_special.at[period, num_str] = "★"
-        st.dataframe(matrix_special, use_container_width=True, height=600)
-
-def build_rule_database():
-    try:
-        df = pd.read_excel(EXCEL_FILE, sheet_name="规则")
-        db = {}
-        col_num = next((c for c in df.columns if "号码" in str(c)), "号码")
-        col_zodiac = next((c for c in df.columns if "生肖" in str(c)), "生肖")
-        col_wuxing = next((c for c in df.columns if "肖五行" in str(c)), "肖五行")
-        col_element = next((c for c in df.columns if "号五行" in str(c)), "号五行")
-        col_tail = next((c for c in df.columns if "尾五行" in str(c)), "尾五行")
-        col_color = next((c for c in df.columns if "波色" in str(c)), "波色")
-        col_size = next((c for c in df.columns if "大小" in str(c)), "大小")
-        col_obj = next((c for c in df.columns if "物象" in str(c)), "物象")
-        col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
-        col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
-        for _, row in df.iterrows():
-            num_str = str(row[col_num]).strip()
-            if num_str.replace('.', '', 1).isdigit():
-                n = str(int(float(num_str)))
-                db[n] = {"生肖": str(row[col_zodiac]), "肖五行": str(row[col_wuxing]), "号五行": str(row[col_element]), "尾五行": str(row[col_tail]), "波色": str(row[col_color]), "大小": str(row[col_size]), "物象": str(row[col_obj]), "人物": str(row[col_role]), "合数": str(row[col_sum])}
-        return db
-    except Exception as e:
-        st.error(f"读取规则表失败: {e}")
-        return None
-
-def build_full_table_text(db):
-    result = "【1-49号完整属性表（绝对权威）】\\\\n"
-    for i in range(1, 50):
-        if str(i) in db:
-            info = db[str(i)]
-            result += f"{i}号:{{{info['生肖']},{info['肖五行']},{info['号五行']},{info['尾五行']},{info['物象']},{info['人物']},{info['大小']},{info['波色']},{info['合数']}}}\\\\n"
-    return result
-
-def get_analysis_prompt(full_table):
-    return f"""你是一个精通集合运算与条件排除的推演助手。以下是 1-49 号号码的绝对属性参照表：
-{full_table}
-【推演与输出规则】
-1. 用户的提问已明确给出了排杀条件，请严格从 1-49 中剔除不符合条件的号码。
-2. 注意多重条件叠加，比如一个号码可能同时触犯了多个排杀条件。
-3. 如果严格剔除后，剩下的号码大于 0 个，直接输出剩下的生肖和号码。
-4. 如果严格剔除后，剩下 0 个号码（即全被杀光），请触发后补机制：筛选出【只触犯了一个排杀条件】的号码作为候补，【触犯两个及以上条件】的号码绝对不能作为候补。
-5. 格式要求：请先在心中默默推演，直接给出结果。最后输出格式必须包含：'【严格筛选结果】'和'【后补筛选结果】(如果有的话)。
-6. 绝对禁止复述属性表，直接给出最终号码和生肖。"""
-
-def call_deepseek_api(question, system_prompt):
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
-    payload = {"model": "deepseek-chat", "temperature": 0, "messages": [{"role": "system", "content": "你是一个严谨的数据推演与集合运算助手。"}, {"role": "user", "content": question}, {"role": "system", "content": system_prompt}]}
-    try:
-        response = requests.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=60)
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content'].replace("**", "").replace("###", "").replace("##", "").replace("#", "").replace("`", "")
-        else: return f"请求失败：{response.status_code}\\\\n{response.text}"
-    except Exception as e: return f"运行错误：{e}"
-    def render_ai():
+def render_ai():
     st.title("🤖 AI 严谨推演系统")
     df_data = load_real_data()
     if df_data is not None and not isinstance(df_data, str):
