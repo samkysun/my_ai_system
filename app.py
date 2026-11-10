@@ -618,11 +618,116 @@ def render_multi_analysis(df_data):
         st.session_state.multi_result_text = "等待执行分析..."
 
     if run_btn:
-        with st.spinner("正在读取数据并计算，请稍候..."):
-            # 注意：在云端，你需要确保这些文件被上传到了项目目录下
-            # 这里我们先模拟一下逻辑执行
-            st.session_state.multi_result_text = f"执行成功！\\n文件：{selected_file}\\nHM1：{hm1}\\nHM2：{hm2}\\n(注：需要上传对应的 Excel 文件才能读取真实数据)"
-            st.success("分析完成！")
+        if not hm1 or not hm2:
+            st.warning("请确保球号和次数已选择！")
+        else:
+           with st.spinner("正在读取真实数据并计算，请稍候..."):
+              try:
+                  import os
+                  base_name = selected_file
+                  file_path = ""
+                  engine_type = None
+                
+                  # ?? 智能识别后缀并配置读取引擎
+                  if os.path.exists(f"{base_name}.xlsb"):
+                        file_path = f"{base_name}.xlsb"
+                        engine_type = "pyxlsb"  # 专属读取 .xlsb 的引擎
+                    elif os.path.exists(f"{base_name}.xlsm"):
+                        file_path = f"{base_name}.xlsm"
+                        engine_type = "openpyxl" # 读取 .xlsm 的引擎
+                    elif os.path.exists(f"{base_name}.xlsx"):
+                        file_path = f"{base_name}.xlsx"
+                        engine_type = "openpyxl"
+                    else:
+                        st.error(f"? 在根目录找不到文件：{base_name} 系列文件，请确认已上传！")
+                        st.stop()
+                    
+                    # 读取 Excel
+                    excel_file = pd.ExcelFile(file_path, engine=engine_type)
+                    
+                    # 寻找目标表 (寻找包含 HN3 数据的表)
+                    target_sheet = None
+                    for sheet in excel_file.sheet_names:
+                        try:
+                            temp_df = pd.read_excel(excel_file, sheet_name=sheet, nrows=5, header=None)
+                            if temp_df.shape[1] > 221 and pd.notna(temp_df.iloc[2, 221]):
+                                target_sheet = sheet
+                                break
+                        except:
+                            continue
+                    
+                    if not target_sheet:
+                        target_sheet = excel_file.sheet_names[0]
+    
+                    from datetime import datetime
+                    time_str = datetime.now().strftime("%H:%M:%S")
+                    st.session_state.multi_result_text = f"========== {selected_file} ==========\\\\n计算时间: {time_str}\\\\n\\\\n"
+                    
+                    if is_wuxing:
+                        # 核算五行
+                        st.session_state.multi_result_text += f"【五行核算】球号: {hm1} | 次数: {hm2}\\\\n"
+                        df_wuxing = pd.read_excel(excel_file, sheet_name=target_sheet, header=None).iloc[1:3, 54:61]
+                        bContent = ""
+                        for r_idx in range(df_wuxing.shape[0]):
+                            for c_idx in range(df_wuxing.shape[1]):
+                                val = str(df_wuxing.iloc[r_idx, c_idx]).strip()
+                                if val != "" and val != "0" and val != "nan":
+                                    posNum = 62 - (55 + c_idx)
+                                    joinStr = f"金（{posNum}）" if val == "金" else f"{val}号（{posNum}）"
+                                    bContent = joinStr if bContent == "" else bContent + f",{joinStr}"
+                        
+                        if bContent == "":
+                            st.session_state.multi_result_text += "未读取到有效值。\\\\n"
+                        else:
+                            st.session_state.multi_result_text += f"【B列结果】: {bContent}\\\\n【C列结果】: 五行对应{hm2}次\\\\n"
+                    
+                    elif is_special:
+                        st.session_state.multi_result_text += "特殊文件已重算。\\\\n"
+                    
+                    else:
+                        # 多维分析
+                        st.session_state.multi_result_text += f"读取工作表: {target_sheet}\\\\n"
+                        df_full = pd.read_excel(excel_file, sheet_name=target_sheet, header=None)
+                        
+                        # B列矩阵 (HN3:IA20 -> 行2-19，列221-234)
+                        dataArr = df_full.iloc[2:20, 221:235].fillna("").astype(str).values
+                        groupNums = [7, 6, 5, 4, 3, 2, 1]
+                        newContentB = ""
+                        
+                        for i in range(7):
+                            colLeftIdx = i * 2
+                            colRightIdx = i * 2 + 1
+                            for r in range(18):
+                                valLeft = dataArr[r, colLeftIdx].strip()
+                                valRight = dataArr[r, colRightIdx].strip()
+                                targetText, isHit = "", False
+                                if valLeft == "1": targetText, isHit = valRight, True
+                                if valRight == "1": targetText, isHit = valLeft, True
+                                
+                                if isHit and targetText != "" and targetText != "0" and not targetText.isdigit():
+                                    内容B = f"{targetText}近{hm2}期一致间距{r+1}（{groupNums[i]}）"
+                                    if 内容B not in newContentB:
+                                        newContentB += f"{内容B},"
+                        
+                        # C列矩阵 (IC2:II20 -> 行1-19，列236-242)
+                        dataArrC = df_full.iloc[1:20, 236:243].fillna("").astype(str).values
+                        newContentC = ""
+                        for ic in range(7):
+                            for rc in range(19):
+                                valC = dataArrC[rc, ic].strip()
+                                if valC != "" and valC != "nan":
+                                    内容C = f"{hm2}，{valC}（{groupNums[ic]}）"
+                                    if 内容C not in newContentC:
+                                        newContentC += f"{内容C},"
+                        
+                        st.session_state.multi_result_text += f"【B列新内容】:\\\\n{newContentB if newContentB else '无'}\\\\n\\\\n"
+                        st.session_state.multi_result_text += f"【C列新内容】:\\\\n{newContentC if newContentC else '无'}\\\\n"
+                            
+                    st.success("? 数据计算完成！")
+    
+                except Exception as e:
+                    st.error(f"执行出错: {e}")
+    
     # ?? 同步到 AI 推演的按钮逻辑
     if sync_ai_btn:
         # 组装杀号条件
@@ -631,25 +736,27 @@ def render_multi_analysis(df_data):
         # 存入 AI 页面可以读取的专属变量中
         st.session_state.ai_extra_condition = ai_condition
         st.success(f"? 同步成功！已向 AI 推演追加条件：{ai_condition}")
+        
     if clear_btn:
         st.session_state.multi_result_text = "等待执行分析..."
         st.rerun()
-
+    
     # 用文本框展示结果（可复制）
     st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
-    # 🔥 动态显示导出按钮（只要文本框有内容就显示）
+    
+    # ?? 动态显示导出按钮（只要文本框有内容就显示）
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
         from datetime import datetime
         file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     
         st.download_button(
-            label="💾 保存日记到本地电脑 (TXT格式)",
+            label="?? 保存日记到本地电脑 (TXT格式)",
             data=st.session_state.multi_result_text,
             file_name=file_name,
             mime="text/plain",
             use_container_width=True,
             type="secondary"
-         )
+        )
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
