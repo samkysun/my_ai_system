@@ -603,7 +603,7 @@ def render_multi_analysis(df_data):
     st.divider()
     
     # 操作按钮区
-    b1, b2 = st.columns(2)
+    b1, b2, b3 = st.columns(2)
     with b1:
         run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
     with b2:
