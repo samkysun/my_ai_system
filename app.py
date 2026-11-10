@@ -575,45 +575,56 @@ def render_ai(df_data):
 import openpyxl
 from openpyxl.utils import column_index_from_string
 
+import openpyxl
+import pandas as pd
+import os
+
 # ==========================================
-# 页面 6：多维分析系统 (辅助列读取 + 完美同步版)
+# 页面 6：多维分析系统 (防卡顿、防错位终极版)
 # ==========================================
+
+# 🔥 核心修复 1：加上缓存！只要文件名不变，绝对不会重复去读大文件，彻底告别卡顿！
+@st.cache_data(show_spinner=False)
 def get_dropdown_data(file_path, selected_file):
     hm1_list, hm2_list = [], []
     if not file_path or not os.path.exists(file_path):
         return ["文件未上传"], []
 
-    # 🔥 严格根据你的文件分类，去读取对应的辅助列
+    # 🔥 核心修复 2：全部改用绝对列索引，彻底干掉 xlsb 的错位问题
+    # JL = 245, JM = 246, CZ = 103, DA = 104, CP = 93
     if "多维分析" in selected_file:
         sheet_name = selected_file
-        hm1_col, hm1_end = "JL", 7
-        hm2_col, hm2_end = "JM", 130
+        hm1_col_idx, hm1_end = 245, 7      # JL
+        hm2_col_idx, hm2_end = 246, 130    # JM
         
     elif "核算五行" in selected_file:
         sheet_name = "多方面"
-        hm1_col, hm1_end = "CZ", 7
-        hm2_col, hm2_end = "DA", 4
+        hm1_col_idx, hm1_end = 103, 7      # CZ
+        hm2_col_idx, hm2_end = 104, 4      # DA
         
     else:
         # 12 套相生相克文件
         sheet_name = "多方面"
-        hm1_col, hm1_end = "CP", 7
-        hm2_col, hm2_end = None, 0 # 无 HM2
+        hm1_col_idx, hm1_end = 93, 7       # CP
+        hm2_col_idx = -1                   # 无 HM2
 
     try:
         engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
+        # 读全表，绝对不用 usecols 字母，防止报错
+        df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine=engine_type)
         
-        # 读取 HM1
-        df1 = pd.read_excel(file_path, sheet_name=sheet_name, usecols=hm1_col, header=None, engine=engine_type)
-        for x in df1.iloc[:hm1_end, 0].dropna().tolist():
+        if df.shape[1] <= hm1_col_idx:
+            return [f"报错: 表格不够宽({df.shape[1]}列)"], []
+
+        # 提取 HM1
+        for x in df.iloc[:hm1_end, hm1_col_idx].dropna().tolist():
             v = str(x).strip()
             if v and v not in hm1_list:
                 hm1_list.append(v)
 
-        # 读取 HM2 (如果有)
-        if hm2_col:
-            df2 = pd.read_excel(file_path, sheet_name=sheet_name, usecols=hm2_col, header=None, engine=engine_type)
-            for x in df2.iloc[:hm2_end, 0].dropna().tolist():
+        # 提取 HM2
+        if hm2_col_idx >= 0 and df.shape[1] > hm2_col_idx:
+            for x in df.iloc[:hm2_end, hm2_col_idx].dropna().tolist():
                 v = str(x).strip()
                 if v and v not in hm2_list:
                     hm2_list.append(v)
@@ -622,6 +633,7 @@ def get_dropdown_data(file_path, selected_file):
         return [f"读取报错: {e}"], []
 
     return hm1_list, hm2_list
+
 
 def render_multi_analysis(df_data):
     st.title("🧊 多维分析系统")
@@ -640,19 +652,12 @@ def render_multi_analysis(df_data):
     ]
     
     with col1:
-        # 🔥 核心同步机制：一旦切换文件，立刻销毁下方旧下拉框的记忆
+        # 切换文件时销毁旧记忆
         def on_file_change():
-            if "multi_hm1_widget" in st.session_state:
-                del st.session_state["multi_hm1_widget"]
-            if "multi_hm2_widget" in st.session_state:
-                del st.session_state["multi_hm2_widget"]
+            if "multi_hm1_widget" in st.session_state: del st.session_state["multi_hm1_widget"]
+            if "multi_hm2_widget" in st.session_state: del st.session_state["multi_hm2_widget"]
 
-        selected_file = st.selectbox(
-            "选择分析类型", 
-            file_options, 
-            on_change=on_file_change
-        )
-        
+        selected_file = st.selectbox("选择分析类型", file_options, on_change=on_file_change)
         is_special = "多维分析" not in selected_file
         is_wuxing = "核算五行" in selected_file
 
@@ -662,13 +667,18 @@ def render_multi_analysis(df_data):
     elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
     elif os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
 
-    # 🔥 获取最新文件的下拉框数据
+    # 获取数据（因为有缓存，这一步极快）
     hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
-    
     if not hm1_list: hm1_list = ["无数据"]
     
+    # 🔥 核心修复 3：严格按照你的要求，前4套叫 HM1，后12套叫 AL1
+    if "多维分析" in selected_file or "核算五行" in selected_file:
+        label_hm1 = "HM1 (球号)"
+    else:
+        label_hm1 = "AL1 (条件)"
+
     with col2:
-        hm1 = st.selectbox("HM1 (球号/条件)", hm1_list, key="multi_hm1_widget")
+        hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
         
     if hm2_list:
         with col3:
@@ -676,9 +686,8 @@ def render_multi_analysis(df_data):
     else:
         hm2 = ""
         with col3:
-            st.info("ℹ️ 该文件无HM2下拉框")
+            st.info("ℹ️ 当前文件无第二个下拉框")
 
-    st.caption(f"🔍 当前解析文件 `{file_path}` | 辅助列读取成功！")
     st.divider()
     
     # 2. 操作按钮区
@@ -692,7 +701,7 @@ def render_multi_analysis(df_data):
 
     # 3. 核心分析逻辑
     if run_btn:
-        if not hm1:
+        if not hm1 or hm1 == "无数据":
             st.error("读取下拉框失败！")
         else:
             with st.spinner("正在读取真实数据并计算，请稍候..."):
@@ -711,6 +720,7 @@ def render_multi_analysis(df_data):
                         except: pass
                             
                     time_str = datetime.now().strftime("%H:%M:%S")
+                    # 🔥 核心修复 4：把所有的 \\\\n 换成 \\n，防止网页显示乱码
                     result_text = f"========== {selected_file} ==========\\n计算时间: {time_str}\\n\\n"
                     
                     if is_wuxing:
