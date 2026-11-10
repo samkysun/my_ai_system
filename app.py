@@ -490,8 +490,12 @@ def render_ai(df_data):
     col_left, col_right = st.columns([1.2, 1])
 
     with col_left:
-        full_text = get_prefix(qishu, qiu, order_type) + "".join(checked_texts)
-        st.text_area("已选核算条件：", value=full_text, height=200)
+        # 🔥 接收多维分析传过来的条件
+        extra = st.session_state.get("ai_extra_condition", "")
+    
+        full_text = get_prefix(qishu, qiu, order_type) + "".join(checked_texts) + extra
+        st.text_area("已选核算条件：", value=full_text, height=200, disabled=True)
+        
         
         b1, b2 = st.columns(2)
         with b1:
@@ -604,7 +608,8 @@ def render_multi_analysis(df_data):
         run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
     with b2:
         clear_btn = st.button("🗑️ 清空结果", use_container_width=True)
-
+    with b3:
+        sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
     # 结果展示区
     st.markdown("### 📊 分析结果预览")
     result_placeholder = st.empty()
@@ -618,7 +623,14 @@ def render_multi_analysis(df_data):
             # 这里我们先模拟一下逻辑执行
             st.session_state.multi_result_text = f"执行成功！\\n文件：{selected_file}\\nHM1：{hm1}\\nHM2：{hm2}\\n(注：需要上传对应的 Excel 文件才能读取真实数据)"
             st.success("分析完成！")
-
+    # ?? 同步到 AI 推演的按钮逻辑
+    if sync_ai_btn:
+        # 组装杀号条件
+        ai_condition = f"杀{hm1}，"
+    
+        # 存入 AI 页面可以读取的专属变量中
+        st.session_state.ai_extra_condition = ai_condition
+        st.success(f"? 同步成功！已向 AI 推演追加条件：{ai_condition}")
     if clear_btn:
         st.session_state.multi_result_text = "等待执行分析..."
         st.rerun()
