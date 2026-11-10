@@ -643,7 +643,7 @@ def render_multi_analysis(df_data):
                         st.stop()
                     
                     # 读取 Excel
-                   excel_file = pd.ExcelFile(file_path, engine=engine_type)
+                  excel_file = pd.ExcelFile(file_path, engine=engine_type)
                     
                     # 寻找目标表 (寻找包含 HN3 数据的表)
                    target_sheet = None
