@@ -575,6 +575,94 @@ def render_ai(df_data):
 # ==========================================
 # 页面 6：多维分析系统
 # ==========================================
+import openpyxl
+from openpyxl.utils import range_boundaries
+
+def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
+    """根据 VBA 逻辑读取指定单元格的数据验证（下拉框）列表"""
+    hm1_list = []
+    hm2_list = []
+    
+    try:
+        # 用 openpyxl 读取公式，这样能获取数据验证信息
+        wb = openpyxl.load_workbook(file_path, data_only=False)
+        
+        # 找目标表
+        target_ws = None
+        if is_special:
+            for sheet in wb.sheetnames:
+                if "多方面" in sheet:
+                    target_ws = wb[sheet]
+                    break
+        else:
+            for sheet in wb.sheetnames:
+                if "结果" not in sheet:
+                    # 检查 HN3 有没有内容 (第 222 列，第 3 行)
+                    test_cell = wb[sheet].cell(row=3, column=222).value
+                    if test_cell is not None and str(test_cell).strip() != "":
+                        target_ws = wb[sheet]
+                        break
+        
+        if not target_ws:
+            target_ws = wb[wb.sheetnames[0]]
+
+        # 确定要读取的单元格坐标 (严格按照 VBA 逻辑)
+        if is_wuxing:
+            coord1, coord2 = "AM1", "AM2"
+        elif is_special:
+            coord1, coord2 = "AL1", "HM2"
+        else:
+            coord1, coord2 = "HM1", "HM2"
+
+        def extract_val(coord):
+            cell = target_ws[coord]
+            values = []
+            # 尝试读取数据验证（Data Validation）
+            if cell.data_validation and cell.data_validation.type == "list":
+                formula = cell.data_validation.formula1
+                if formula:
+                    if formula.startswith("="):
+                        # 如果是引用的范围，例如 "=Sheet2!$A$1:$A$10"
+                        range_ref = formula[1:]
+                        try:
+                            # 解析范围并读取值
+                            sheet_part, range_part = range_ref.split("!") if "!" in range_ref else (target_ws.title, range_ref)
+                            sheet_part = sheet_part.replace("'", "")
+                            min_col, min_row, max_col, max_row = range_boundaries(range_part.replace("$", ""))
+                            
+                            ref_ws = wb[sheet_part] if sheet_part in wb.sheetnames else target_ws
+                            for row in ref_ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col):
+                                for c in row:
+                                    if c.value is not None and str(c.value).strip() != "":
+                                        values.append(str(c.value).strip())
+                        except Exception:
+                            pass
+                    else:
+                        # 如果是直接字符串，例如 "相生,相克"
+                        values = [v.strip() for v in formula.replace('"', '').split(",") if v.strip()]
+            
+            # 如果没读到数据验证，直接读取单元格自身的值
+            if not values and cell.value is not None:
+                val_str = str(cell.value).strip()
+                # 尝试按逗号分割
+                if "," in val_str or "，" in val_str:
+                    values = [v.strip() for v in val_str.replace("，", ",").split(",") if v.strip()]
+                else:
+                    values = [val_str]
+                    
+            # 去重并保留顺序
+            unique_vals = []
+            for v in values:
+                if v not in unique_vals: unique_vals.append(v)
+            return unique_vals
+
+        hm1_list = extract_val(coord1)
+        hm2_list = extract_val(coord2)
+        wb.close()
+    except Exception as e:
+        print(f"读取下拉列表失败: {e}")
+        
+    return hm1_list, hm2_list
 def render_multi_analysis(df_data):
     st.title("🧊 多维分析系统")
     
