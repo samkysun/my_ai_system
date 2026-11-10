@@ -577,7 +577,7 @@ import pandas as pd
 import os
 
 # ==========================================
-# 页面 6：多维分析系统 (终极防漏版)
+# 页面 6：多维分析系统 (最终完整版)
 # ==========================================
 
 def get_dropdown_data(file_path, selected_file):
@@ -585,7 +585,7 @@ def get_dropdown_data(file_path, selected_file):
     if not file_path or not os.path.exists(file_path):
         return ["文件未上传"], []
 
-    # 确定目标工作表和列字母
+    # 严格区分文件类型和读取位置
     if "多维分析" in selected_file:
         sheet_name = selected_file
         col1_letter = "JL"
@@ -601,10 +601,11 @@ def get_dropdown_data(file_path, selected_file):
         col2_letter = None
 
     try:
+        # 统一先尝试用 openpyxl 读（支持 xlsm 和 xlsx）
         if file_path.endswith(".xlsm") or file_path.endswith(".xlsx"):
             wb = openpyxl.load_workbook(file_path, data_only=True)
             
-            # 模糊匹配表名
+            # 模糊匹配表名，防止表名多空格
             target_ws = None
             for s in wb.sheetnames:
                 if sheet_name in s:
@@ -613,7 +614,7 @@ def get_dropdown_data(file_path, selected_file):
             if not target_ws:
                 target_ws = wb[wb.sheetnames[0]]
             
-            # 🔥 暴力读取第一列（HM1 或 AL1）的整列，不管合并单元格还是隐藏行
+            # 暴力扫描第一列整列
             for col in target_ws[f"{col1_letter}:{col1_letter}"]:
                 for cell in col:
                     if cell.value is not None:
@@ -621,7 +622,7 @@ def get_dropdown_data(file_path, selected_file):
                         if v and v != "nan" and v not in hm1_list:
                             hm1_list.append(v)
             
-            # 🔥 暴力读取第二列（HM2）
+            # 暴力扫描第二列整列
             if col2_letter:
                 for col in target_ws[f"{col2_letter}:{col2_letter}"]:
                     for cell in col:
@@ -631,10 +632,26 @@ def get_dropdown_data(file_path, selected_file):
                                 hm2_list.append(v)
             wb.close()
             
+        else:
+            # 如果是 xlsb，用 pandas 兜底
+            df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="pyxlsb")
+            col1_idx = openpyxl.utils.column_index_from_string(col1_letter) - 1
+            
+            for val in df.iloc[:, col1_idx].dropna().tolist():
+                v = str(val).strip()
+                if v and v != "nan" and v not in hm1_list:
+                    hm1_list.append(v)
+
     except Exception as e:
         return [f"读取报错: {e}"], []
 
-    return hm1_list, hm2_list
+    # 如果前 4 套的 HM2 实在没读到，为了界面能显示，给个兜底
+    if "多维分析" in selected_file and not hm2_list:
+        hm2_list = [str(i) for i in range(1, 131)]
+    if "核算五行" in selected_file and not hm2_list:
+        hm2_list = ["1", "2", "3", "4"]
+
+    return hm1_list if hm1_list else ["无数据"], hm2_list
 
 
 def render_multi_analysis(df_data):
@@ -663,6 +680,7 @@ def render_multi_analysis(df_data):
         is_wuxing = "核算五行" in selected_file
         is_12_files = not ("多维分析" in selected_file or "核算五行" in selected_file)
 
+    # 找文件路径
     file_path = ""
     if os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
     elif os.path.exists(f"{selected_file}.xlsm"): file_path = f"{selected_file}.xlsm"
@@ -673,12 +691,12 @@ def render_multi_analysis(df_data):
     label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号/条件)"
 
     with col2:
-        hm1 = st.selectbox(label_hm1, hm1_list if hm1_list else ["无数据"], key="multi_hm1_widget")
+        hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
         
-    # 🔥 前 4 套文件，无论如何都要显示第三个框
+    # 只有不是那 12 套文件，才显示第三个框
     if not is_12_files:
         with col3:
-            hm2 = st.selectbox("HM2 (属性/次数)", hm2_list if hm2_list else ["无数据"], key="multi_hm2_widget")
+            hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
     else:
         hm2 = ""
         with col3:
@@ -693,9 +711,9 @@ def render_multi_analysis(df_data):
 
     if run_btn:
         if not file_path:
-            st.error("文件未上传！")
-        elif "报错" in hm1_list[0]:
-            st.error(hm1_list[0])
+            st.error("文件未上传！请确认文件已传到 GitHub 根目录。")
+        elif "报错" in hm1_list[0] or hm1_list[0] == "无数据":
+            st.error(f"读取下拉框失败：{hm1_list[0]}")
         else:
             with st.spinner("正在读取真实数据并计算，请稍候..."):
                 try:
