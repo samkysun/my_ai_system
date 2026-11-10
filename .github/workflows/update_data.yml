@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          ref: main  # ?? 核心修复：强制指定拉取 main 分支，拒绝游离状态！
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -32,6 +34,6 @@ jobs:
           git add .
           git commit -m "自动更新 Mark Six Data" || echo "没有文件变动"
           
-          # ?? 核心修复：先拉取远程最新代码（如果别人改了），然后再推送
+          # ?? 先拉取最新代码，再强推
           git pull --rebase origin main
           git push origin main
