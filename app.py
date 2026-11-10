@@ -630,15 +630,15 @@ def render_multi_analysis(df_data):
                 
                   # ?? 智能识别后缀并配置读取引擎
                   if os.path.exists(f"{base_name}.xlsb"):
-                        file_path = f"{base_name}.xlsb"
-                        engine_type = "pyxlsb"  # 专属读取 .xlsb 的引擎
-                    elif os.path.exists(f"{base_name}.xlsm"):
+                      file_path = f"{base_name}.xlsb"
+                      engine_type = "pyxlsb"  # 专属读取 .xlsb 的引擎
+                  elif os.path.exists(f"{base_name}.xlsm"):
                         file_path = f"{base_name}.xlsm"
                         engine_type = "openpyxl" # 读取 .xlsm 的引擎
-                    elif os.path.exists(f"{base_name}.xlsx"):
+                  elif os.path.exists(f"{base_name}.xlsx"):
                         file_path = f"{base_name}.xlsx"
                         engine_type = "openpyxl"
-                    else:
+                  else:
                         st.error(f"? 在根目录找不到文件：{base_name} 系列文件，请确认已上传！")
                         st.stop()
                     
