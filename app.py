@@ -581,210 +581,222 @@ from openpyxl.utils import column_index_from_string
 import pandas as pd
 import os
 
-# ==========================================
-# 页面 6：多维分析系统 (地毯式搜索版)
-# ==========================================
+import pandas as pd
+import os
+from datetime import datetime
 
-def get_dropdown_data(file_path, selected_file):
-    hm1_list, hm2_list = [], []
-    if not file_path or not os.path.exists(file_path):
-        return ["❌ 文件未上传"], []
+# ==========================================
+# 辅助逻辑：五行生克与文本清洗
+# ==========================================
+def clean_str(v):
+    if pd.isna(v): return ""
+    s = str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").replace("　", "")
+    return s.strip()
 
-    # 确定要找哪一列和对应的HM2
-    if "多维分析" in selected_file:
-        col1_letter = "JL"
-        hm2_list = [str(i) for i in range(1, 131)] # 固定给默认值防止读不到控件
-    elif "核算五行" in selected_file:
-        col1_letter = "CZ"
-        hm2_list = [str(i) for i in range(1, 5)]
+def get_child(s):
+    return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
+
+def get_mother(s):
+    return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
+
+def is_sheng(a, b):
+    return (get_child(a) == b) or (get_mother(a) == b)
+
+def get_col_idx(letter):
+    if len(letter) == 1: return ord(letter) - ord('A')
+    return (ord(letter[0]) - ord('A') + 1) * 26 + (ord(letter[1]) - ord('A'))
+
+def get_wx_xiao(df, r, col_letter):
+    if r < 0 or r >= len(df): return "—"
+    c_idx = get_col_idx(col_letter)
+    val = clean_str(df.iloc[r, c_idx])
+    if val in ["金", "木", "水", "火", "土"]:
+        return val + "肖"
+    elif val == "":
+        return "空"
+    return val + "(非五行)"
+
+def format_wx_and_ke(wx_str, is_sxwx, is_ke):
+    if "肖" in wx_str:
+        base = wx_str.replace("肖", "")
+        sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
+        ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "土肖火肖", "火": "金肖水肖", "土": "水肖木肖"}
+        sheng_str, ke_str = sheng_dict.get(base, ""), ke_dict.get(base, "")
+    elif "号" in wx_str:
+        base = wx_str.replace("号", "")
+        if is_sxwx:
+            sheng_dict = {"金": "土肖水肖", "木": "火肖水肖", "水": "木肖金肖", "火": "土肖木肖", "土": "火肖金肖"}
+            ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
+        else:
+            sheng_dict = {"金": "水号土号", "木": "水号火号", "水": "木号金号", "火": "土号木号", "土": "金号火号"}
+            ke_dict = {"金": "火号木号", "木": "金号土号", "水": "土号火号", "火": "水号金号", "土": "水号木号"}
+        sheng_str, ke_str = sheng_dict.get(base, ""), ke_dict.get(base, "")
     else:
-        col1_letter = "CP"
-        hm2_list = []
+        return wx_str, ""
 
-    col_idx = column_index_from_string(col1_letter)
+    if is_ke:
+        return f"{wx_str} （克{ke_str}，）", f"本期杀{ke_str}。"
+    else:
+        return f"{wx_str} （生{sheng_str}，）", f"本期杀{sheng_str}。"
 
-    try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
-        
-        # 🔥 核心改动：遍历所有工作表，哪张表有数据就从哪张表拿！
-        for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            for col in ws.iter_cols(min_col=col_idx, max_col=col_idx):
-                for cell in col:
-                    if cell.value is not None:
-                        v = str(cell.value).strip()
-                        if v and v != "nan" and v not in hm1_list:
-                            hm1_list.append(v)
-                            
-        wb.close()
-    except Exception as e:
-        return [f"❌ 读取报错: {e}"], []
-
-    # 如果所有表都翻遍了还是空的，说明文件里真的没字
-    if not hm1_list:
-        return [f"❌ 表[{sheet_name}]的{col1_letter}列无数据"], hm2_list
-
-    return hm1_list, hm2_list
-
-
+# ==========================================
+# 页面 6：多维分析系统
+# ==========================================
 def render_multi_analysis(df_data):
-    st.title("🧊 多维分析系统")
+    st.title("🧊 多维分析系统 (内存高速计算版)")
     
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
 
-    col1, col2, col3 = st.columns(3)
+    # 固定读取你刚上传的测试文件
+    target_file = "升序生肖相生1.xlsx"
     
-    file_options = [
-        "升序多维分析", "按序多维分析", "升序核算五行", "按序核算五行",
-        "升序生肖相生", "按序生肖相生", "升序生肖相克", "按序生肖相克",
-        "升序五行相生", "按序五行相生", "升序五行相克", "按序五行相克",
-        "升序生肖与五行相生", "按序生肖与五行相生", "升序生肖与五行相克", "按序生肖与五行相克"
-    ]
-    
+    # 1. 配置参数
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        def on_file_change():
-            if "multi_hm1_widget" in st.session_state: del st.session_state["multi_hm1_widget"]
-            if "multi_hm2_widget" in st.session_state: del st.session_state["multi_hm2_widget"]
-
-        selected_file = st.selectbox("选择分析类型", file_options, on_change=on_file_change)
-        
-        is_special = "多维分析" not in selected_file
-        is_wuxing = "核算五行" in selected_file
-        is_12_files = not ("多维分析" in selected_file or "核算五行" in selected_file)
-
-    # 找文件路径
-    file_path = ""
-    if os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
-    elif os.path.exists(f"{selected_file}.xlsm"): file_path = f"{selected_file}.xlsm"
-    elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
-
-    hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
-    
-    label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号/条件)"
-
+        ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+        ball_str = st.selectbox("基准球号", ball_options)
+        ball_num = int(ball_str.replace("第", "").replace("球", ""))
     with col2:
-        hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
-        
-    if not is_12_files:
-        with col3:
-            hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
-    else:
-        hm2 = ""
-        with col3:
-            st.info("ℹ️ 当前文件无第二下拉框")
+        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
+    with col3:
+        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+    with col4:
+        st.write(""); st.write("")
+        run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
 
-    st.divider()
-    
-    b1, b2, b3 = st.columns(3)
-    with b1: run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
-    with b2: clear_btn = st.button("🗑️ 清空数据", use_container_width=True)
-    with b3: sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
-
+    # 2. 核心计算
     if run_btn:
-        if not file_path:
-            st.error("文件未上传！")
-        elif "❌" in hm1_list[0]:
-            st.error(f"读取下拉框失败：{hm1_list[0]}")
+        if not os.path.exists(target_file):
+            st.error(f"找不到文件 {target_file}，请确认已上传到根目录！")
         else:
-            with st.spinner("正在读取真实数据并计算，请稍候..."):
+            with st.spinner(f"Python 正在全量扫描 {target_file}，请稍候..."):
                 try:
-                    from datetime import datetime
-                    engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
-                    excel_file = pd.ExcelFile(file_path, engine=engine_type)
+                    # 直接读取“多方面”工作表
+                    df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
-                    target_sheet = excel_file.sheet_names[0]
-                    for sheet in excel_file.sheet_names:
-                        try:
-                            temp_df = pd.read_excel(excel_file, sheet_name=sheet, nrows=5, header=None)
-                            if temp_df.shape[1] > 221 and pd.notna(temp_df.iloc[2, 221]):
-                                target_sheet = sheet
-                                break
-                        except: pass
-                            
-                    time_str = datetime.now().strftime("%H:%M:%S")
-                    result_text = f"========== {selected_file} ==========\\n计算时间: {time_str}\\n\\n"
+                    # 默认以“升序生肖相生”的逻辑进行测试 (相生，非生肖与五行)
+                    is_ke = False
+                    is_sxwx = False
                     
-                    if is_wuxing:
-                        result_text += f"【五行核算】球号: {hm1} | 次数: {hm2}\\n"
-                        df_wuxing = pd.read_excel(excel_file, sheet_name=target_sheet, header=None).iloc[1:3, 54:61]
-                        bContent = ""
-                        for r_idx in range(df_wuxing.shape[0]):
-                            for c_idx in range(df_wuxing.shape[1]):
-                                val = str(df_wuxing.iloc[r_idx, c_idx]).strip()
-                                if val != "" and val != "0" and val != "nan":
-                                    posNum = 62 - (55 + c_idx)
-                                    joinStr = f"金（{posNum}）" if val == "金" else f"{val}号（{posNum}）"
-                                    bContent = joinStr if bContent == "" else bContent + f",{joinStr}"
-                        if bContent == "":
-                            result_text += "未读取到有效值。\\n"
-                        else:
-                            result_text += f"【B列结果】: {bContent}\\n【C列结果】: 五行对应{hm2}次\\n"
+                    ref_col_map = {1: "F", 2: "K", 3: "P", 4: "U", 5: "Z", 6: "AE", 7: "AJ"}
+                    ref_col_letter = ref_col_map[ball_num]
+                    ref_col_idx = get_col_idx(ref_col_letter)
                     
-                    elif is_12_files:
-                        result_text += "特殊文件已重算。\\n"
-                    
-                    else:
-                        result_text += f"读取工作表: {target_sheet}\\n"
-                        df_full = pd.read_excel(excel_file, sheet_name=target_sheet, header=None)
+                    # 读模板 (从第3行开始找)
+                    template = []
+                    for r in range(2, 2 + 14): 
+                        val = clean_str(df.iloc[r, ref_col_idx])
+                        if not val or val not in ["金", "木", "水", "火", "土"]:
+                            break
+                        template.append(val)
                         
-                        dataArr = df_full.iloc[2:20, 221:235].fillna("").astype(str).values
-                        groupNums = [7, 6, 5, 4, 3, 2, 1]
-                        newContentB = ""
+                    if len(template) < min_len:
+                        st.warning(f"参考列 {ref_col_letter} 的五行模板不足 {min_len} 格 (当前读到 {len(template)} 个，请检查表内容)")
+                        st.stop()
                         
-                        for i in range(7):
-                            colLeftIdx = i * 2
-                            colRightIdx = i * 2 + 1
-                            for r in range(18):
-                                valLeft = dataArr[r, colLeftIdx].strip()
-                                valRight = dataArr[r, colRightIdx].strip()
-                                targetText, isHit = "", False
-                                if valLeft == "1": targetText, isHit = valRight, True
-                                if valRight == "1": targetText, isHit = valLeft, True
+                    target_cols = ["K", "F", "AE", "P", "U", "Z", "AJ"]
+                    col_names_map = {"F": "1球", "K": "2球", "P": "3球", "U": "4球", "Z": "5球", "AE": "6球", "AJ": "7球"}
+                    gColl = {i: [] for i in range(min_len, max_len + 1)}
+                    
+                    for col_letter in target_cols:
+                        c_idx = get_col_idx(col_letter)
+                        is_ref = (col_letter == ref_col_letter)
+                        disp_name = col_names_map.get(col_letter, col_letter)
+                        
+                        valid_data = []
+                        for r in range(3, len(df)):
+                            val = clean_str(df.iloc[r, c_idx])
+                            if val in ["金", "木", "水", "火", "土"]:
+                                valid_data.append((r, val))
                                 
-                                if isHit and targetText != "" and targetText != "0" and not targetText.isdigit():
-                                    内容B = f"{targetText}近{hm2}期一致间距{r+1}（{groupNums[i]}）"
-                                    if 内容B not in newContentB:
-                                        newContentB += f"{内容B},"
-                        
-                        dataArrC = df_full.iloc[1:20, 236:243].fillna("").astype(str).values
-                        newContentC = ""
-                        for ic in range(7):
-                            for rc in range(19):
-                                valC = dataArrC[rc, ic].strip()
-                                if valC != "" and valC != "nan":
-                                    内容C = f"{hm2}，{valC}（{groupNums[ic]}）"
-                                    if 内容C not in newContentC:
-                                        newContentC += f"{内容C},"
-                        
-                        result_text += f"【B列新内容】:\\n{newContentB if newContentB else '无'}\\n\\n"
-                        result_text += f"【C列新内容】:\\n{newContentC if newContentC else '无'}\\n"
-                        
-                    st.session_state.multi_result_text = result_text
-                    st.success("✅ 数据计算完成！")
+                        vc = len(valid_data)
+                        if vc >= min_len:
+                            k = 0
+                            while k <= vc - min_len:
+                                max_l = 0
+                                for j in range(vc - k):
+                                    if j >= 14 or j >= len(template): break
+                                    if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
+                                    if not is_sheng(template[j], valid_data[k+j][1]): break
+                                    max_l = j + 1
+                                    
+                                if max_l >= min_len:
+                                    real_l = max_l
+                                    group_l = min(real_l, max_len)
+                                    sr = valid_data[k][0]
+                                    er = valid_data[k + real_l - 1][0]
+                                    
+                                    w1 = get_wx_xiao(df, sr-1, col_letter)
+                                    w2 = get_wx_xiao(df, er+1, col_letter)
+                                    w3 = get_wx_xiao(df, er+2, col_letter)
+                                    w4 = get_wx_xiao(df, er+3, col_letter)
+                                    
+                                    full_w1, sha_str = format_wx_and_ke(w1, is_sxwx, is_ke)
+                                    
+                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    
+                                    gColl[group_l].append({"line": line, "is_ref": is_ref, "sr": sr})
+                                    k += real_l
+                                else:
+                                    k += 1
+
+                    # 汇总结果
+                    report_text = f"========== {target_file} ({ball_str}) ==========\\n"
+                    maxGroupL = 0
+                    for L in range(min_len, max_len + 1):
+                        if len(gColl[L]) > 0: maxGroupL = L
+                            
+                    finalStrB = ""
+                    if maxGroupL > 0:
+                        for item in gColl[maxGroupL]:
+                            if finalStrB: finalStrB += "\\n-------------------\\n"
+                            finalStrB += item["line"]
+                    else:
+                        finalStrB = "无匹配结果"
+
+                    minSr = 999999
+                    finalStrC = ""
+                    for L in range(min_len, max_len + 1):
+                        for item in gColl[L]:
+                            if item["sr"] < 500:
+                                if item["sr"] < minSr:
+                                    minSr = item["sr"]
+                                    finalStrC = item["line"]
+                                elif item["sr"] == minSr:
+                                    finalStrC += "\\n-------------------\\n" + item["line"]
+                                    
+                    strC_Display = finalStrC if finalStrC else "无符合条件的匹配（起始行需<500）"
+
+                    report_text += "【B列结果】：匹配行数最多\\n"
+                    report_text += finalStrB + "\\n\\n"
+                    report_text += "【C列结果】：起始行最近且<500\\n"
+                    report_text += strC_Display + "\\n\\n"
+                    
+                    for L in range(min_len, max_len + 1):
+                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
+                        if not gColl[L]:
+                            report_text += "  （无）\\n"
+                        else:
+                            for item in gColl[L]:
+                                report_text += item["line"] + "\\n"
+                                if item["is_ref"]: report_text += "[自身参考列匹配]\\n"
+                            report_text += "\\n"
+
+                    st.session_state.multi_result_text = report_text
+                    st.success("✅ 分析完成！")
                     
                 except Exception as e:
-                    st.error(f"执行出错: {e}")
+                    st.error(f"计算报错: {e}")
 
-    if sync_ai_btn:
-        ai_condition = f"杀{hm1}，"
-        st.session_state.ai_extra_condition = ai_condition
-        st.success(f"✅ 同步成功！已向 AI 推演追加条件：{ai_condition}")
-        
-    if clear_btn:
-        st.session_state.multi_result_text = "等待执行分析..."
-        st.rerun()
-
+    # 3. 结果显示
     st.divider()
-    st.markdown("### 📊 分析结果预览")
-    st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
+    st.text_area("详细结果", value=st.session_state.multi_result_text, height=500)
     
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
-        from datetime import datetime
-        file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        
+        file_name = f"测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="💾 保存日记到本地电脑 (TXT格式)",
+            label="💾 保存结果到本地 (TXT格式)",
             data=st.session_state.multi_result_text,
             file_name=file_name,
             mime="text/plain",
