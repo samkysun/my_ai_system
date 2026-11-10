@@ -577,10 +577,10 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 页面 6：多维分析系统 (无Emoji版)
+# 页面 6：多维分析系统 (精准分行排版引擎)
 # ==========================================
 def render_multi_analysis(df_data):
-    st.title("多维分析系统 (精确排版引擎)")
+    st.title("多维分析系统 (纯代码引擎)")
     
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
@@ -610,12 +610,11 @@ def render_multi_analysis(df_data):
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}，请确保已上传到根目录。")
         else:
-            with st.spinner(f"Python 正在全量扫描 {target_file} 的 6000 多行数据，请稍候..."):
+            with st.spinner(f"Python 正在全量扫描数据，请稍候..."):
                 try:
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
-                    # 列索引映射 (A=0, V=21)
-                    # F=5, J=9, N=13, R=17, V=21, Z=25, AD=29
+                    # 列索引映射
                     ref_col_map = {1: 5, 2: 9, 3: 13, 4: 17, 5: 21, 6: 25, 7: 29}
                     ref_col_idx = ref_col_map[ball_num]
                     
@@ -648,6 +647,7 @@ def render_multi_analysis(df_data):
                     
                     for col_idx in scan_cols:
                         disp_name = col_names[col_idx]
+                        is_self = (col_idx == ref_col_idx)
                         
                         valid_data = []
                         for r in range(2, len(df)):
@@ -662,9 +662,7 @@ def render_multi_analysis(df_data):
                                 max_l = 0
                                 for j in range(vc - k):
                                     if j >= 14 or j >= len(template): break
-                                    # 行连续
                                     if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                                    # 相生
                                     if not is_sheng(template[j], valid_data[k+j][1]): break
                                     max_l = j + 1
                                     
@@ -689,29 +687,32 @@ def render_multi_analysis(df_data):
                                     sheng_str = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}.get(base_w, "")
                                     
                                     if sheng_str:
-                                        full_w1 = f"{w1} (生:{sheng_str}，)"
+                                        full_w1 = f"{w1}（生:{sheng_str}，）"
                                         sha_str = f"本期杀{sheng_str}。"
                                     else:
                                         full_w1 = w1
                                         sha_str = ""
                                         
-                                    # 严格按照你的截图格式构建两行数据
-                                    header_line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)"
-                                    detail_line = f"    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     
+                                    if is_self:
+                                        detail_txt += " 【自身参考列匹配】"
+                                        
                                     gColl[group_l].append({
-                                        "header": header_line, 
-                                        "detail": detail_line, 
-                                        "sr": sr
+                                        "disp_name": disp_name,
+                                        "sr": sr,
+                                        "er": er,
+                                        "real_l": real_l,
+                                        "detail": detail_txt
                                     })
                                     k += real_l
                                 else:
                                     k += 1
 
-                    # 3. 整理文本输出 (严格复刻截图排版)
+                    # 3. 生成排版文本 (分行+空行分割)
                     report_text = f"【{ball_str}分析报告】\\n\\n"
                     
-                    # 第一部分：起始行最近且<500
+                    # === 第一部分：起始行最近且<500 ===
                     minSr = 999999
                     finalC = []
                     for L in range(min_len, max_len + 1):
@@ -726,20 +727,22 @@ def render_multi_analysis(df_data):
                     if finalC:
                         report_text += "起始行最近且<500:\\n"
                         for item in finalC:
-                            report_text += item["header"] + "\\n" + item["detail"] + "\\n"
+                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1}({item['real_l']}行)\\n"
+                            report_text += f"    {item['detail']}\\n\\n" # 多加一个\\n进行空行分割
                         report_text += "\\n"
 
-                    # 第二部分：按连续行数递增列出详细
+                    # === 第二部分：按连续行数递增 ===
                     for L in range(min_len, max_len + 1):
                         if not gColl[L]:
                             continue
                         report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
                         for item in gColl[L]:
-                            report_text += item["header"] + "\\n" + item["detail"] + "\\n"
+                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1}({item['real_l']}行)\\n"
+                            report_text += f"    {item['detail']}\\n\\n" # 多加一个\\n进行空行分割
                         report_text += "\\n"
                                 
                     st.session_state.multi_result_text = report_text.strip()
-                    st.success("分析完成！已生成规整对比表。")
+                    st.success("分析完成！")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
