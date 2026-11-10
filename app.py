@@ -573,21 +573,25 @@ def render_ai(df_data):
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 # ==========================================
-# 页面 6：多维分析系统
+# 页面 6：多维分析系统 (完美读取下拉列表版)
 # ==========================================
 import openpyxl
 from openpyxl.utils import range_boundaries
 
-def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
-    """根据 VBA 逻辑读取指定单元格的数据验证（下拉框）列表"""
-    hm1_list = []
-    hm2_list = []
-    
+def get_dropdown_values(file_path, is_wuxing, is_special):
+    """严格复刻 VBA 逻辑，读取指定单元格的数据验证列表"""
+    hm1_list, hm2_list = [], []
+    if not file_path or not os.path.exists(file_path):
+        return [], []
+
+    # 如果遇到 xlsb，直接报错，因为 openpyxl 读不了 xlsb 的数据验证
+    if file_path.endswith('.xlsb'):
+        return ["xlsb格式无法读取下拉框"], ["xlsb格式无法读取下拉框"]
+
     try:
-        # 用 openpyxl 读取公式，这样能获取数据验证信息
         wb = openpyxl.load_workbook(file_path, data_only=False)
         
-        # 找目标表
+        # 找目标工作表
         target_ws = None
         if is_special:
             for sheet in wb.sheetnames:
@@ -596,17 +600,14 @@ def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
                     break
         else:
             for sheet in wb.sheetnames:
-                if "结果" not in sheet:
-                    # 检查 HN3 有没有内容 (第 222 列，第 3 行)
-                    test_cell = wb[sheet].cell(row=3, column=222).value
-                    if test_cell is not None and str(test_cell).strip() != "":
-                        target_ws = wb[sheet]
-                        break
-        
+                if "结果" not in sheet and wb[sheet].cell(row=3, column=222).value is not None:
+                    target_ws = wb[sheet]
+                    break
+                    
         if not target_ws:
             target_ws = wb[wb.sheetnames[0]]
 
-        # 确定要读取的单元格坐标 (严格按照 VBA 逻辑)
+        # 确定要读取的单元格
         if is_wuxing:
             coord1, coord2 = "AM1", "AM2"
         elif is_special:
@@ -617,18 +618,16 @@ def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
         def extract_val(coord):
             cell = target_ws[coord]
             values = []
-            # 尝试读取数据验证（Data Validation）
             if cell.data_validation and cell.data_validation.type == "list":
                 formula = cell.data_validation.formula1
                 if formula:
                     if formula.startswith("="):
-                        # 如果是引用的范围，例如 "=Sheet2!$A$1:$A$10"
-                        range_ref = formula[1:]
+                        # 引用区域解析
+                        range_ref = formula[1:].replace("$", "")
                         try:
-                            # 解析范围并读取值
                             sheet_part, range_part = range_ref.split("!") if "!" in range_ref else (target_ws.title, range_ref)
                             sheet_part = sheet_part.replace("'", "")
-                            min_col, min_row, max_col, max_row = range_boundaries(range_part.replace("$", ""))
+                            min_col, min_row, max_col, max_row = range_boundaries(range_part)
                             
                             ref_ws = wb[sheet_part] if sheet_part in wb.sheetnames else target_ws
                             for row in ref_ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col):
@@ -638,19 +637,15 @@ def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
                         except Exception:
                             pass
                     else:
-                        # 如果是直接字符串，例如 "相生,相克"
-                        values = [v.strip() for v in formula.replace('"', '').split(",") if v.strip()]
+                        # 字符串直接解析
+                        values = [v.strip() for v in formula.replace('"', '').replace("，", ",").split(",") if v.strip()]
             
-            # 如果没读到数据验证，直接读取单元格自身的值
+            # 如果没读到验证，读单元格自身值
             if not values and cell.value is not None:
                 val_str = str(cell.value).strip()
-                # 尝试按逗号分割
-                if "," in val_str or "，" in val_str:
-                    values = [v.strip() for v in val_str.replace("，", ",").split(",") if v.strip()]
-                else:
-                    values = [val_str]
-                    
-            # 去重并保留顺序
+                values = [v.strip() for v in val_str.replace("，", ",").split(",") if v.strip()]
+                
+            # 去重
             unique_vals = []
             for v in values:
                 if v not in unique_vals: unique_vals.append(v)
@@ -663,58 +658,52 @@ def get_dropdown_values(file_path, is_wuxing, is_special, sheet_name):
         print(f"读取下拉列表失败: {e}")
         
     return hm1_list, hm2_list
+
+
 def render_multi_analysis(df_data):
     st.title("🧊 多维分析系统")
     
-    # 1. 初始化状态变量
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
-    if "multi_file_select" not in st.session_state:
-        st.session_state.multi_file_select = "升序多维分析"
 
-    # 2. 判断当前选中的文件类型
-    selected_file = st.session_state.multi_file_select
-    is_special = "多维分析" not in selected_file
-    is_wuxing = "核算五行" in selected_file
-
-    # 3. 顶部控制面板
+    # 1. 顶部控制面板
     col1, col2, col3 = st.columns(3)
     
     file_options = [
-        "升序多维分析", "按序多维分析",
-        "升序核算五行", "按序核算五行",
-        "升序生肖相生", "按序生肖相生",
-        "升序生肖相克", "按序生肖相克",
-        "升序五行相生", "按序五行相生",
-        "升序五行相克", "按序五行相克",
-        "升序生肖与五行相生", "按序生肖与五行相生",
-        "升序生肖与五行相克", "按序生肖与五行相克"
+        "升序多维分析", "按序多维分析", "升序核算五行", "按序核算五行",
+        "升序生肖相生", "按序生肖相生", "升序生肖相克", "按序生肖相克",
+        "升序五行相生", "按序五行相生", "升序五行相克", "按序五行相克",
+        "升序生肖与五行相生", "按序生肖与五行相生", "升序生肖与五行相克", "按序生肖与五行相克"
     ]
     
     with col1:
-        selected_file = st.selectbox("选择分析类型", file_options, key="multi_file_select")
+        selected_file = st.selectbox("选择分析类型", file_options)
         is_special = "多维分析" not in selected_file
         is_wuxing = "核算五行" in selected_file
-    
-    if is_wuxing:
-        hm1_list = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
-        hm2_list = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    elif is_special:
-        hm1_list = ["相生", "相克", "生肖", "五行"]
-        hm2_list = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    else:
-        hm1_list = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
-        hm2_list = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "15", "20"]
-        
-    with col2:
-        hm1 = st.selectbox("球号", hm1_list)
-    with col3:
-        hm2 = st.selectbox("属性", hm2_list)
 
+    # 识别文件路径
+    file_path = ""
+    if os.path.exists(f"{selected_file}.xlsm"): file_path = f"{selected_file}.xlsm"
+    elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
+    elif os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
+
+    # 🔥 真实读取下拉框
+    hm1_list, hm2_list = get_dropdown_values(file_path, is_wuxing, is_special)
+    
+    # 兜底提示，绝不自己瞎编选项
+    if not hm1_list: hm1_list = ["⚠️ 未读取到数据验证"]
+    if not hm2_list: hm2_list = ["⚠️ 未读取到数据验证"]
+
+    with col2:
+        hm1 = st.selectbox("HM1 (球号/条件)", hm1_list)
+    with col3:
+        hm2 = st.selectbox("HM2 (属性/次数)", hm2_list)
+        
+    st.caption(f"🔍 调试：当前读取文件 `{file_path}` | 数据验证读取情况：HM1({len(hm1_list)}项) | HM2({len(hm2_list)}项)")
 
     st.divider()
     
-    # 4. 操作按钮区
+    # 2. 操作按钮区
     b1, b2, b3 = st.columns(3)
     with b1:
         run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
@@ -723,33 +712,15 @@ def render_multi_analysis(df_data):
     with b3:
         sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
 
-    # 5. 核心分析逻辑
+    # 3. 核心分析逻辑（直接内联，防止缩进/丢失函数问题）
     if run_btn:
-        if not hm1 or not hm2:
-            st.warning("请确保球号和次数已选择！")
+        if "⚠️" in hm1 or "⚠️" in hm2:
+            st.error("读取下拉框失败，请确认文件存在且不是加密的 .xlsb 格式！")
         else:
             with st.spinner("正在读取真实数据并计算，请稍候..."):
                 try:
-                    import os
                     from datetime import datetime
-                    
-                    base_name = selected_file
-                    file_path = ""
-                    engine_type = None
-                    
-                    if os.path.exists(f"{base_name}.xlsb"):
-                        file_path = f"{base_name}.xlsb"
-                        engine_type = "pyxlsb" 
-                    elif os.path.exists(f"{base_name}.xlsm"):
-                        file_path = f"{base_name}.xlsm"
-                        engine_type = "openpyxl" 
-                    elif os.path.exists(f"{base_name}.xlsx"):
-                        file_path = f"{base_name}.xlsx"
-                        engine_type = "openpyxl"
-                    else:
-                        st.error(f"❌ 在根目录找不到文件：{base_name} 系列文件，请确认已上传！")
-                        st.stop()
-                    
+                    engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
                     excel_file = pd.ExcelFile(file_path, engine=engine_type)
                     
                     target_sheet = excel_file.sheet_names[0]
@@ -759,8 +730,7 @@ def render_multi_analysis(df_data):
                             if temp_df.shape[1] > 221 and pd.notna(temp_df.iloc[2, 221]):
                                 target_sheet = sheet
                                 break
-                        except:
-                            pass
+                        except: pass
                             
                     time_str = datetime.now().strftime("%H:%M:%S")
                     result_text = f"========== {selected_file} ==========\\n计算时间: {time_str}\\n\\n"
@@ -799,10 +769,8 @@ def render_multi_analysis(df_data):
                                 valLeft = dataArr[r, colLeftIdx].strip()
                                 valRight = dataArr[r, colRightIdx].strip()
                                 targetText, isHit = "", False
-                                if valLeft == "1": 
-                                    targetText, isHit = valRight, True
-                                if valRight == "1": 
-                                    targetText, isHit = valLeft, True
+                                if valLeft == "1": targetText, isHit = valRight, True
+                                if valRight == "1": targetText, isHit = valLeft, True
                                 
                                 if isHit and targetText != "" and targetText != "0" and not targetText.isdigit():
                                     内容B = f"{targetText}近{hm2}期一致间距{r+1}（{groupNums[i]}）"
@@ -828,25 +796,24 @@ def render_multi_analysis(df_data):
                 except Exception as e:
                     st.error(f"执行出错: {e}")
 
-    # 6. 同步到 AI 推演逻辑
+    # 4. 同步到 AI 推演逻辑
     if sync_ai_btn:
         ai_condition = f"杀{hm1}，"
         st.session_state.ai_extra_condition = ai_condition
         st.success(f"✅ 同步成功！已向 AI 推演追加条件：{ai_condition}")
         
-    # 7. 清空数据逻辑
+    # 5. 清空数据逻辑
     if clear_btn:
         st.session_state.multi_result_text = "等待执行分析..."
         st.rerun()
 
-    # 8. 结果展示与下载
+    # 6. 结果展示与下载
     st.divider()
     st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
     
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
         from datetime import datetime
         file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    
         st.download_button(
             label="💾 保存日记到本地电脑 (TXT格式)",
             data=st.session_state.multi_result_text,
