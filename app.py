@@ -576,55 +576,53 @@ import openpyxl
 import pandas as pd
 import os
 
+import openpyxl
+from openpyxl.utils import column_index_from_string
+import pandas as pd
+import os
+
 # ==========================================
-# 页面 6：多维分析系统 (绝对不报错版)
+# 页面 6：多维分析系统 (地毯式搜索版)
 # ==========================================
 
 def get_dropdown_data(file_path, selected_file):
     hm1_list, hm2_list = [], []
     if not file_path or not os.path.exists(file_path):
-        return ["文件未上传"], []
+        return ["❌ 文件未上传"], []
 
+    # 确定要找哪一列和对应的HM2
     if "多维分析" in selected_file:
-        sheet_name = selected_file
         col1_letter = "JL"
-        hm2_list = [str(i) for i in range(1, 131)] # 强制给默认值，防止因为复选框读不到而消失
+        hm2_list = [str(i) for i in range(1, 131)] # 固定给默认值防止读不到控件
     elif "核算五行" in selected_file:
-        sheet_name = "多方面"
         col1_letter = "CZ"
-        hm2_list = [str(i) for i in range(1, 5)] 
+        hm2_list = [str(i) for i in range(1, 5)]
     else:
-        sheet_name = "多方面"
         col1_letter = "CP"
         hm2_list = []
 
+    col_idx = column_index_from_string(col1_letter)
+
     try:
-        from openpyxl.utils import column_index_from_string
         wb = openpyxl.load_workbook(file_path, data_only=True)
         
-        # 找表
-        target_ws = wb[wb.sheetnames[0]]
-        for s in wb.sheetnames:
-            if sheet_name in s:
-                target_ws = wb[s]
-                break
-                
-        col_idx = column_index_from_string(col1_letter)
-        
-        # 🔥 逐行读取，绝对不报错
-        for row in target_ws.iter_rows(min_col=col_idx, max_col=col_idx):
-            for cell in row:
-                if cell.value is not None:
-                    v = str(cell.value).strip()
-                    if v and v != "nan" and v not in hm1_list:
-                        hm1_list.append(v)
+        # 🔥 核心改动：遍历所有工作表，哪张表有数据就从哪张表拿！
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            for col in ws.iter_cols(min_col=col_idx, max_col=col_idx):
+                for cell in col:
+                    if cell.value is not None:
+                        v = str(cell.value).strip()
+                        if v and v != "nan" and v not in hm1_list:
+                            hm1_list.append(v)
+                            
         wb.close()
-    except Exception:
-        # 就算底层报错，也默默吞掉，不让红字显示在界面上
-        pass
+    except Exception as e:
+        return [f"❌ 读取报错: {e}"], []
 
+    # 如果所有表都翻遍了还是空的，说明文件里真的没字
     if not hm1_list:
-        hm1_list = ["无数据"]
+        return [f"❌ 表[{sheet_name}]的{col1_letter}列无数据"], hm2_list
 
     return hm1_list, hm2_list
 
@@ -668,7 +666,6 @@ def render_multi_analysis(df_data):
     with col2:
         hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
         
-    # 只有不是那 12 套文件，才显示第三个框
     if not is_12_files:
         with col3:
             hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
@@ -686,9 +683,9 @@ def render_multi_analysis(df_data):
 
     if run_btn:
         if not file_path:
-            st.error("文件未上传！请确认文件已传到 GitHub 根目录。")
-        elif hm1_list[0] == "无数据":
-            st.error(f"读取失败：在表[{selected_file}]的 {col1_letter} 列中未找到任何文字数据。")
+            st.error("文件未上传！")
+        elif "❌" in hm1_list[0]:
+            st.error(f"读取下拉框失败：{hm1_list[0]}")
         else:
             with st.spinner("正在读取真实数据并计算，请稍候..."):
                 try:
