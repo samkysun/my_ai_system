@@ -568,14 +568,70 @@ def render_ai(df_data):
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
+# ==========================================
+# 页面 6：多维分析系统
+# ==========================================
+def render_multi_analysis(df_data):
+    st.title("🧊 多维分析系统")
+    
+    # 文件映射字典
+    file_options = [
+        "升序多维分析", "按序多维分析",
+        "升序核算五行", "按序核算五行",
+        "升序生肖相生", "按序生肖相生",
+        "升序生肖相克", "按序生肖相克",
+        "升序五行相生", "按序五行相生",
+        "升序五行相克", "按序五行相克",
+        "升序生肖与五行相生", "按序生肖与五行相生",
+        "升序生肖与五行相克", "按序生肖与五行相克"
+    ]
 
+    # 顶部控制面板
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        selected_file = st.selectbox("选择分析类型", file_options)
+    with col2:
+        # 这里暂时留空，等用户选了文件后动态生成
+        hm1 = st.selectbox("HM1 (球号1)", ["等待读取数据..."])
+    with col3:
+        hm2 = st.selectbox("HM2 (球号2)", ["等待读取数据..."])
+
+    st.divider()
+    
+    # 操作按钮区
+    b1, b2 = st.columns(2)
+    with b1:
+        run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
+    with b2:
+        clear_btn = st.button("🗑️ 清空结果", use_container_width=True)
+
+    # 结果展示区
+    st.markdown("### 📊 分析结果预览")
+    result_placeholder = st.empty()
+    
+    if "multi_result_text" not in st.session_state:
+        st.session_state.multi_result_text = "等待执行分析..."
+
+    if run_btn:
+        with st.spinner("正在读取数据并计算，请稍候..."):
+            # 注意：在云端，你需要确保这些文件被上传到了项目目录下
+            # 这里我们先模拟一下逻辑执行
+            st.session_state.multi_result_text = f"执行成功！\\n文件：{selected_file}\\nHM1：{hm1}\\nHM2：{hm2}\\n(注：需要上传对应的 Excel 文件才能读取真实数据)"
+            st.success("分析完成！")
+
+    if clear_btn:
+        st.session_state.multi_result_text = "等待执行分析..."
+        st.rerun()
+
+    # 用文本框展示结果（可复制）
+    st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
-        menu = st.radio("功能导航：", ["主控制台", "同现统计", "AI推演"])
+        menu = st.radio("功能导航：", ["主控制台", "同现统计", "AI推演", "多维分析"])
 
     if "synced_df" in st.session_state and st.session_state.synced_df is not None:
         df_data = st.session_state.synced_df
@@ -585,6 +641,7 @@ def main_app():
     if menu == "主控制台": render_console(df_data)
     elif menu == "同现统计": render_stats(df_data)
     elif menu == "AI推演": render_ai(df_data)  # 🔥 核心修改：传参进去
+    elif menu == "多维分析": render_multi_analysis(df_data) # 🔥 新增这一行    
 
 if not st.session_state.logged_in: login_page()
 else: main_app()
