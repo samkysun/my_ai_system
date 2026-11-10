@@ -572,141 +572,92 @@ def render_ai(df_data):
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
-import openpyxl
-import pandas as pd
-import os
-
-import openpyxl
-from openpyxl.utils import column_index_from_string
-import pandas as pd
-import os
-
 import pandas as pd
 import os
 from datetime import datetime
 
 # ==========================================
-# 辅助逻辑：五行生克与文本清洗
-# ==========================================
-def clean_str(v):
-    if pd.isna(v): return ""
-    s = str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").replace("　", "")
-    return s.strip()
-
-def get_child(s):
-    return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
-
-def get_mother(s):
-    return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
-
-def is_sheng(a, b):
-    return (get_child(a) == b) or (get_mother(a) == b)
-
-def get_col_idx(letter):
-    if len(letter) == 1: return ord(letter) - ord('A')
-    return (ord(letter[0]) - ord('A') + 1) * 26 + (ord(letter[1]) - ord('A'))
-
-def get_wx_xiao(df, r, col_letter):
-    if r < 0 or r >= len(df): return "—"
-    c_idx = get_col_idx(col_letter)
-    val = clean_str(df.iloc[r, c_idx])
-    if val in ["金", "木", "水", "火", "土"]:
-        return val + "肖"
-    elif val == "":
-        return "空"
-    return val + "(非五行)"
-
-def format_wx_and_ke(wx_str, is_sxwx, is_ke):
-    if "肖" in wx_str:
-        base = wx_str.replace("肖", "")
-        sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
-        ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "土肖火肖", "火": "金肖水肖", "土": "水肖木肖"}
-        sheng_str, ke_str = sheng_dict.get(base, ""), ke_dict.get(base, "")
-    elif "号" in wx_str:
-        base = wx_str.replace("号", "")
-        if is_sxwx:
-            sheng_dict = {"金": "土肖水肖", "木": "火肖水肖", "水": "木肖金肖", "火": "土肖木肖", "土": "火肖金肖"}
-            ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
-        else:
-            sheng_dict = {"金": "水号土号", "木": "水号火号", "水": "木号金号", "火": "土号木号", "土": "金号火号"}
-            ke_dict = {"金": "火号木号", "木": "金号土号", "水": "土号火号", "火": "水号金号", "土": "水号木号"}
-        sheng_str, ke_str = sheng_dict.get(base, ""), ke_dict.get(base, "")
-    else:
-        return wx_str, ""
-
-    if is_ke:
-        return f"{wx_str} （克{ke_str}，）", f"本期杀{ke_str}。"
-    else:
-        return f"{wx_str} （生{sheng_str}，）", f"本期杀{sheng_str}。"
-
-# ==========================================
-# 页面 6：多维分析系统
+# 页面 6：多维分析系统 (纯代码极速引擎)
 # ==========================================
 def render_multi_analysis(df_data):
-    st.title("🧊 多维分析系统 (内存高速计算版)")
+    st.title("?? 多维分析系统 (精确坐标版)")
     
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
 
-    # 固定读取你刚上传的测试文件
-    target_file = "升序生肖相生1.xlsx"
-    
-    # 1. 配置参数
+    # 1. 顶部控制面板
+    st.markdown("### ?? 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+        ball_options = ["第1球(F列)", "第2球(K列)", "第3球(N列)", "第4球(R列)", "第5球(W列)", "第6球(Z列)", "第7球(AD列)"]
         ball_str = st.selectbox("基准球号", ball_options)
-        ball_num = int(ball_str.replace("第", "").replace("球", ""))
+        # 提取数字
+        ball_num = int(ball_str.replace("第", "").split("球")[0])
+        
     with col2:
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col3:
         max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
     with col4:
         st.write(""); st.write("")
-        run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
+        run_btn = st.button("?? 执行分析", use_container_width=True, type="primary")
 
+    st.divider()
+    
     # 2. 核心计算
     if run_btn:
+        target_file = "升序生肖相生1.xlsx"
         if not os.path.exists(target_file):
-            st.error(f"找不到文件 {target_file}，请确认已上传到根目录！")
+            st.error(f"找不到文件：{target_file}，请确保已上传到根目录。")
         else:
-            with st.spinner(f"Python 正在全量扫描 {target_file}，请稍候..."):
+            with st.spinner(f"Python 正在全量扫描 {target_file} 的 6000 多行数据，请稍候..."):
                 try:
-                    # 直接读取“多方面”工作表
+                    # 直接读取多方面工作表，忽略表头（假设没有表头）
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
-                    # 默认以“升序生肖相生”的逻辑进行测试 (相生，非生肖与五行)
-                    is_ke = False
-                    is_sxwx = False
+                    # 精确列索引 (A=0, B=1...)
+                    # F=5, K=10, N=13, R=17, W=22, Z=25, AD=29
+                    ref_col_map = {1: 5, 2: 10, 3: 13, 4: 17, 5: 22, 6: 25, 7: 29}
+                    ref_col_idx = ref_col_map[ball_num]
                     
-                    ref_col_map = {1: "F", 2: "K", 3: "P", 4: "U", 5: "Z", 6: "AE", 7: "AJ"}
-                    ref_col_letter = ref_col_map[ball_num]
-                    ref_col_idx = get_col_idx(ref_col_letter)
+                    # 扫描的7个列索引
+                    scan_cols = [5, 10, 13, 17, 22, 25, 29]
+                    col_names = {5: "1球(F)", 10: "2球(K)", 13: "3球(N)", 17: "4球(R)", 22: "5球(W)", 25: "6球(Z)", 29: "7球(AD)"}
                     
-                    # 读模板 (从第3行开始找)
-                    template = []
-                    for r in range(2, 2 + 14): 
-                        val = clean_str(df.iloc[r, ref_col_idx])
-                        if not val or val not in ["金", "木", "水", "火", "土"]:
-                            break
-                        template.append(val)
+                    # 提取数据清洗函数
+                    def clean_str(v):
+                        if pd.isna(v): return ""
+                        return str(v).replace("\\\\r", "").replace("\\\\n", "").replace(" ", "").strip()
                         
+                    def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
+                    def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
+                    def is_sheng(a, b): return (get_child(a) == b) or (get_mother(a) == b)
+                    
+                    # 1. 提取基准模板 (从第3行即索引2开始)
+                    template = []
+                    for r in range(2, len(df)):
+                        val = clean_str(df.iloc[r, ref_col_idx])
+                        if val in ["金", "木", "水", "火", "土"]:
+                            template.append(val)
+                        if len(template) >= 14: # 模板最多读14格
+                            break
+                            
                     if len(template) < min_len:
-                        st.warning(f"参考列 {ref_col_letter} 的五行模板不足 {min_len} 格 (当前读到 {len(template)} 个，请检查表内容)")
+                        st.warning(f"基准列 {col_names[ref_col_idx]} 的五行数据不足 {min_len} 个，请检查文件！")
                         st.stop()
                         
-                    target_cols = ["K", "F", "AE", "P", "U", "Z", "AJ"]
-                    col_names_map = {"F": "1球", "K": "2球", "P": "3球", "U": "4球", "Z": "5球", "AE": "6球", "AJ": "7球"}
+                    # 2. 扫描 7 列
                     gColl = {i: [] for i in range(min_len, max_len + 1)}
                     
-                    for col_letter in target_cols:
-                        c_idx = get_col_idx(col_letter)
-                        is_ref = (col_letter == ref_col_letter)
-                        disp_name = col_names_map.get(col_letter, col_letter)
+                    for col_idx in scan_cols:
+                        is_ref = (col_idx == ref_col_idx)
+                        disp_name = col_names[col_idx]
                         
+                        # 提取该列从第3行开始的所有有效数据 (行索引, 值)
                         valid_data = []
-                        for r in range(3, len(df)):
-                            val = clean_str(df.iloc[r, c_idx])
+                        for r in range(2, len(df)):
+                            val = clean_str(df.iloc[r, col_idx])
                             if val in ["金", "木", "水", "火", "土"]:
                                 valid_data.append((r, val))
                                 
@@ -717,32 +668,51 @@ def render_multi_analysis(df_data):
                                 max_l = 0
                                 for j in range(vc - k):
                                     if j >= 14 or j >= len(template): break
+                                    # 行必须连续
                                     if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
+                                    # 五行必须相生
                                     if not is_sheng(template[j], valid_data[k+j][1]): break
                                     max_l = j + 1
                                     
                                 if max_l >= min_len:
                                     real_l = max_l
                                     group_l = min(real_l, max_len)
-                                    sr = valid_data[k][0]
+                                    sr = valid_data[k][0] # 原始行索引
                                     er = valid_data[k + real_l - 1][0]
                                     
-                                    w1 = get_wx_xiao(df, sr-1, col_letter)
-                                    w2 = get_wx_xiao(df, er+1, col_letter)
-                                    w3 = get_wx_xiao(df, er+2, col_letter)
-                                    w4 = get_wx_xiao(df, er+3, col_letter)
+                                    # 上下文辅助函数
+                                    def get_ctx(r_idx):
+                                        if r_idx < 0 or r_idx >= len(df): return "—"
+                                        v = clean_str(df.iloc[r_idx, col_idx])
+                                        if v in ["金", "木", "水", "火", "土"]: return v + "肖"
+                                        return v if v else "空"
+                                        
+                                    w1 = get_ctx(sr-1)
+                                    w2 = get_ctx(er+1)
+                                    w3 = get_ctx(er+2)
+                                    w4 = get_ctx(er+3)
                                     
-                                    full_w1, sha_str = format_wx_and_ke(w1, is_sxwx, is_ke)
+                                    # 简化的相生相克输出
+                                    base_w = w1.replace("肖", "") if "肖" in w1 else w1
+                                    sheng_str = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}.get(base_w, "")
                                     
-                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    if sheng_str:
+                                        full_w1 = f"{w1} （生{sheng_str}，）"
+                                        sha_str = f"本期杀{sheng_str}。"
+                                    else:
+                                        full_w1 = w1
+                                        sha_str = ""
+                                        
+                                    # 行号显示时 +1，对应 Excel 的实际行号
+                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     
                                     gColl[group_l].append({"line": line, "is_ref": is_ref, "sr": sr})
                                     k += real_l
                                 else:
                                     k += 1
 
-                    # 汇总结果
-                    report_text = f"========== {target_file} ({ball_str}) ==========\\n"
+                    # 3. 汇总文本
+                    report_text = f"========== 升序生肖相生1 ({ball_str}) ==========\\\\n"
                     maxGroupL = 0
                     for L in range(min_len, max_len + 1):
                         if len(gColl[L]) > 0: maxGroupL = L
@@ -750,7 +720,7 @@ def render_multi_analysis(df_data):
                     finalStrB = ""
                     if maxGroupL > 0:
                         for item in gColl[maxGroupL]:
-                            if finalStrB: finalStrB += "\\n-------------------\\n"
+                            if finalStrB: finalStrB += "\\\\n-------------------\\\\n"
                             finalStrB += item["line"]
                     else:
                         finalStrB = "无匹配结果"
@@ -764,39 +734,39 @@ def render_multi_analysis(df_data):
                                     minSr = item["sr"]
                                     finalStrC = item["line"]
                                 elif item["sr"] == minSr:
-                                    finalStrC += "\\n-------------------\\n" + item["line"]
+                                    finalStrC += "\\\\n-------------------\\\\n" + item["line"]
                                     
                     strC_Display = finalStrC if finalStrC else "无符合条件的匹配（起始行需<500）"
 
-                    report_text += "【B列结果】：匹配行数最多\\n"
-                    report_text += finalStrB + "\\n\\n"
-                    report_text += "【C列结果】：起始行最近且<500\\n"
-                    report_text += strC_Display + "\\n\\n"
+                    report_text += "【B列结果】：匹配行数最多\\\\n"
+                    report_text += finalStrB + "\\\\n\\\\n"
+                    report_text += "【C列结果】：起始行最近且<500\\\\n"
+                    report_text += strC_Display + "\\\\n\\\\n"
                     
                     for L in range(min_len, max_len + 1):
-                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
+                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\\\n"
                         if not gColl[L]:
-                            report_text += "  （无）\\n"
+                            report_text += "  （无）\\\\n"
                         else:
                             for item in gColl[L]:
-                                report_text += item["line"] + "\\n"
-                                if item["is_ref"]: report_text += "[自身参考列匹配]\\n"
-                            report_text += "\\n"
+                                report_text += item["line"] + "\\\\n"
+                                if item["is_ref"]: report_text += "[自身参考列匹配]\\\\n"
+                            report_text += "\\\\n"
 
                     st.session_state.multi_result_text = report_text
-                    st.success("✅ 分析完成！")
+                    st.success("? 分析完成！")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
-    # 3. 结果显示
+    # 4. 结果显示与下载
     st.divider()
     st.text_area("详细结果", value=st.session_state.multi_result_text, height=500)
     
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
-        file_name = f"测试结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_name = f"分析结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="💾 保存结果到本地 (TXT格式)",
+            label="?? 保存结果到本地 (TXT格式)",
             data=st.session_state.multi_result_text,
             file_name=file_name,
             mime="text/plain",
