@@ -572,93 +572,56 @@ def render_ai(df_data):
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
-# ==========================================
-# 页面 6：多维分析系统 (完美读取下拉列表版)
-# ==========================================
 import openpyxl
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import column_index_from_string
 
-def get_dropdown_values(file_path, is_wuxing, is_special):
-    """严格复刻 VBA 逻辑，读取指定单元格的数据验证列表"""
+# ==========================================
+# 页面 6：多维分析系统 (辅助列读取 + 完美同步版)
+# ==========================================
+def get_dropdown_data(file_path, selected_file):
     hm1_list, hm2_list = [], []
     if not file_path or not os.path.exists(file_path):
-        return [], []
+        return ["文件未上传"], []
 
-    # 如果遇到 xlsb，直接报错，因为 openpyxl 读不了 xlsb 的数据验证
-    if file_path.endswith('.xlsb'):
-        return ["xlsb格式无法读取下拉框"], ["xlsb格式无法读取下拉框"]
+    # 🔥 严格根据你的文件分类，去读取对应的辅助列
+    if "多维分析" in selected_file:
+        sheet_name = selected_file
+        hm1_col, hm1_end = "JL", 7
+        hm2_col, hm2_end = "JM", 130
+        
+    elif "核算五行" in selected_file:
+        sheet_name = "多方面"
+        hm1_col, hm1_end = "CZ", 7
+        hm2_col, hm2_end = "DA", 4
+        
+    else:
+        # 12 套相生相克文件
+        sheet_name = "多方面"
+        hm1_col, hm1_end = "CP", 7
+        hm2_col, hm2_end = None, 0 # 无 HM2
 
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=False)
+        engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
         
-        # 找目标工作表
-        target_ws = None
-        if is_special:
-            for sheet in wb.sheetnames:
-                if "多方面" in sheet:
-                    target_ws = wb[sheet]
-                    break
-        else:
-            for sheet in wb.sheetnames:
-                if "结果" not in sheet and wb[sheet].cell(row=3, column=222).value is not None:
-                    target_ws = wb[sheet]
-                    break
-                    
-        if not target_ws:
-            target_ws = wb[wb.sheetnames[0]]
+        # 读取 HM1
+        df1 = pd.read_excel(file_path, sheet_name=sheet_name, usecols=hm1_col, header=None, engine=engine_type)
+        for x in df1.iloc[:hm1_end, 0].dropna().tolist():
+            v = str(x).strip()
+            if v and v not in hm1_list:
+                hm1_list.append(v)
 
-        # 确定要读取的单元格
-        if is_wuxing:
-            coord1, coord2 = "AM1", "AM2"
-        elif is_special:
-            coord1, coord2 = "AL1", "HM2"
-        else:
-            coord1, coord2 = "HM1", "HM2"
+        # 读取 HM2 (如果有)
+        if hm2_col:
+            df2 = pd.read_excel(file_path, sheet_name=sheet_name, usecols=hm2_col, header=None, engine=engine_type)
+            for x in df2.iloc[:hm2_end, 0].dropna().tolist():
+                v = str(x).strip()
+                if v and v not in hm2_list:
+                    hm2_list.append(v)
 
-        def extract_val(coord):
-            cell = target_ws[coord]
-            values = []
-            if cell.data_validation and cell.data_validation.type == "list":
-                formula = cell.data_validation.formula1
-                if formula:
-                    if formula.startswith("="):
-                        # 引用区域解析
-                        range_ref = formula[1:].replace("$", "")
-                        try:
-                            sheet_part, range_part = range_ref.split("!") if "!" in range_ref else (target_ws.title, range_ref)
-                            sheet_part = sheet_part.replace("'", "")
-                            min_col, min_row, max_col, max_row = range_boundaries(range_part)
-                            
-                            ref_ws = wb[sheet_part] if sheet_part in wb.sheetnames else target_ws
-                            for row in ref_ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col):
-                                for c in row:
-                                    if c.value is not None and str(c.value).strip() != "":
-                                        values.append(str(c.value).strip())
-                        except Exception:
-                            pass
-                    else:
-                        # 字符串直接解析
-                        values = [v.strip() for v in formula.replace('"', '').replace("，", ",").split(",") if v.strip()]
-            
-            # 如果没读到验证，读单元格自身值
-            if not values and cell.value is not None:
-                val_str = str(cell.value).strip()
-                values = [v.strip() for v in val_str.replace("，", ",").split(",") if v.strip()]
-                
-            # 去重
-            unique_vals = []
-            for v in values:
-                if v not in unique_vals: unique_vals.append(v)
-            return unique_vals
-
-        hm1_list = extract_val(coord1)
-        hm2_list = extract_val(coord2)
-        wb.close()
     except Exception as e:
-        print(f"读取下拉列表失败: {e}")
-        
-    return hm1_list, hm2_list
+        return [f"读取报错: {e}"], []
 
+    return hm1_list, hm2_list
 
 def render_multi_analysis(df_data):
     st.title("🧊 多维分析系统")
@@ -677,7 +640,19 @@ def render_multi_analysis(df_data):
     ]
     
     with col1:
-        selected_file = st.selectbox("选择分析类型", file_options)
+        # 🔥 核心同步机制：一旦切换文件，立刻销毁下方旧下拉框的记忆
+        def on_file_change():
+            if "multi_hm1_widget" in st.session_state:
+                del st.session_state["multi_hm1_widget"]
+            if "multi_hm2_widget" in st.session_state:
+                del st.session_state["multi_hm2_widget"]
+
+        selected_file = st.selectbox(
+            "选择分析类型", 
+            file_options, 
+            on_change=on_file_change
+        )
+        
         is_special = "多维分析" not in selected_file
         is_wuxing = "核算五行" in selected_file
 
@@ -687,20 +662,23 @@ def render_multi_analysis(df_data):
     elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
     elif os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
 
-    # 🔥 真实读取下拉框
-    hm1_list, hm2_list = get_dropdown_values(file_path, is_wuxing, is_special)
+    # 🔥 获取最新文件的下拉框数据
+    hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
     
-    # 兜底提示，绝不自己瞎编选项
-    if not hm1_list: hm1_list = ["⚠️ 未读取到数据验证"]
-    if not hm2_list: hm2_list = ["⚠️ 未读取到数据验证"]
-
+    if not hm1_list: hm1_list = ["无数据"]
+    
     with col2:
-        hm1 = st.selectbox("HM1 (球号/条件)", hm1_list)
-    with col3:
-        hm2 = st.selectbox("HM2 (属性/次数)", hm2_list)
+        hm1 = st.selectbox("HM1 (球号/条件)", hm1_list, key="multi_hm1_widget")
         
-    st.caption(f"🔍 调试：当前读取文件 `{file_path}` | 数据验证读取情况：HM1({len(hm1_list)}项) | HM2({len(hm2_list)}项)")
+    if hm2_list:
+        with col3:
+            hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
+    else:
+        hm2 = ""
+        with col3:
+            st.info("ℹ️ 该文件无HM2下拉框")
 
+    st.caption(f"🔍 当前解析文件 `{file_path}` | 辅助列读取成功！")
     st.divider()
     
     # 2. 操作按钮区
@@ -712,10 +690,10 @@ def render_multi_analysis(df_data):
     with b3:
         sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
 
-    # 3. 核心分析逻辑（直接内联，防止缩进/丢失函数问题）
+    # 3. 核心分析逻辑
     if run_btn:
-        if "⚠️" in hm1 or "⚠️" in hm2:
-            st.error("读取下拉框失败，请确认文件存在且不是加密的 .xlsb 格式！")
+        if not hm1:
+            st.error("读取下拉框失败！")
         else:
             with st.spinner("正在读取真实数据并计算，请稍候..."):
                 try:
