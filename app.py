@@ -576,8 +576,9 @@ import openpyxl
 import pandas as pd
 import os
 
-import openpyxl
-import os
+# ==========================================
+# 页面 6：多维分析系统
+# ==========================================
 
 def get_dropdown_data(file_path, selected_file):
     hm1_list, hm2_list = [], []
@@ -586,28 +587,25 @@ def get_dropdown_data(file_path, selected_file):
 
     if "多维分析" in selected_file:
         sheet_name = selected_file
-        hm1_col, hm1_end = 246, 7      # JL 列 (第246列)
-        hm2_col, hm2_end = 247, 130    # JM 列 (第247列)
+        hm1_col, hm1_end = 246, 7      # JL 列
+        hm2_col, hm2_end = 247, 130    # JM 列
     elif "核算五行" in selected_file:
         sheet_name = "多方面"
-        hm1_col, hm1_end = 104, 7      # CZ 列 (第104列)
-        hm2_col, hm2_end = 105, 4      # DA 列 (第105列)
+        hm1_col, hm1_end = 104, 7      # CZ 列
+        hm2_col, hm2_end = 105, 4      # DA 列
     else:
         # 12 套相生相克文件 (.xlsm)
         sheet_name = "多方面"
-        hm1_col, hm1_end = 94, 7       # CP 列 (第94列)
+        hm1_col, hm1_end = 94, 7       # CP 列
         hm2_col = -1
 
     try:
-        # 如果是 .xlsm 或 .xlsx，直接使用 openpyxl 精确抠单元格，无视 pandas 截断
         if file_path.endswith(".xlsm") or file_path.endswith(".xlsx"):
             wb = openpyxl.load_workbook(file_path, data_only=True)
             if sheet_name not in wb.sheetnames:
                 sheet_name = "多方面" if "多方面" in wb.sheetnames else wb.sheetnames[0]
-            
             ws = wb[sheet_name]
             
-            # 强行读取第 1 到 7 行
             for r in range(1, hm1_end + 1):
                 cell = ws.cell(row=r, column=hm1_col)
                 if cell.value is not None:
@@ -624,11 +622,9 @@ def get_dropdown_data(file_path, selected_file):
                             hm2_list.append(v)
             wb.close()
         else:
-            # 如果是 .xlsb，只能依靠 pyxlsb
-            import pandas as pd
             df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="pyxlsb")
             for r in range(min(hm1_end, df.shape[0])):
-                val = df.iloc[r, hm1_col - 1] # pandas 索引从 0 开始
+                val = df.iloc[r, hm1_col - 1]
                 if pd.notna(val):
                     v = str(val).strip()
                     if v and v != "nan" and v not in hm1_list:
@@ -638,6 +634,171 @@ def get_dropdown_data(file_path, selected_file):
         return [f"读取报错: {e}"], []
 
     return hm1_list, hm2_list
+
+
+def render_multi_analysis(df_data):
+    st.title("🧊 多维分析系统")
+    
+    if "multi_result_text" not in st.session_state:
+        st.session_state.multi_result_text = "等待执行分析..."
+
+    col1, col2, col3 = st.columns(3)
+    
+    file_options = [
+        "升序多维分析", "按序多维分析", "升序核算五行", "按序核算五行",
+        "升序生肖相生", "按序生肖相生", "升序生肖相克", "按序生肖相克",
+        "升序五行相生", "按序五行相生", "升序五行相克", "按序五行相克",
+        "升序生肖与五行相生", "按序生肖与五行相生", "升序生肖与五行相克", "按序生肖与五行相克"
+    ]
+    
+    with col1:
+        def on_file_change():
+            if "multi_hm1_widget" in st.session_state: del st.session_state["multi_hm1_widget"]
+            if "multi_hm2_widget" in st.session_state: del st.session_state["multi_hm2_widget"]
+
+        selected_file = st.selectbox("选择分析类型", file_options, on_change=on_file_change)
+        is_special = "多维分析" not in selected_file
+        is_wuxing = "核算五行" in selected_file
+        is_12_files = not ("多维分析" in selected_file or "核算五行" in selected_file)
+
+    file_path = ""
+    if os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
+    elif os.path.exists(f"{selected_file}.xlsm"): file_path = f"{selected_file}.xlsm"
+    elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
+
+    hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
+    if not hm1_list: hm1_list = ["无数据"]
+    
+    label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号/条件)"
+
+    with col2:
+        hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
+        
+    if hm2_list:
+        with col3:
+            hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
+    else:
+        hm2 = ""
+        with col3:
+            st.info("ℹ️ 当前文件无第二下拉框")
+
+    st.divider()
+    
+    b1, b2, b3 = st.columns(3)
+    with b1: run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
+    with b2: clear_btn = st.button("🗑️ 清空数据", use_container_width=True)
+    with b3: sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
+
+    if run_btn:
+        if not file_path:
+            st.error("文件未上传！")
+        elif "报错" in hm1_list[0]:
+            st.error(hm1_list[0])
+        else:
+            with st.spinner("正在读取真实数据并计算，请稍候..."):
+                try:
+                    from datetime import datetime
+                    engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
+                    excel_file = pd.ExcelFile(file_path, engine=engine_type)
+                    
+                    target_sheet = excel_file.sheet_names[0]
+                    for sheet in excel_file.sheet_names:
+                        try:
+                            temp_df = pd.read_excel(excel_file, sheet_name=sheet, nrows=5, header=None)
+                            if temp_df.shape[1] > 221 and pd.notna(temp_df.iloc[2, 221]):
+                                target_sheet = sheet
+                                break
+                        except: pass
+                            
+                    time_str = datetime.now().strftime("%H:%M:%S")
+                    result_text = f"========== {selected_file} ==========\\n计算时间: {time_str}\\n\\n"
+                    
+                    if is_wuxing:
+                        result_text += f"【五行核算】球号: {hm1} | 次数: {hm2}\\n"
+                        df_wuxing = pd.read_excel(excel_file, sheet_name=target_sheet, header=None).iloc[1:3, 54:61]
+                        bContent = ""
+                        for r_idx in range(df_wuxing.shape[0]):
+                            for c_idx in range(df_wuxing.shape[1]):
+                                val = str(df_wuxing.iloc[r_idx, c_idx]).strip()
+                                if val != "" and val != "0" and val != "nan":
+                                    posNum = 62 - (55 + c_idx)
+                                    joinStr = f"金（{posNum}）" if val == "金" else f"{val}号（{posNum}）"
+                                    bContent = joinStr if bContent == "" else bContent + f",{joinStr}"
+                        if bContent == "":
+                            result_text += "未读取到有效值。\\n"
+                        else:
+                            result_text += f"【B列结果】: {bContent}\\n【C列结果】: 五行对应{hm2}次\\n"
+                    
+                    elif is_special:
+                        result_text += "特殊文件已重算。\\n"
+                    
+                    else:
+                        result_text += f"读取工作表: {target_sheet}\\n"
+                        df_full = pd.read_excel(excel_file, sheet_name=target_sheet, header=None)
+                        
+                        dataArr = df_full.iloc[2:20, 221:235].fillna("").astype(str).values
+                        groupNums = [7, 6, 5, 4, 3, 2, 1]
+                        newContentB = ""
+                        
+                        for i in range(7):
+                            colLeftIdx = i * 2
+                            colRightIdx = i * 2 + 1
+                            for r in range(18):
+                                valLeft = dataArr[r, colLeftIdx].strip()
+                                valRight = dataArr[r, colRightIdx].strip()
+                                targetText, isHit = "", False
+                                if valLeft == "1": targetText, isHit = valRight, True
+                                if valRight == "1": targetText, isHit = valLeft, True
+                                
+                                if isHit and targetText != "" and targetText != "0" and not targetText.isdigit():
+                                    内容B = f"{targetText}近{hm2}期一致间距{r+1}（{groupNums[i]}）"
+                                    if 内容B not in newContentB:
+                                        newContentB += f"{内容B},"
+                        
+                        dataArrC = df_full.iloc[1:20, 236:243].fillna("").astype(str).values
+                        newContentC = ""
+                        for ic in range(7):
+                            for rc in range(19):
+                                valC = dataArrC[rc, ic].strip()
+                                if valC != "" and valC != "nan":
+                                    内容C = f"{hm2}，{valC}（{groupNums[ic]}）"
+                                    if 内容C not in newContentC:
+                                        newContentC += f"{内容C},"
+                        
+                        result_text += f"【B列新内容】:\\n{newContentB if newContentB else '无'}\\n\\n"
+                        result_text += f"【C列新内容】:\\n{newContentC if newContentC else '无'}\\n"
+                        
+                    st.session_state.multi_result_text = result_text
+                    st.success("✅ 数据计算完成！")
+                    
+                except Exception as e:
+                    st.error(f"执行出错: {e}")
+
+    if sync_ai_btn:
+        ai_condition = f"杀{hm1}，"
+        st.session_state.ai_extra_condition = ai_condition
+        st.success(f"✅ 同步成功！已向 AI 推演追加条件：{ai_condition}")
+        
+    if clear_btn:
+        st.session_state.multi_result_text = "等待执行分析..."
+        st.rerun()
+
+    st.divider()
+    st.markdown("### 📊 分析结果预览")
+    st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
+    
+    if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
+        from datetime import datetime
+        file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        
+        st.download_button(
+            label="💾 保存日记到本地电脑 (TXT格式)",
+            data=st.session_state.multi_result_text,
+            file_name=file_name,
+            mime="text/plain",
+            use_container_width=True,
+            type="secondary"
+        )
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
