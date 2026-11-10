@@ -17,7 +17,7 @@ def fetch_data():
         response.raise_for_status()
         data = response.json()
         if not data:
-            print("❌ 未抓取到数据，数据源返回为空")
+            print("未抓取到数据")
             return None
         latest = data[0]
         issue = str(latest.get("no", "")).strip()
@@ -25,18 +25,31 @@ def fetch_data():
         special = latest.get("xDrawnNo", "")
         return issue, ordered_nums, special
     except Exception as e:
-        print(f"❌ 获取数据失败: {e}")
+        print(f"获取数据失败: {e}")
         return None
 
 def write_to_sheet(ws, issue, numbers_list):
-    """将期数和号码写入第3行（强制插入新行）"""
+    """将期数、年份和拆分的号码强制写入第3行"""
     ws.insert_rows(3)
     
-    issue_str = str(issue).strip()[-3:].zfill(3)  # 比如 117
-    ws.cell(row=3, column=1).value = int(issue_str[0])
-    ws.cell(row=3, column=2).value = int(issue_str[1])
-    ws.cell(row=3, column=3).value = int(issue_str[2])
+    # 精准拆解期数和年份
+    issue_str = str(issue).strip()
+    if len(issue_str) >= 7:
+        year = int(issue_str[:4]) # 提取前4位作为年份 (如 2026)
+        tail = issue_str[-3:]     # 提取后3位 (如 117)
+    else:
+        year = 2026               # 兜底年份
+        tail = issue_str.zfill(3)[-3:]
+        
+    # 写入期数到 A、B、C 列
+    ws.cell(row=3, column=1).value = int(tail[0])
+    ws.cell(row=3, column=2).value = int(tail[1])
+    ws.cell(row=3, column=3).value = int(tail[2])
     
+    # 写入年份到 AA 列（第 27 列）
+    ws.cell(row=3, column=27).value = year
+    
+    # 写入号码到 D 列开始（拆分十位和个位）
     current_col = 4
     for num in numbers_list:
         num_int = int(num)
@@ -50,12 +63,13 @@ def process_excel(file_path, issue, numbers_list, file_desc):
         return
 
     print(f"正在处理 {file_desc}...")
-    # 注意：因为 GitHub 上处理 .xlsm 容易掉格式，如果你只是想纯更新数据，建议另存为 .xlsx 上传，并在这里改成 False
+    # 加载文件（保留宏）
     wb = openpyxl.load_workbook(file_path, keep_vba=True)
     
     if SHEET_NAME in wb.sheetnames:
         ws = wb[SHEET_NAME]
         
+        # 强制写入，绝不跳过
         print(f"🔥 强制将 {issue} 期数据写入 {file_desc} 的【{SHEET_NAME}】表...")
         write_to_sheet(ws, issue, numbers_list)
         try:
@@ -73,12 +87,16 @@ def main():
     
     issue, ordered_nums, special = result
     print(f"✅ 成功获取最新数据: {issue} 期")
+    print(f"原始平码数据: {ordered_nums}, 特码: {special}")
     
-    # 按序
+    # 1. 准备按序数据（按落球顺序，特码在最后）
     all_ordered = ordered_nums + [special]
-    # 升序
+    
+    # 2. 准备升序数据（前6个平码强制升序排列，特码在最后）
+    # 即使源头已经是升序，这里再排一次作为双保险
     all_sorted = sorted([int(n) for n in ordered_nums]) + [special]
 
+    # 分别处理两个文件
     process_excel(FILE_ORDERED, issue, all_ordered, "按序源文件")
     process_excel(FILE_SORTED, issue, all_sorted, "升序源文件")
 
