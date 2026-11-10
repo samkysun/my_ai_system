@@ -574,19 +574,7 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 辅助函数区：五行生克判断与文本清洗
-# ==========================================
-def clean_str(v):
-    if pd.isna(v): return ""
-    return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
-
-def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
-def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
-def is_sheng(a, b): return (get_child(a) == b) or (get_mother(a) == b)
-
-
-# ==========================================
-# 页面 6：多维分析系统 (纯代码引擎)
+# 页面 6：多维分析系统
 # ==========================================
 def render_multi_analysis(df_data):
     st.title("多维分析系统")
@@ -594,9 +582,6 @@ def render_multi_analysis(df_data):
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析"
 
-    # ==========================================
-    # 1. 顶部控制面板
-    # ==========================================
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
     
@@ -616,15 +601,12 @@ def render_multi_analysis(df_data):
 
     st.divider()
     
-    # ==========================================
-    # 2. 核心计算逻辑
-    # ==========================================
     if run_btn:
         target_file = "升序生肖相生1.xlsx"
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}")
         else:
-            with st.spinner(f"正在扫描数据，请稍候..."):
+            with st.spinner("正在扫描数据，请稍候..."):
                 try:
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
@@ -634,7 +616,14 @@ def render_multi_analysis(df_data):
                     scan_cols = [5, 9, 13, 17, 21, 25, 29]
                     col_names = {5: "1球(F)", 9: "2球(J)", 13: "3球(N)", 17: "4球(R)", 21: "5球(V)", 25: "6球(Z)", 29: "7球(AD)"}
                     
-                    # 读取模板
+                    def clean_str(v):
+                        if pd.isna(v): return ""
+                        return str(v).replace("\\\\r", "").replace("\\\\n", "").replace(" ", "").strip()
+                        
+                    def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
+                    def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
+                    def is_sheng(a, b): return (get_child(a) == b) or (get_mother(a) == b)
+                    
                     template = []
                     for r in range(2, len(df)):
                         val = clean_str(df.iloc[r, ref_col_idx])
@@ -649,7 +638,6 @@ def render_multi_analysis(df_data):
                         
                     gColl = {i: [] for i in range(min_len, max_len + 1)}
                     
-                    # 扫描目标列
                     for col_idx in scan_cols:
                         disp_name = col_names[col_idx]
                         is_self = (col_idx == ref_col_idx)
@@ -712,15 +700,12 @@ def render_multi_analysis(df_data):
                                 else:
                                     k += 1
 
-                    # ==========================================
-                    # 3. 整理输出文本
-                    # ==========================================
+                    # 使用列表拼接，保证每一行独立
                     output_lines = []
                     output_lines.append("========== 升序生肖相生1 ==========")
                     output_lines.append(ball_str.replace('列', '列参照列'))
                     output_lines.append("")
                     
-                    # 第一部分：最近行<500
                     minSr = 999999
                     finalC = []
                     for L in range(min_len, max_len + 1):
@@ -738,7 +723,6 @@ def render_multi_analysis(df_data):
                             output_lines.append(item["line"])
                             output_lines.append("")
 
-                    # 第二部分：按行数递增
                     for L in range(min_len, max_len + 1):
                         if not gColl[L]:
                             continue
@@ -747,20 +731,19 @@ def render_multi_analysis(df_data):
                             output_lines.append(item["line"])
                             output_lines.append("")
                                 
-                    st.session_state.multi_result_text = "\\n".join(output_lines)
+                    # 用换行符安全连接
+                    st.session_state.multi_result_text = "\\\\n".join(output_lines)
                     st.success("分析完成")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
-    # ==========================================
-    # 4. 结果显示与下载
-    # ==========================================
     st.divider()
     st.subheader("详细结果")
     
     if st.session_state.multi_result_text != "等待执行分析":
-        st.text_area("分析报告内容", value=st.session_state.multi_result_text, height=600)
+        # height=500 保证文本框够高，自动显示滚动条
+        st.text_area("分析报告内容", value=st.session_state.multi_result_text, height=500)
         
         file_name = f"分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
@@ -772,7 +755,7 @@ def render_multi_analysis(df_data):
             type="secondary"
         )
     else:
-        st.info("等待执行分析")   
+        st.info("等待执行分析")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
