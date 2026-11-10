@@ -572,12 +572,13 @@ def render_ai(df_data):
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
+
 import pandas as pd
 import os
 from datetime import datetime
 
 # ==========================================
-# 页面 6：多维分析系统 (表格级清晰排版)
+# 页面 6：多维分析系统 (单行文本排版)
 # ==========================================
 def render_multi_analysis(df_data):
     st.title("多维分析系统 (纯代码引擎)")
@@ -686,38 +687,37 @@ def render_multi_analysis(df_data):
                                     sheng_str = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}.get(base_w, "")
                                     
                                     if sheng_str:
-                                        full_w1 = f"{w1}（生:{sheng_str}，）"
+                                        full_w1 = f"{w1} （生{sheng_str}，）"
                                         sha_str = f"本期杀{sheng_str}。"
                                     else:
                                         full_w1 = w1
                                         sha_str = ""
                                         
-                                    # 🔥 核心：强制把长句拆成多行，绝不拥挤
-                                    detail_lines = [
-                                        f"      上: {full_w1}",
-                                        f"      下: {w2}",
-                                        f"      再下: {w3}",
-                                        f"      再再下: {w4}",
-                                        f"      {sha_str}"
-                                    ]
+                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     if is_self:
-                                        detail_lines.append("      【自身参考列匹配】")
+                                        detail_txt += " [自身参考列匹配]"
+                                        
+                                    # 🔥 拼装成完美的单行长句
+                                    line_txt = f" {disp_name} 行{sr+1}-{er+1}({real_l}行)：  {detail_txt}"
                                         
                                     gColl[group_l].append({
-                                        "disp_name": disp_name,
-                                        "sr": sr,
-                                        "er": er,
-                                        "real_l": real_l,
-                                        "details": detail_lines
+                                        "line": line_txt,
+                                        "sr": sr
                                     })
                                     k += real_l
                                 else:
                                     k += 1
 
                     # 3. 生成排版文本
-                    report_text = f"【{ball_str} 升序生肖相生对比表】\\n\\n"
+                    # 获取文件名大写、加顶部标题
+                    file_title = target_file.replace('.xlsx', '')
+                    # 替换"列"为"列参照列"，匹配你的示例
+                    ball_title = ball_str.replace('列', '列参照列')
                     
-                    # 第一部分：起始行最近且<500
+                    report_text = f"========== {file_title}  ==========\\n"
+                    report_text += f"{ball_title}\\n\\n"
+                    
+                    # === 第一部分：起始行最近且<500 ===
                     minSr = 999999
                     finalC = []
                     for L in range(min_len, max_len + 1):
@@ -730,36 +730,31 @@ def render_multi_analysis(df_data):
                                     finalC.append(item)
                                     
                     if finalC:
-                        report_text += "> 起始行最近且 <500\\n"
+                        report_text += "起始行最近且<500行：\\n"
                         for item in finalC:
-                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1} ({item['real_l']}行)\\n"
-                            for dl in item["details"]:
-                                report_text += f"{dl}\\n"
-                            report_text += "\\n" # 每个结果间隔空行
+                            report_text += item["line"] + "\\n\\n"
+                        report_text += "\\n"
 
-                    # 第二部分：按连续行数递增
+                    # === 第二部分：按连续行数递增 ===
                     for L in range(min_len, max_len + 1):
                         if not gColl[L]:
                             continue
-                        report_text += f"━━ 连续 {L} 行匹配（共 {len(gColl[L])} 处）━━\\n"
+                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
                         for item in gColl[L]:
-                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1} ({item['real_l']}行)\\n"
-                            for dl in item["details"]:
-                                report_text += f"{dl}\\n"
-                            report_text += "\\n" # 每个结果间隔空行
+                            report_text += item["line"] + "\\n\\n"
+                        report_text += "\\n"
                                 
                     st.session_state.multi_result_text = report_text.strip()
-                    st.success("分析完成！请查看下方规范排版。")
+                    st.success("分析完成！")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
-    # 4. 结果展示 (改用 markdown 代码块，保证换行和对齐极美)
+    # 4. 结果展示 (使用 st.code 或者 text_area，由于内容很长，text_area 更适合直接复制)
     st.divider()
-    if st.session_state.multi_result_text != "等待执行分析...":
-        # 用代码块展示，彻底解决 text_area 换行和拥挤的问题
-        st.markdown(f"```text\\n{st.session_state.multi_result_text}\\n```")
-        
+    st.text_area("详细结果", value=st.session_state.multi_result_text, height=600)
+    
+    if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
         file_name = f"分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
             label="保存结果到本地 (TXT格式)",
@@ -768,9 +763,7 @@ def render_multi_analysis(df_data):
             mime="text/plain",
             use_container_width=True,
             type="secondary"
-        )
-    else:
-        st.info("等待执行分析...")
+        )   
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
