@@ -592,9 +592,9 @@ def render_multi_analysis(df_data):
         selected_file = st.selectbox("选择分析类型", file_options)
     with col2:
         # 这里暂时留空，等用户选了文件后动态生成
-        hm1 = st.selectbox("HM1 (球号1)", ["等待读取数据..."])
+        hm1 = st.selectbox("球号", ["等待读取数据..."])
     with col3:
-        hm2 = st.selectbox("HM2 (球号2)", ["等待读取数据..."])
+        hm2 = st.selectbox("次数", ["等待读取数据..."])
 
     st.divider()
     
