@@ -628,7 +628,7 @@ def render_multi_analysis(df_data):
                     # 提取数据清洗函数
                     def clean_str(v):
                         if pd.isna(v): return ""
-                        return str(v).replace("\\\\r", "").replace("\\\\n", "").replace(" ", "").strip()
+                        return str(v).replace("\\\\\\\\r", "").replace("\\\\\\\\n", "").replace(" ", "").strip()
                         
                     def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
                     def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
@@ -704,7 +704,7 @@ def render_multi_analysis(df_data):
                                         sha_str = ""
                                         
                                     # 行号显示时 +1，对应 Excel 的实际行号
-                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\\\\\\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     
                                     gColl[group_l].append({"line": line, "is_ref": is_ref, "sr": sr})
                                     k += real_l
@@ -712,7 +712,7 @@ def render_multi_analysis(df_data):
                                     k += 1
 
                     # 3. 汇总文本
-                    report_text = f"========== 升序生肖相生1 ({ball_str}) ==========\\\\n"
+                    report_text = f"========== 升序生肖相生1 ({ball_str}) ==========\\\\\\\\n"
                     maxGroupL = 0
                     for L in range(min_len, max_len + 1):
                         if len(gColl[L]) > 0: maxGroupL = L
@@ -720,7 +720,7 @@ def render_multi_analysis(df_data):
                     finalStrB = ""
                     if maxGroupL > 0:
                         for item in gColl[maxGroupL]:
-                            if finalStrB: finalStrB += "\\\\n-------------------\\\\n"
+                            if finalStrB: finalStrB += "\\\\\\\\n-------------------\\\\\\\\n"
                             finalStrB += item["line"]
                     else:
                         finalStrB = "无匹配结果"
@@ -734,24 +734,24 @@ def render_multi_analysis(df_data):
                                     minSr = item["sr"]
                                     finalStrC = item["line"]
                                 elif item["sr"] == minSr:
-                                    finalStrC += "\\\\n-------------------\\\\n" + item["line"]
+                                    finalStrC += "\\\\\\\\n-------------------\\\\\\\\n" + item["line"]
                                     
                     strC_Display = finalStrC if finalStrC else "无符合条件的匹配（起始行需<500）"
 
-                    report_text += "【B列结果】：匹配行数最多\\\\n"
-                    report_text += finalStrB + "\\\\n\\\\n"
-                    report_text += "【C列结果】：起始行最近且<500\\\\n"
-                    report_text += strC_Display + "\\\\n\\\\n"
+                    report_text += "【B列结果】：匹配行数最多\\\\\\\\n"
+                    report_text += finalStrB + "\\\\\\\\n\\\\\\\\n"
+                    report_text += "【C列结果】：起始行最近且<500\\\\\\\\n"
+                    report_text += strC_Display + "\\\\\\\\n\\\\\\\\n"
                     
                     for L in range(min_len, max_len + 1):
-                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\\\n"
+                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\\\\\\\n"
                         if not gColl[L]:
-                            report_text += "  （无）\\\\n"
+                            report_text += "  （无）\\\\\\\\n"
                         else:
                             for item in gColl[L]:
-                                report_text += item["line"] + "\\\\n"
-                                if item["is_ref"]: report_text += "[自身参考列匹配]\\\\n"
-                            report_text += "\\\\n"
+                                report_text += item["line"] + "\\\\\\\\n"
+                                if item["is_ref"]: report_text += "[自身参考列匹配]\\\\\\\\n"
+                            report_text += "\\\\\\\\n"
 
                     st.session_state.multi_result_text = report_text
                     st.success("? 分析完成！")
