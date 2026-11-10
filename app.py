@@ -577,7 +577,7 @@ import pandas as pd
 import os
 
 # ==========================================
-# 页面 6：多维分析系统
+# 页面 6：多维分析系统 (精准抠单元格版)
 # ==========================================
 
 def get_dropdown_data(file_path, selected_file):
@@ -585,51 +585,54 @@ def get_dropdown_data(file_path, selected_file):
     if not file_path or not os.path.exists(file_path):
         return ["文件未上传"], []
 
+    # 🔥 严格对应你的坐标
     if "多维分析" in selected_file:
         sheet_name = selected_file
-        hm1_col, hm1_end = 246, 7      # JL 列
-        hm2_col, hm2_end = 247, 130    # JM 列
+        col1_letter, col2_letter = "JL", "JM"
+        end1, end2 = 7, 130
     elif "核算五行" in selected_file:
         sheet_name = "多方面"
-        hm1_col, hm1_end = 104, 7      # CZ 列
-        hm2_col, hm2_end = 105, 4      # DA 列
+        col1_letter, col2_letter = "CZ", "DA"
+        end1, end2 = 7, 4
     else:
-        # 12 套相生相克文件 (.xlsm)
+        # 12套相生相克文件
         sheet_name = "多方面"
-        hm1_col, hm1_end = 94, 7       # CP 列
-        hm2_col = -1
+        col1_letter, col2_letter = "CP", None
+        end1, end2 = 7, 0
 
     try:
+        # 如果是 xlsm 或 xlsx，直接点对点抠单元格，绝对不漏第7个球！
         if file_path.endswith(".xlsm") or file_path.endswith(".xlsx"):
             wb = openpyxl.load_workbook(file_path, data_only=True)
-            if sheet_name not in wb.sheetnames:
-                sheet_name = "多方面" if "多方面" in wb.sheetnames else wb.sheetnames[0]
-            ws = wb[sheet_name]
+            ws = wb[sheet_name] if sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
             
-            for r in range(1, hm1_end + 1):
-                cell = ws.cell(row=r, column=hm1_col)
+            # 精确读取 CP1, CP2... CP7
+            for r in range(1, end1 + 1):
+                cell = ws[f"{col1_letter}{r}"]
                 if cell.value is not None:
                     v = str(cell.value).strip()
                     if v and v != "nan" and v not in hm1_list:
                         hm1_list.append(v)
-                        
-            if hm2_col >= 0:
-                for r in range(1, hm2_end + 1):
-                    cell = ws.cell(row=r, column=hm2_col)
+            
+            # 读取第二个下拉框
+            if col2_letter:
+                for r in range(1, end2 + 1):
+                    cell = ws[f"{col2_letter}{r}"]
                     if cell.value is not None:
                         v = str(cell.value).strip()
                         if v and v != "nan" and v not in hm2_list:
                             hm2_list.append(v)
             wb.close()
+            
         else:
+            # 如果是 xlsb，只能用 pandas 兜底读取整列的非空数据
             df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine="pyxlsb")
-            for r in range(min(hm1_end, df.shape[0])):
-                val = df.iloc[r, hm1_col - 1]
-                if pd.notna(val):
-                    v = str(val).strip()
-                    if v and v != "nan" and v not in hm1_list:
-                        hm1_list.append(v)
-                        
+            col1_idx = openpyxl.utils.column_index_from_string(col1_letter) - 1
+            for x in df.iloc[:, col1_idx].dropna().tolist():
+                v = str(x).strip()
+                if v and v != "nan" and v not in hm1_list:
+                    hm1_list.append(v)
+
     except Exception as e:
         return [f"读取报错: {e}"], []
 
@@ -669,7 +672,7 @@ def render_multi_analysis(df_data):
     hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
     if not hm1_list: hm1_list = ["无数据"]
     
-    label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号/条件)"
+    label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号)"
 
     with col2:
         hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
@@ -729,7 +732,7 @@ def render_multi_analysis(df_data):
                         else:
                             result_text += f"【B列结果】: {bContent}\\n【C列结果】: 五行对应{hm2}次\\n"
                     
-                    elif is_special:
+                    elif is_12_files:
                         result_text += "特殊文件已重算。\\n"
                     
                     else:
