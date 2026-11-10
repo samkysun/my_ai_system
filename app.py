@@ -637,6 +637,19 @@ def render_multi_analysis(df_data):
 
     # 用文本框展示结果（可复制）
     st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
+    # 🔥 动态显示导出按钮（只要文本框有内容就显示）
+    if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
+        from datetime import datetime
+        file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    
+        st.download_button(
+            label="💾 保存日记到本地电脑 (TXT格式)",
+            data=st.session_state.multi_result_text,
+            file_name=file_name,
+            mime="text/plain",
+            use_container_width=True,
+            type="secondary"
+         )
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
