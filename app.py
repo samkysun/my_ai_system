@@ -574,7 +574,7 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统
+# 页面 6：多维分析系统 (自动追加统合版)
 # ==========================================
 def render_multi_analysis(df_data):
     # 直接在函数内导入，解决报错
@@ -584,28 +584,45 @@ def render_multi_analysis(df_data):
 
     st.title("多维分析系统")
     
+    # ==========================================
+    # 1. 状态初始化与属性切换监控
+    # ==========================================
+    if "current_attr" not in st.session_state:
+        st.session_state.current_attr = "升序生肖相生"
+    if "multi_results_dict" not in st.session_state:
+        # 这个字典用来存储 {球号: 计算结果文本}
+        st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state:
-        st.session_state.multi_result_text = "等待执行分析"
+        st.session_state.multi_result_text = ""
 
-    # ==========================================
-    # 1. 顶部控制面板
-    # ==========================================
+    # 顶部控制面板
     st.markdown("### 分析参数设置")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
+        # 为了兼容未来的大表，把分析属性单独提出来作为下拉框
+        selected_attr = st.selectbox("分析属性", ["升序生肖相生", "升序生肖相克"]) 
+        
+    with col2:
         ball_options = ["第1球(F列)", "第2球(J列)", "第3球(N列)", "第4球(R列)", "第5球(V列)", "第6球(Z列)", "第7球(AD列)"]
         ball_str = st.selectbox("基准球号", ball_options)
         ball_num = int(ball_str.replace("第", "").split("球")[0])
         
-    with col2:
-        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col3:
-        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col4:
+        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+    with col5:
         st.write("")
         st.write("")
-        run_btn = st.button("执行分析", use_container_width=True, type="primary")
+        run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
+
+    # 🔥 核心逻辑：如果切换了分析属性，自动清空之前累积的所有球的结果
+    if selected_attr != st.session_state.current_attr:
+        st.session_state.current_attr = selected_attr
+        st.session_state.multi_results_dict = {}
+        st.session_state.multi_result_text = ""
+        st.info(f"已切换分析属性为【{selected_attr}】，历史记录已清空，请重新计算。")
 
     st.divider()
     
@@ -613,11 +630,16 @@ def render_multi_analysis(df_data):
     # 2. 核心计算引擎
     # ==========================================
     if run_btn:
-        target_file = "升序生肖相生1.xlsx"
+        # 根据属性判断是相生还是相克 (未来扩展用)
+        is_ke = "相克" in selected_attr
+        
+        # 这里目前写死读取 升序生肖相生1.xlsx，未来如果是大表，改这里即可
+        target_file = "升序生肖相生1.xlsx" 
+        
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}")
         else:
-            with st.spinner("正在扫描数据，请稍候..."):
+            with st.spinner(f"正在扫描 {ball_str} 数据，请稍候..."):
                 try:
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
@@ -633,7 +655,11 @@ def render_multi_analysis(df_data):
                         
                     def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
                     def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
-                    def is_sheng(a, b): return (get_child(a) == b) or (get_mother(a) == b)
+                    
+                    # 兼容相生和相克
+                    def check_match(a, b):
+                        if is_ke: return (get_child(b) == a) or (get_mother(b) == a) # 简单取反
+                        return (get_child(a) == b) or (get_mother(a) == b)
                     
                     template = []
                     for r in range(2, len(df)):
@@ -667,7 +693,7 @@ def render_multi_analysis(df_data):
                                 for j in range(vc - k):
                                     if j >= 14 or j >= len(template): break
                                     if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                                    if not is_sheng(template[j], valid_data[k+j][1]): break
+                                    if not check_match(template[j], valid_data[k+j][1]): break
                                     max_l = j + 1
                                     
                                 if max_l >= min_len:
@@ -688,33 +714,36 @@ def render_multi_analysis(df_data):
                                     w4 = get_ctx(er+3)
                                     
                                     base_w = w1.replace("肖", "") if "肖" in w1 else w1
-                                    sheng_str = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}.get(base_w, "")
                                     
-                                    if sheng_str:
-                                        full_w1 = f"{w1} (生{sheng_str})"
-                                        sha_str = f"本期杀{sheng_str}。"
+                                    # 根据生克动态拼接文字
+                                    sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
+                                    ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
+                                    
+                                    if is_ke:
+                                        rule_str = ke_dict.get(base_w, "")
+                                        full_w1 = f"{w1} (克{rule_str})"
+                                        sha_str = f"本期杀{rule_str}。"
                                     else:
+                                        rule_str = sheng_dict.get(base_w, "")
+                                        full_w1 = f"{w1} (生{rule_str})"
+                                        sha_str = f"本期杀{rule_str}。"
+                                        
+                                    if not rule_str:
                                         full_w1 = w1
                                         sha_str = ""
                                         
                                     detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
-                                    if is_self:
-                                        detail_txt += " [自身参考列匹配]"
+                                    if is_self: detail_txt += " [自身参考列匹配]"
                                         
                                     line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
-                                        
-                                    gColl[group_l].append({
-                                        "line": line_txt,
-                                        "sr": sr
-                                    })
+                                    gColl[group_l].append({"line": line_txt, "sr": sr})
                                     k += real_l
                                 else:
                                     k += 1
 
-                    output_lines = []
-                    output_lines.append("========== 升序生肖相生1 ==========")
-                    output_lines.append(ball_str.replace('列', '列参照列'))
-                    output_lines.append("")
+                    # 整理【当前球】的报告文本
+                    ball_lines = []
+                    ball_lines.append(f"========== {selected_attr} - {ball_str} ==========")
                     
                     minSr = 999999
                     finalC = []
@@ -728,52 +757,67 @@ def render_multi_analysis(df_data):
                                     finalC.append(item)
                                     
                     if finalC:
-                        output_lines.append("起始行最近且<500行:")
+                        ball_lines.append("起始行最近且<500行:")
                         for item in finalC:
-                            output_lines.append(item["line"])
-                            output_lines.append("")
+                            ball_lines.append(item["line"])
+                            ball_lines.append("")
 
                     for L in range(min_len, max_len + 1):
-                        if not gColl[L]:
-                            continue
-                        output_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
+                        if not gColl[L]: continue
+                        ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
                         for item in gColl[L]:
-                            output_lines.append(item["line"])
-                            output_lines.append("")
-                                
-                    st.session_state.multi_result_text = "\\n".join(output_lines)
-                    st.success("分析完成")
+                            ball_lines.append(item["line"])
+                            ball_lines.append("")
+                    
+                    ball_text = "\\n".join(ball_lines)
+
+                    # 🔥 将当前球的结果存入字典（这样不仅不会覆盖，还会把之前的球保留下来）
+                    st.session_state.multi_results_dict[ball_num] = ball_text
+                    
+                    # 🔥 按1到7球顺序拼接总报告
+                    combined_text = []
+                    for i in range(1, 8):
+                        if i in st.session_state.multi_results_dict:
+                            combined_text.append(st.session_state.multi_results_dict[i])
+                            
+                    st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
+                    st.success(f"{ball_str} 计算完成并已追加到报告！")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
     # ==========================================
-    # 3. 详细结果展示区 (使用 HTML 强制换行)
+    # 3. 详细结果展示区
     # ==========================================
     st.divider()
-    st.subheader("详细结果")
     
-    if st.session_state.multi_result_text != "等待执行分析":
+    col_title, col_btn = st.columns([8, 2])
+    with col_title:
+        st.subheader("详细结果 (累积报告)")
+    with col_btn:
+        if st.button("清空所有结果", use_container_width=True):
+            st.session_state.multi_results_dict = {}
+            st.session_state.multi_result_text = ""
+            st.rerun()
+
+    if st.session_state.multi_result_text != "":
         
-        # 🔥 核心修复：使用 HTML 渲染文本，white-space: pre-wrap 会强制长句自动换行！
+        # 用 HTML 强制自动换行
         html_content = st.session_state.multi_result_text.replace("\\n", "<br>")
         st.markdown(
             f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
                 {html_content}
             </div>
             """, 
             unsafe_allow_html=True
         )
         
-        st.write("") # 留出一点间距
+        st.write("") 
         
-        # ========================================================
-        # 保存到本地的按钮
-        # ========================================================
-        file_name = f"分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_name = f"{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="保存结果到本地 (TXT格式)",
+            label="保存完整报告到本地 (TXT格式)",
             data=st.session_state.multi_result_text,
             file_name=file_name,
             mime="text/plain",
@@ -781,7 +825,7 @@ def render_multi_analysis(df_data):
             type="secondary"
         )
     else:
-        st.info("等待执行分析，点击上方【执行分析】按钮后，这里会出现结果和下载按钮。")
+        st.info("请选择球号并点击【执行当前球分析】，系统会按顺序自动拼接。")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
