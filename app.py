@@ -577,7 +577,7 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 页面 6：多维分析系统 (精准分行排版引擎)
+# 页面 6：多维分析系统 (表格级清晰排版)
 # ==========================================
 def render_multi_analysis(df_data):
     st.title("多维分析系统 (纯代码引擎)")
@@ -614,7 +614,6 @@ def render_multi_analysis(df_data):
                 try:
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
-                    # 列索引映射
                     ref_col_map = {1: 5, 2: 9, 3: 13, 4: 17, 5: 21, 6: 25, 7: 29}
                     ref_col_idx = ref_col_map[ball_num]
                     
@@ -693,26 +692,32 @@ def render_multi_analysis(df_data):
                                         full_w1 = w1
                                         sha_str = ""
                                         
-                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
-                                    
+                                    # 🔥 核心：强制把长句拆成多行，绝不拥挤
+                                    detail_lines = [
+                                        f"      上: {full_w1}",
+                                        f"      下: {w2}",
+                                        f"      再下: {w3}",
+                                        f"      再再下: {w4}",
+                                        f"      {sha_str}"
+                                    ]
                                     if is_self:
-                                        detail_txt += " 【自身参考列匹配】"
+                                        detail_lines.append("      【自身参考列匹配】")
                                         
                                     gColl[group_l].append({
                                         "disp_name": disp_name,
                                         "sr": sr,
                                         "er": er,
                                         "real_l": real_l,
-                                        "detail": detail_txt
+                                        "details": detail_lines
                                     })
                                     k += real_l
                                 else:
                                     k += 1
 
-                    # 3. 生成排版文本 (分行+空行分割)
-                    report_text = f"【{ball_str}分析报告】\\n\\n"
+                    # 3. 生成排版文本
+                    report_text = f"【{ball_str} 升序生肖相生对比表】\\n\\n"
                     
-                    # === 第一部分：起始行最近且<500 ===
+                    # 第一部分：起始行最近且<500
                     minSr = 999999
                     finalC = []
                     for L in range(min_len, max_len + 1):
@@ -725,33 +730,36 @@ def render_multi_analysis(df_data):
                                     finalC.append(item)
                                     
                     if finalC:
-                        report_text += "起始行最近且<500:\\n"
+                        report_text += "> 起始行最近且 <500\\n"
                         for item in finalC:
-                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1}({item['real_l']}行)\\n"
-                            report_text += f"    {item['detail']}\\n\\n" # 多加一个\\n进行空行分割
-                        report_text += "\\n"
+                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1} ({item['real_l']}行)\\n"
+                            for dl in item["details"]:
+                                report_text += f"{dl}\\n"
+                            report_text += "\\n" # 每个结果间隔空行
 
-                    # === 第二部分：按连续行数递增 ===
+                    # 第二部分：按连续行数递增
                     for L in range(min_len, max_len + 1):
                         if not gColl[L]:
                             continue
-                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
+                        report_text += f"━━ 连续 {L} 行匹配（共 {len(gColl[L])} 处）━━\\n"
                         for item in gColl[L]:
-                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1}({item['real_l']}行)\\n"
-                            report_text += f"    {item['detail']}\\n\\n" # 多加一个\\n进行空行分割
-                        report_text += "\\n"
+                            report_text += f"  {item['disp_name']} 行{item['sr']+1}-{item['er']+1} ({item['real_l']}行)\\n"
+                            for dl in item["details"]:
+                                report_text += f"{dl}\\n"
+                            report_text += "\\n" # 每个结果间隔空行
                                 
                     st.session_state.multi_result_text = report_text.strip()
-                    st.success("分析完成！")
+                    st.success("分析完成！请查看下方规范排版。")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
-    # 4. 结果显示与下载
+    # 4. 结果展示 (改用 markdown 代码块，保证换行和对齐极美)
     st.divider()
-    st.text_area("详细结果", value=st.session_state.multi_result_text, height=600)
-    
-    if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
+    if st.session_state.multi_result_text != "等待执行分析...":
+        # 用代码块展示，彻底解决 text_area 换行和拥挤的问题
+        st.markdown(f"```text\\n{st.session_state.multi_result_text}\\n```")
+        
         file_name = f"分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
             label="保存结果到本地 (TXT格式)",
@@ -761,6 +769,8 @@ def render_multi_analysis(df_data):
             use_container_width=True,
             type="secondary"
         )
+    else:
+        st.info("等待执行分析...")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
