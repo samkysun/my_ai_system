@@ -1,9 +1,10 @@
 import requests
 import os
 import openpyxl
+from datetime import datetime
 
 # =======================================================
-# ?? 配置区
+# ⚙️ 配置区
 # =======================================================
 FILE_ORDERED = "按序源文件.xlsx"   
 FILE_SORTED = "升序源文件.xlsx"    
@@ -11,99 +12,115 @@ SHEET_NAME = "数据源"
 # =======================================================
 
 def fetch_data():
-    url = "https://raw.githubusercontent.com/icelam/mark-six-data-visualization/master/data/mark-six-results.json"
+    # 🔥 核心修改：直接请求香港马会官方 GraphQL 接口
+    url = "https://info.cld.hkjc.com/graphql/base/"
+    query = """
+    query marksixResult($lastNDraw: Int) {
+      lotteryDraws(lastNDraw: $lastNDraw) {
+        no
+        drawDate
+        drawResult {
+          drawnNo
+          xDrawnNo
+        }
+      }
+    }
+    """
+    payload = {
+        "operationName": "marksixResult",
+        "variables": {"lastNDraw": 1},
+        "query": query
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/json"
+    }
+    
     try:
-        response = requests.get(url, timeout=15)
+        print("正在连接香港马会官方数据源...")
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
         response.raise_for_status()
         data = response.json()
-        latest = data[0]
+        
+        draws = data.get("data", {}).get("lotteryDraws", [])
+        if not draws:
+            print("❌ 官方接口未返回数据")
+            return None
+            
+        latest = draws[0]
         issue = str(latest.get("no", "")).strip()
-        ordered_nums = latest.get("drawnNo", [])
-        special = latest.get("xDrawnNo", "")
+        ordered_nums = latest.get("drawResult", {}).get("drawnNo", [])
+        special = latest.get("drawResult", {}).get("xDrawnNo", "")
+        
         return issue, ordered_nums, special
     except Exception as e:
-        print(f"? 获取数据失败: {e}")
+        print(f"❌ 获取官方数据失败: {e}")
         return None
 
 def process_excel(file_path, issue, numbers_list, file_desc):
-    print(f"\\\\n--- 开始处理: {file_desc} ---")
-    
     if not os.path.exists(file_path):
-        print(f"? 找不到文件: {file_path}")
+        print(f"❌ 找不到文件: {file_path}")
         return
 
+    print(f"--- 开始处理: {file_desc} ---")
     try:
         wb = openpyxl.load_workbook(file_path)
-        ws = wb[SHEET_NAME]
     except Exception as e:
-        print(f"? 打开文件或工作表失败: {e}")
+        print(f"❌ 打开失败: {e}")
         return
+        
+    if SHEET_NAME not in wb.sheetnames:
+        print(f"❌ 找不到工作表: {SHEET_NAME}")
+        return
+        
+    ws = wb[SHEET_NAME]
     
-    # 拆解期数
+    # 拆解期数 (例如 2026120 -> 年份2026, 尾数120)
     issue_str = str(issue).strip()
     if len(issue_str) >= 7:
-        year = int(issue_str[:4]) # 例如 2026
-        tail = issue_str[-3:]     # 例如 119
+        year, tail = int(issue_str[:4]), issue_str[-3:]
     else:
-        year = 2026
-        tail = issue_str.zfill(3)[-3:]
+        year, tail = 2026, issue_str.zfill(3)[-3:]
         
-    print(f"?? 准备写入期数: {issue_str} -> 年份:{year}, 尾数:{tail}")
-    print(f"?? 准备写入号码: {numbers_list}")
+    print(f"✅ 正在写入 {issue} 期 | 年份:{year} 尾数:{tail}")
     
-    # 插入新行
+    # 插入新行到第3行
     ws.insert_rows(3)
     
-    # ==========================================
-    # ?? 核心：绝对精准的列名写入 (A, B, C...)
-    # ==========================================
-    # 1. 写入期数后3位 (A, B, C列)
-    ws["A3"] = int(tail[0])
-    ws["B3"] = int(tail[1])
-    ws["C3"] = int(tail[2])
-    
-    # 2. 写入年份 (AA列，即第27列)
+    # 写入期数 (A, B, C 列)
+    ws["A3"], ws["B3"], ws["C3"] = int(tail[0]), int(tail[1]), int(tail[2])
+    # 写入年份 (AA 列)
     ws["AA3"] = year
     
-    # 3. 写入拆分的号码 (D列开始，按字母顺序给)
-    # 号码列表一共 7 个：6个平码 + 1个特码
-    cols = ["D", "F", "H", "J", "L", "N", "P"] # 每个号码的十位所在的列
-    
+    # 写入拆分的号码 (D, F, H, J, L, N, P 列是十位，后面一列是个位)
+    cols = ["D", "F", "H", "J", "L", "N", "P"] 
     for i, num in enumerate(numbers_list):
         num_int = int(num)
         col_letter = cols[i]
+        ws[f"{col_letter}3"] = num_int // 10  # 十位
+        ws[f"{chr(ord(col_letter) + 1)}3"] = num_int % 10  # 个位
         
-        # 写入十位
-        ws[f"{col_letter}3"] = num_int // 10
-        # 写入个位 (列往后推一格，比如 D 的个位在 E)
-        next_col_letter = chr(ord(col_letter) + 1)
-        ws[f"{next_col_letter}3"] = num_int % 10
-        
-        print(f"   -> 第{i+1}球: {num_int} 写入 {col_letter}3 和 {next_col_letter}3")
-        
-    # 保存
     try:
         wb.save(file_path)
-        print(f"?? {file_desc} 保存成功！")
+        print(f"✅ {file_desc} 写入成功！")
     except Exception as e:
-        print(f"? 保存失败，原因: {e}")
+        print(f"❌ 保存失败: {e}")
 
 def main():
+    # 强制生成一个变动文件，防止 git 认为没有变化而不推送
+    with open("trigger_test.txt", "w") as f:
+        f.write(f"Last run at: {datetime.now()}")
+        
     result = fetch_data()
     if not result:
         return
-    
+        
     issue, ordered_nums, special = result
-    print(f"=====================================")
-    print(f"? 抓取成功！当前期数: {issue}")
-    print(f"? 平码数据: {ordered_nums}")
-    print(f"? 特码数据: {special}")
-    print(f"=====================================")
+    print(f"✅ 抓取到最新开奖: {issue}期 | 平码: {ordered_nums} | 特码: {special}")
     
-    # 按序：前6平码 + 特码
+    # 组合数据（前6个平码 + 第7个特码）
     all_ordered = ordered_nums + [special]
-    # 升序：前6平码升序 + 特码
-    all_sorted = sorted([int(n) for n in ordered_nums]) + [special]
+    all_sorted = sorted([int(n) for n in ordered_nums]) + [int(special)]
 
     process_excel(FILE_ORDERED, issue, all_ordered, "按序源文件")
     process_excel(FILE_SORTED, issue, all_sorted, "升序源文件")
