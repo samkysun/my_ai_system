@@ -186,28 +186,38 @@ def login_page():
                         st.success("注册成功！请去左侧登录。")
 
 def render_console(df_data):
-    st.title("🧊 智能数据分析总控台")
+    st.title("智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
     except: unique_periods.sort(reverse=True)
+    
     col1, col2 = st.columns(2)
-    with col1: selected_period = st.selectbox("🎯 选择期数：", unique_periods)
+    with col1: selected_period = st.selectbox("选择期数：", unique_periods)
     with col2: analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
+    
     st.write("") 
-    b1, b2, b3, b4, b5 = st.columns(5)
-    start_btn = b1.button("🚀 批量联动分析", use_container_width=True, type="primary")
-    result_btn = b2.button("🏆 中奖结果", use_container_width=True)
-    clear_btn = b3.button("🗑️ 清空数据", use_container_width=True)
-    sync_btn = b4.button("🔄 同步数据", use_container_width=True)
-    trend_btn = b5.button("📈 走势图", use_container_width=True)
+    
+    # ==========================================
+    # 1. 按钮布局 (增加了抓取按钮，去除了 Emoji)
+    # ==========================================
+    b1, b2, b3, b4, b5, b6 = st.columns(6)
+    start_btn = b1.button("批量联动分析", use_container_width=True, type="primary")
+    result_btn = b2.button("中奖结果", use_container_width=True)
+    clear_btn = b3.button("清空数据", use_container_width=True)
+    sync_btn = b4.button("同步数据", use_container_width=True)
+    trend_btn = b5.button("走势图", use_container_width=True)
+    fetch_btn = b6.button("抓取香港数据", use_container_width=True)
+
     st.divider()
+    
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
     try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
     except: is_descending = True
+    
     next_period_str, next_flat_nums, next_special_num, has_next_data = "", [], 0, False
     if not matched_rows.empty:
         base_idx = matched_rows.index[0]
@@ -220,8 +230,9 @@ def render_console(df_data):
                 next_special_num = int(clean_period(next_row.iloc[25])) if pd.notna(next_row.iloc[25]) else 0
                 if len(next_flat_nums) > 0: has_next_data = True
             except: pass
+            
     if has_next_data:
-        st.subheader(f"🎯 {next_period_str} 期开奖结果")
+        st.subheader(f"{next_period_str} 期开奖结果")
         balls_html = '<div class="ball-container">'
         for num in next_flat_nums: balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
         if next_special_num > 0: balls_html += f'<div class="ball {get_ball_color(next_special_num)} ball-special">★ {next_special_num:02d}</div>'
@@ -230,9 +241,42 @@ def render_console(df_data):
     else:
         try: next_period_str = str(int(float(selected_period)) + 1)
         except: next_period_str = "下一期"
-        st.subheader(f"🎯 {next_period_str} 期开奖结果")
-        st.info(f"⏳ {next_period_str} 期待开奖（暂无数据）")
+        st.subheader(f"{next_period_str} 期开奖结果")
+        st.info(f"{next_period_str} 期待开奖（暂无数据）")
 
+    # ==========================================
+    # 2. 抓取香港数据逻辑 (新增)
+    # ==========================================
+    if fetch_btn:
+        import requests
+        with st.spinner("正在向 GitHub 发送抓取指令..."):
+            try:
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                
+                if not token or not repo:
+                    st.error("请在 Streamlit Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                else:
+                    url = f"https://api.github.com/repos/{repo}/actions/workflows/update_data.yml/dispatches"
+                    headers = {
+                        "Accept": "application/vnd.github.v3+json",
+                        "Authorization": f"Bearer {token}"
+                    }
+                    data = {"ref": "main"} # 如果主分支是 master，请改成 master
+                    
+                    res = requests.post(url, headers=headers, json=data)
+                    
+                    if res.status_code == 204:
+                        st.success("✅ 指令已发送！GitHub 机器人正在后台抓取最新数据并更新源文件。")
+                        st.info("⏳ 抓取过程大约需要 1 分钟。请稍后点击旁边的【同步数据】按钮获取最新结果。")
+                    else:
+                        st.error(f"指令发送失败，状态码：{res.status_code}。请检查 Token 权限。")
+            except Exception as e:
+                st.error(f"网络请求异常：{e}")
+
+    # ==========================================
+    # 3. 同步数据逻辑 (保留原样)
+    # ==========================================
     if sync_btn:
         with st.spinner("正在从源文件同步数据..."):
             FILE_SORTED = "升序源文件.xlsx"
