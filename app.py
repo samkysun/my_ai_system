@@ -621,7 +621,8 @@ def render_multi_analysis(df_data):
     with col2:
         hm1 = st.selectbox("球号", hm1_list)
     with col3:
-        hm2 = st.selectbox("次数", hm2_list)
+        hm2 = st.selectbox("属性", hm2_list)
+
 
     st.divider()
     
