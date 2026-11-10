@@ -577,22 +577,21 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 页面 6：多维分析系统 (纯代码极速引擎)
+# 页面 6：多维分析系统 (无Emoji版)
 # ==========================================
 def render_multi_analysis(df_data):
-    st.title("?? 多维分析系统 (精确坐标版)")
+    st.title("多维分析系统 (精确排版引擎)")
     
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
 
     # 1. 顶部控制面板
-    st.markdown("### ?? 分析参数设置")
+    st.markdown("### 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        ball_options = ["第1球(F列)", "第2球(K列)", "第3球(N列)", "第4球(R列)", "第5球(W列)", "第6球(Z列)", "第7球(AD列)"]
+        ball_options = ["第1球(F列)", "第2球(J列)", "第3球(N列)", "第4球(R列)", "第5球(V列)", "第6球(Z列)", "第7球(AD列)"]
         ball_str = st.selectbox("基准球号", ball_options)
-        # 提取数字
         ball_num = int(ball_str.replace("第", "").split("球")[0])
         
     with col2:
@@ -601,7 +600,7 @@ def render_multi_analysis(df_data):
         max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
     with col4:
         st.write(""); st.write("")
-        run_btn = st.button("?? 执行分析", use_container_width=True, type="primary")
+        run_btn = st.button("执行分析", use_container_width=True, type="primary")
 
     st.divider()
     
@@ -613,48 +612,43 @@ def render_multi_analysis(df_data):
         else:
             with st.spinner(f"Python 正在全量扫描 {target_file} 的 6000 多行数据，请稍候..."):
                 try:
-                    # 直接读取多方面工作表，忽略表头（假设没有表头）
                     df = pd.read_excel(target_file, sheet_name="多方面", header=None)
                     
-                    # 精确列索引 (A=0, B=1...)
-                    # F=5, K=10, N=13, R=17, W=22, Z=25, AD=29
-                    ref_col_map = {1: 5, 2: 10, 3: 13, 4: 17, 5: 22, 6: 25, 7: 29}
+                    # 列索引映射 (A=0, V=21)
+                    # F=5, J=9, N=13, R=17, V=21, Z=25, AD=29
+                    ref_col_map = {1: 5, 2: 9, 3: 13, 4: 17, 5: 21, 6: 25, 7: 29}
                     ref_col_idx = ref_col_map[ball_num]
                     
-                    # 扫描的7个列索引
-                    scan_cols = [5, 10, 13, 17, 22, 25, 29]
-                    col_names = {5: "1球(F)", 10: "2球(K)", 13: "3球(N)", 17: "4球(R)", 22: "5球(W)", 25: "6球(Z)", 29: "7球(AD)"}
+                    scan_cols = [5, 9, 13, 17, 21, 25, 29]
+                    col_names = {5: "1球(F)", 9: "2球(J)", 13: "3球(N)", 17: "4球(R)", 21: "5球(V)", 25: "6球(Z)", 29: "7球(AD)"}
                     
-                    # 提取数据清洗函数
                     def clean_str(v):
                         if pd.isna(v): return ""
-                        return str(v).replace("\\\\\\\\r", "").replace("\\\\\\\\n", "").replace(" ", "").strip()
+                        return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
                         
                     def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
                     def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
                     def is_sheng(a, b): return (get_child(a) == b) or (get_mother(a) == b)
                     
-                    # 1. 提取基准模板 (从第3行即索引2开始)
+                    # 1. 提取基准模板
                     template = []
                     for r in range(2, len(df)):
                         val = clean_str(df.iloc[r, ref_col_idx])
                         if val in ["金", "木", "水", "火", "土"]:
                             template.append(val)
-                        if len(template) >= 14: # 模板最多读14格
+                        if len(template) >= 14:
                             break
                             
                     if len(template) < min_len:
                         st.warning(f"基准列 {col_names[ref_col_idx]} 的五行数据不足 {min_len} 个，请检查文件！")
                         st.stop()
                         
-                    # 2. 扫描 7 列
+                    # 2. 扫描并收集结果
                     gColl = {i: [] for i in range(min_len, max_len + 1)}
                     
                     for col_idx in scan_cols:
-                        is_ref = (col_idx == ref_col_idx)
                         disp_name = col_names[col_idx]
                         
-                        # 提取该列从第3行开始的所有有效数据 (行索引, 值)
                         valid_data = []
                         for r in range(2, len(df)):
                             val = clean_str(df.iloc[r, col_idx])
@@ -668,19 +662,18 @@ def render_multi_analysis(df_data):
                                 max_l = 0
                                 for j in range(vc - k):
                                     if j >= 14 or j >= len(template): break
-                                    # 行必须连续
+                                    # 行连续
                                     if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                                    # 五行必须相生
+                                    # 相生
                                     if not is_sheng(template[j], valid_data[k+j][1]): break
                                     max_l = j + 1
                                     
                                 if max_l >= min_len:
                                     real_l = max_l
                                     group_l = min(real_l, max_len)
-                                    sr = valid_data[k][0] # 原始行索引
+                                    sr = valid_data[k][0]
                                     er = valid_data[k + real_l - 1][0]
                                     
-                                    # 上下文辅助函数
                                     def get_ctx(r_idx):
                                         if r_idx < 0 or r_idx >= len(df): return "—"
                                         v = clean_str(df.iloc[r_idx, col_idx])
@@ -692,81 +685,73 @@ def render_multi_analysis(df_data):
                                     w3 = get_ctx(er+2)
                                     w4 = get_ctx(er+3)
                                     
-                                    # 简化的相生相克输出
                                     base_w = w1.replace("肖", "") if "肖" in w1 else w1
                                     sheng_str = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}.get(base_w, "")
                                     
                                     if sheng_str:
-                                        full_w1 = f"{w1} （生{sheng_str}，）"
+                                        full_w1 = f"{w1} (生:{sheng_str}，)"
                                         sha_str = f"本期杀{sheng_str}。"
                                     else:
                                         full_w1 = w1
                                         sha_str = ""
                                         
-                                    # 行号显示时 +1，对应 Excel 的实际行号
-                                    line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)\\\\\\\\n    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    # 严格按照你的截图格式构建两行数据
+                                    header_line = f"  {disp_name} 行{sr+1}-{er+1}({real_l}行)"
+                                    detail_line = f"    上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     
-                                    gColl[group_l].append({"line": line, "is_ref": is_ref, "sr": sr})
+                                    gColl[group_l].append({
+                                        "header": header_line, 
+                                        "detail": detail_line, 
+                                        "sr": sr
+                                    })
                                     k += real_l
                                 else:
                                     k += 1
 
-                    # 3. 汇总文本
-                    report_text = f"========== 升序生肖相生1 ({ball_str}) ==========\\\\\\\\n"
-                    maxGroupL = 0
-                    for L in range(min_len, max_len + 1):
-                        if len(gColl[L]) > 0: maxGroupL = L
-                            
-                    finalStrB = ""
-                    if maxGroupL > 0:
-                        for item in gColl[maxGroupL]:
-                            if finalStrB: finalStrB += "\\\\\\\\n-------------------\\\\\\\\n"
-                            finalStrB += item["line"]
-                    else:
-                        finalStrB = "无匹配结果"
-
+                    # 3. 整理文本输出 (严格复刻截图排版)
+                    report_text = f"【{ball_str}分析报告】\\n\\n"
+                    
+                    # 第一部分：起始行最近且<500
                     minSr = 999999
-                    finalStrC = ""
+                    finalC = []
                     for L in range(min_len, max_len + 1):
                         for item in gColl[L]:
                             if item["sr"] < 500:
                                 if item["sr"] < minSr:
                                     minSr = item["sr"]
-                                    finalStrC = item["line"]
+                                    finalC = [item]
                                 elif item["sr"] == minSr:
-                                    finalStrC += "\\\\\\\\n-------------------\\\\\\\\n" + item["line"]
+                                    finalC.append(item)
                                     
-                    strC_Display = finalStrC if finalStrC else "无符合条件的匹配（起始行需<500）"
+                    if finalC:
+                        report_text += "起始行最近且<500:\\n"
+                        for item in finalC:
+                            report_text += item["header"] + "\\n" + item["detail"] + "\\n"
+                        report_text += "\\n"
 
-                    report_text += "【B列结果】：匹配行数最多\\\\\\\\n"
-                    report_text += finalStrB + "\\\\\\\\n\\\\\\\\n"
-                    report_text += "【C列结果】：起始行最近且<500\\\\\\\\n"
-                    report_text += strC_Display + "\\\\\\\\n\\\\\\\\n"
-                    
+                    # 第二部分：按连续行数递增列出详细
                     for L in range(min_len, max_len + 1):
-                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\\\\\\\n"
                         if not gColl[L]:
-                            report_text += "  （无）\\\\\\\\n"
-                        else:
-                            for item in gColl[L]:
-                                report_text += item["line"] + "\\\\\\\\n"
-                                if item["is_ref"]: report_text += "[自身参考列匹配]\\\\\\\\n"
-                            report_text += "\\\\\\\\n"
-
-                    st.session_state.multi_result_text = report_text
-                    st.success("? 分析完成！")
+                            continue
+                        report_text += f"━━ 连续{L}行匹配（共{len(gColl[L])}处）━━\\n"
+                        for item in gColl[L]:
+                            report_text += item["header"] + "\\n" + item["detail"] + "\\n"
+                        report_text += "\\n"
+                                
+                    st.session_state.multi_result_text = report_text.strip()
+                    st.success("分析完成！已生成规整对比表。")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
     # 4. 结果显示与下载
     st.divider()
-    st.text_area("详细结果", value=st.session_state.multi_result_text, height=500)
+    st.text_area("详细结果", value=st.session_state.multi_result_text, height=600)
     
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
-        file_name = f"分析结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_name = f"分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="?? 保存结果到本地 (TXT格式)",
+            label="保存结果到本地 (TXT格式)",
             data=st.session_state.multi_result_text,
             file_name=file_name,
             mime="text/plain",
