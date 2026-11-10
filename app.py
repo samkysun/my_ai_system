@@ -583,50 +583,56 @@ import openpyxl
 import pandas as pd
 import os
 
+import openpyxl
+import pandas as pd
+import os
+
 # ==========================================
-# 页面 6：多维分析系统 (完整终极版)
+# 页面 6：多维分析系统 (绝对精准读取版)
 # ==========================================
 
-# 🔥 核心修复 1：加缓存，切换文件才读，点按钮不读，彻底告别卡顿
 @st.cache_data(show_spinner=False)
 def get_dropdown_data(file_path, selected_file):
     hm1_list, hm2_list = [], []
     if not file_path or not os.path.exists(file_path):
         return ["文件未上传"], []
 
-    # 🔥 核心修复 2：使用绝对数字列号，绝不使用字母，防止 xlsb 引擎错位
-    # JL=245, JM=246, CZ=103, DA=104, CP=93
+    # 重新精确计算列号：
+    # JL 列 = 第246列 (索引 245), JM = 247 (索引 246)
+    # CZ 列 = 第104列 (索引 103), DA = 105 (索引 104)
+    # CP 列 = 第94列  (索引 93)
     if "多维分析" in selected_file:
         sheet_name = selected_file
-        hm1_col_idx, hm1_end = 245, 7      # JL 列
-        hm2_col_idx, hm2_end = 246, 130    # JM 列
+        hm1_col_idx, hm1_end = 245, 7      
+        hm2_col_idx, hm2_end = 246, 130    
         
     elif "核算五行" in selected_file:
         sheet_name = "多方面"
-        hm1_col_idx, hm1_end = 103, 7      # CZ 列
-        hm2_col_idx, hm2_end = 104, 4      # DA 列
+        hm1_col_idx, hm1_end = 103, 7      
+        hm2_col_idx, hm2_end = 104, 4      
         
     else:
-        # 12 套相生相克文件
         sheet_name = "多方面"
-        hm1_col_idx, hm1_end = 93, 7       # CP 列
+        hm1_col_idx, hm1_end = 93, 7       
         hm2_col_idx = -1
 
     try:
         engine_type = "pyxlsb" if file_path.endswith(".xlsb") else "openpyxl"
         df = pd.read_excel(file_path, sheet_name=sheet_name, header=None, engine=engine_type)
         
-        if df.shape[1] <= hm1_col_idx:
-            return [f"报错: 表格不够宽({df.shape[1]}列)，读不到第 {hm1_col_idx+1} 列"], []
+        # 🔥 核心破局：pyxlsb 如果吞了空列，会导致列数变少。这里强行补齐缺失的列，防止索引错位！
+        if df.shape[1] <= max(hm1_col_idx, hm2_col_idx):
+            missing_cols = max(hm1_col_idx, hm2_col_idx) - df.shape[1] + 1
+            for _ in range(missing_cols):
+                df[df.shape[1]] = None
 
-        # 动态提取 HM1 或 AL1
+        # 提取数据（用索引精确抓取）
         for x in df.iloc[:hm1_end, hm1_col_idx].dropna().tolist():
             v = str(x).strip()
             if v and v not in hm1_list:
                 hm1_list.append(v)
 
-        # 动态提取 HM2
-        if hm2_col_idx >= 0 and df.shape[1] > hm2_col_idx:
+        if hm2_col_idx >= 0:
             for x in df.iloc[:hm2_end, hm2_col_idx].dropna().tolist():
                 v = str(x).strip()
                 if v and v not in hm2_list:
@@ -644,7 +650,6 @@ def render_multi_analysis(df_data):
     if "multi_result_text" not in st.session_state:
         st.session_state.multi_result_text = "等待执行分析..."
 
-    # 1. 顶部控制面板
     col1, col2, col3 = st.columns(3)
     
     file_options = [
@@ -660,28 +665,23 @@ def render_multi_analysis(df_data):
             if "multi_hm2_widget" in st.session_state: del st.session_state["multi_hm2_widget"]
 
         selected_file = st.selectbox("选择分析类型", file_options, on_change=on_file_change)
-        
         is_special = "多维分析" not in selected_file
         is_wuxing = "核算五行" in selected_file
         is_12_files = not ("多维分析" in selected_file or "核算五行" in selected_file)
 
-    # 识别文件路径
     file_path = ""
     if os.path.exists(f"{selected_file}.xlsb"): file_path = f"{selected_file}.xlsb"
     elif os.path.exists(f"{selected_file}.xlsm"): file_path = f"{selected_file}.xlsm"
     elif os.path.exists(f"{selected_file}.xlsx"): file_path = f"{selected_file}.xlsx"
 
-    # 🔥 动态去 Excel 里读取下拉框数据
     hm1_list, hm2_list = get_dropdown_data(file_path, selected_file)
     if not hm1_list: hm1_list = ["无数据"]
     
-    # 🔥 根据文件类型，动态切换标签名：前4套叫 HM1，后12套叫 AL1
     label_hm1 = "AL1 (条件)" if is_12_files else "HM1 (球号/条件)"
 
     with col2:
         hm1 = st.selectbox(label_hm1, hm1_list, key="multi_hm1_widget")
         
-    # 只有前 4 套有 HM2，后 12 套没有
     if hm2_list:
         with col3:
             hm2 = st.selectbox("HM2 (属性/次数)", hm2_list, key="multi_hm2_widget")
@@ -692,7 +692,6 @@ def render_multi_analysis(df_data):
 
     st.divider()
     
-    # 2. 操作按钮区
     b1, b2, b3 = st.columns(3)
     with b1:
         run_btn = st.button("🚀 执行分析", use_container_width=True, type="primary")
@@ -701,10 +700,9 @@ def render_multi_analysis(df_data):
     with b3:
         sync_ai_btn = st.button("🔄 同步到 AI 推演", use_container_width=True)
 
-    # 3. 核心分析逻辑
     if run_btn:
         if not file_path:
-            st.error("文件未上传！请确认文件已传到 GitHub 根目录。")
+            st.error("文件未上传！")
         elif not hm1 or hm1 == "无数据":
             st.error("读取下拉框失败！请检查文件内部结构。")
         else:
@@ -787,25 +785,19 @@ def render_multi_analysis(df_data):
                 except Exception as e:
                     st.error(f"执行出错: {e}")
 
-    # 4. 同步到 AI 推演逻辑
     if sync_ai_btn:
         ai_condition = f"杀{hm1}，"
         st.session_state.ai_extra_condition = ai_condition
         st.success(f"✅ 同步成功！已向 AI 推演追加条件：{ai_condition}")
         
-    # 5. 清空数据逻辑
     if clear_btn:
         st.session_state.multi_result_text = "等待执行分析..."
         st.rerun()
 
-    # =======================================================
-    # 6. 结果展示与【💾 保存日记】按钮
-    # =======================================================
     st.divider()
     st.markdown("### 📊 分析结果预览")
     st.text_area("详细结果", value=st.session_state.multi_result_text, height=400)
     
-    # 只有当有计算结果时，才显示下载按钮
     if st.session_state.multi_result_text != "等待执行分析..." and st.session_state.multi_result_text != "":
         from datetime import datetime
         file_name = f"{selected_file}_日记_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
