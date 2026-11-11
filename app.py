@@ -835,8 +835,7 @@ def render_multi_analysis(df_data):
                                 w1_str = str(w1).strip()
                                 # 2. 只要不在这个黑名单里(0尾 不在里面，所以0尾会被保留
                                 if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
-                                    # 原有的25行以内判断
-                                    # ?? 核心修复：先判断是不是 25 行以内
+                                    # 🔥 核心修复：先判断是不是 25 行以内
                                     if er + 1 <= 25:
                                         # 第一步：先拼上“近X期一致”
                                         line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
@@ -850,8 +849,8 @@ def render_multi_analysis(df_data):
                                         # 超过25行的，绝不高亮，原样输出
                                         line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
                                     
-                                    # 存入结果
-                                    gColl[group_l].append({"line": line_txt, "sr": sr})e": line_txt, "sr": sr})
+                                    # 存入结果（注意这里千万别多出别的东西！）
+                                    gColl[group_l].append({"line": line_txt, "sr": sr})
                                 # 无论是否加入结果，k 都要前进，防止死循环
                                 k += real_l
                             else:
