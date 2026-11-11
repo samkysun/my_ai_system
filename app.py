@@ -7,6 +7,8 @@ import itertools
 from collections import Counter
 import requests
 import openpyxl
+import io       # 👈 新增
+import base64   # 👈 新增
 
 # ==========================================
 # ⚙️ 配置区
@@ -211,6 +213,137 @@ def render_console(df_data):
     trend_btn = b5.button("走势图", use_container_width=True)
     fetch_btn = b6.button("抓取香港数据", use_container_width=True)
 
+    # ==========================================
+    # ?? 管理员专属：云端数据录入与同步
+    # ==========================================
+    # 读取 Secrets 里的管理员用户名，如果没有配置，默认叫 "admin"
+    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+    
+    # 只有当前登录的用户名和 Secrets 里一致，才显示录入面板
+    if st.session_state.username == admin_name:
+        with st.expander("?? 管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
+            with st.form("manual_input_form", clear_on_submit=True):
+                st.info("?? 提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
+                
+                col_year, col_p1, col_p2, col_p3 = st.columns(4)
+                with col_year: year_val = st.text_input("年份 (AA列)", value="2026")
+                with col_p1: p1 = st.text_input("A列 (百位)", value="1")
+                with col_p2: p2 = st.text_input("B列 (十位)", value="1")
+                with col_p3: p3 = st.text_input("C列 (个位)", value="8")
+                
+                st.write("---")
+                col_nums = st.columns(7)
+                nums = []
+                for i in range(7):
+                    label = "特码 (第7球)" if i == 6 else f"平码{i+1}"
+                    with col_nums[i]:
+                        n = st.number_input(label, min_value=1, max_value=49, value=i+1, key=f"manual_num_{i}")
+                        nums.append(n)
+                        
+                submit_btn = st.form_submit_button("?? 保存并同步到云端两个文件", use_container_width=True, type="primary")
+    
+                if submit_btn:
+                    if not year_val or not p1 or not p2 or not p3:
+                        st.error("年份和期号不能为空！")
+                    elif len(set(nums)) < 7:
+                        st.error("录入的 7 个号码中有重复，请检查！")
+                    else:
+                        # 1. 准备数据 (按序 和 升序)
+                        raw_nums = nums.copy()
+                        asc_nums = sorted(nums[:6]) + [nums[6]]
+                        
+                        # 2. 获取 GitHub 配置
+                        token = st.secrets.get("GITHUB_TOKEN")
+                        repo = st.secrets.get("GITHUB_REPO") 
+                        
+                        if not token or not repo:
+                            st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                        else:
+                            # 3. 核心函数：拉取 -> 修改 -> 推送 GitHub
+                            def update_github_excel(file_path, nums_list, commit_msg):
+                                try:
+                                    api_url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+                                    headers = {
+                                        "Authorization": f"Bearer {token}",
+                                        "Accept": "application/vnd.github.v3+json"
+                                    }
+                                    
+                                    # 3.1 获取文件的 SHA 和下载链接
+                                    r = requests.get(api_url, headers=headers)
+                                    if r.status_code != 200:
+                                        return False, f"找不到云端文件或API错误: {r.status_code}"
+                                    
+                                    file_info = r.json()
+                                    sha = file_info["sha"]
+                                    download_url = file_info["download_url"]
+                                    
+                                    # 3.2 从云端下载现有 Excel
+                                    file_content = requests.get(download_url).content
+                                    
+                                    # 3.3 在内存中操作 openpyxl
+                                    wb = openpyxl.load_workbook(io.BytesIO(file_content))
+                                    if "数据源" not in wb.sheetnames:
+                                        return False, "源文件中找不到“数据源”工作表"
+                                    ws = wb["数据源"]
+                                    
+                                    # 3.4 强制在第 3 行插入空白行
+                                    ws.insert_rows(3)
+                                    
+                                    # 3.5 写入期号 (A, B, C 列)
+                                    ws.cell(row=3, column=1, value=p1)
+                                    ws.cell(row=3, column=2, value=p2)
+                                    ws.cell(row=3, column=3, value=p3)
+                                    
+                                    # 3.6 写入年份 (AA列 第27列)
+                                    ws.cell(row=3, column=27, value=year_val)
+                                    
+                                    # 3.7 写入7个号码
+                                    for i, num in enumerate(nums_list):
+                                        tens = num // 10
+                                        units = num % 10
+                                        col_tens = 4 + i*2
+                                        col_units = 5 + i*2
+                                        ws.cell(row=3, column=col_tens, value=str(tens) if tens > 0 else "")
+                                        ws.cell(row=3, column=col_units, value=str(units))
+                                    
+                                    # 3.8 保存到内存字节流
+                                    output = io.BytesIO()
+                                    wb.save(output)
+                                    b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
+                                    
+                                    # 3.9 推送到 GitHub (覆盖原文件)
+                                    payload = {
+                                        "message": commit_msg,
+                                        "content": b64_content,
+                                        "sha": sha,
+                                        "branch": "main" # ?? 如果你的分支叫 master，请改成 master
+                                    }
+                                    
+                                    put_res = requests.put(api_url, headers=headers, json=payload)
+                                    
+                                    if put_res.status_code in [200, 201]:
+                                        return True, "成功"
+                                    else:
+                                        return False, f"推送失败: {put_res.text}"
+                                        
+                                except Exception as e:
+                                    return False, str(e)
+    
+                            # 4. 执行双写
+                            with st.spinner("正在覆盖更新 GitHub 云端的两个 Excel 文件..."):
+                                # 先更新升序源文件
+                                s1, m1 = update_github_excel("升序源文件.xlsx", asc_nums, f"更新升序数据 {year_val}-{p1}{p2}{p3}")
+                                # 再更新按序源文件
+                                s2, m2 = update_github_excel("按序源文件.xlsx", raw_nums, f"更新按序数据 {year_val}-{p1}{p2}{p3}")
+                                
+                                if s1 and s2:
+                                    st.success("? 数据已永久存入 GitHub 云端！")
+                                    st.info("?? 云端数据已刷新，请点击上方【同步数据】按钮重新加载。")
+                                    load_real_data.clear()
+                                else:
+                                    if not s1: st.error(f"? 升序文件同步失败: {m1}")
+                                    if not s2: st.error(f"? 按序文件同步失败: {m2}")
+    
     st.divider()
     
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
