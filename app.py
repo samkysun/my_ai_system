@@ -291,6 +291,20 @@ def render_console(df_data):
                                         return False, "源文件中找不到“数据源”工作表"
                                     ws = wb["数据源"]
                                     
+                                    # 🔥 新增：拦截重复期号
+                                    for row_idx in range(3, ws.max_row + 1):
+                                        # 读取 A, B, C 列的值（处理掉可能的浮点数 .0）
+                                        def get_cell_str(r, c):
+                                            v = ws.cell(row=r, column=c).value
+                                            if v is None: return ""
+                                            return str(v).replace(".0", "").strip()
+                                            
+                                        r_p1, r_p2, r_p3 = get_cell_str(row_idx, 1), get_cell_str(row_idx, 2), get_cell_str(row_idx, 3)
+                                        
+                                        # 如果发现三列期号全部一致，直接拦截
+                                        if r_p1 == p1 and r_p2 == p2 and r_p3 == p3:
+                                            return False, f"期号 {p1}-{p2}-{p3} 已经存在，禁止重复录入！"
+                                    
                                     # 3.4 强制在第 3 行插入空白行
                                     ws.insert_rows(3)
                                     
@@ -308,7 +322,7 @@ def render_console(df_data):
                                         units = num % 10
                                         col_tens = 4 + i*2
                                         col_units = 5 + i*2
-                                        ws.cell(row=3, column=col_tens, value=str(tens) if tens > 0 else "")
+                                        ws.cell(row=3, column=col_tens, value=str(tens))
                                         ws.cell(row=3, column=col_units, value=str(units))
                                     
                                     # 3.8 保存到内存字节流
