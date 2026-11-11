@@ -955,47 +955,71 @@ def render_multi_analysis(df_data):
         import html
         import base64
         
-        # 1. 清理文本
-        clean_text = st.session_state.multi_result_text.replace('\r', '')
-        # 一步到位：转义 + 换行 + 替换高亮标签
-        safe_text = html.escape(clean_text).replace("\\n", "<br>").replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
+        # 1. 清理基础文本
+        clean_text = st.session_state.multi_result_text.replace('\\r', '')
         
-        # 🔥 新增：把占位符替换成真正的 HTML 高亮标签（红字+黄底加粗）
-        safe_text = safe_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">')
-        safe_text = safe_text.replace("[[/HIGHLIGHT]]", '</span>')
+        # 2. 转义（防乱码），并把换行变成 <br>
+        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         
-        # 2. 构建展示用的 HTML 和 打印用的 HTML
+        # 3. 把占位符替换成真正的高亮红字（网页展示用）
+        highlighted_display = escaped_text.replace(
+            "[[HIGHLIGHT]]", 
+            '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
+        ).replace("[[/HIGHLIGHT]]", '</span>')
+    
+        # 4. 构建网页显示的 HTML（带上灰底和滚动条）
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
-            {html.escape(clean_text).replace(chr(10), '<br>')}
+            {highlighted_display}
         </div>
         """
-        # 1. 直接合并成一步：转义 + 替换标签（这样绝对不会找不到变量）
-        highlighted_print_text = html.escape(clean_text).replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
         
-        # 2. 塞进打印模板
-
-            
+        # 5. 构建打印用的 HTML（外面套一层 pre 保持排版）
         print_html = f"""
         <html>
-        <head>
-        <meta charset="utf-8">
+        <head><meta charset="utf-8">
         <style>
             body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
             pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
         </style>
         </head>
         <body>
-        <pre>{highlighted_print_text}</pre>
+        <pre>{highlighted_display}</pre>
         </body>
         </html>
         """
         
-        # 3. 把两段 HTML 都转成 Base64
+        # 6. 转码，准备注入前端
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
     
-        # 4. 注入前端代码（使用了 JavaScript 的 decodeURIComponent 来完美解析中文）
+        # 7. 检查是否需要播放声音（由计算步骤中的标记触发）
+        js_play_alert = ""
+        if st.session_state.get("play_alert", False):
+            js_play_alert = """
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                var ctx = new AudioContext();
+                function playCoin() {
+                    if (ctx.state === 'suspended') ctx.resume();
+                    var osc1 = ctx.createOscillator(), gain1 = ctx.createGain();
+                    osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime);
+                    gain1.gain.setValueAtTime(0.5, ctx.currentTime);
+                    gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                    osc1.connect(gain1); gain1.connect(ctx.destination);
+                    osc1.start(); osc1.stop(ctx.currentTime + 0.3);
+    
+                    var osc2 = ctx.createOscillator(), gain2 = ctx.createGain();
+                    osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1);
+                    gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                    osc2.connect(gain2); gain2.connect(ctx.destination);
+                    osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4);
+                }
+                playCoin();
+            """
+            st.session_state.play_alert = False  # 播放完立刻重置
+    
+        # 8. 渲染前端组件
         components.html(
             f"""
             <div id="report-container"></div>
@@ -1007,25 +1031,24 @@ def render_multi_analysis(df_data):
             </div>
     
             <script>
-            // ?? 核心修复：这个函数专门用来正确解析含有中文的 Base64 字符串
             function b64DecodeUnicode(str) {{
                 return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
                     return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
                 }}).join(''));
             }}
     
-            // 把展示的文本塞进上面的 div 里
             document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
     
-            // 打印函数
             function printReport() {{
                 var win = window.open("");
-                // 这里也换成新的解码函数，打印出来的中文就不会乱码了
                 win.document.write(b64DecodeUnicode("{b64_print}"));
                 win.document.close();
                 win.focus();
                 setTimeout(function() {{ win.print(); }}, 500);
             }}
+    
+            // 注入声音逻辑
+            {js_play_alert}
             </script>
             """,
             height=620,
@@ -1034,10 +1057,10 @@ def render_multi_analysis(df_data):
     
         st.write("") 
         
-        # --- 下载按钮保留 ---
+        # 9. 下载按钮（保持原样）
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="📥保存完整报告到本地 (TXT格式)", 
+            label="📥 保存完整报告到本地 (TXT格式)", 
             data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
