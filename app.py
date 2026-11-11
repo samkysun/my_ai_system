@@ -618,7 +618,7 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (终极完美版)
+# 页面 6：多维分析系统 (功能原封不动，仅修复后缀版)
 # ==========================================
 import pandas as pd
 import os
@@ -685,6 +685,16 @@ def render_multi_analysis(df_data):
         is_ke_mode = "相克" in selected_attr
         is_normal_mode = not (is_sheng_mode or is_ke_mode)
         
+        # 🔥 唯一改动：动态判断后缀是“号”、“肖”还是“尾”
+        if "数字" in selected_attr or "号" in selected_attr:
+            wx_suffix = "号"
+        elif "尾" in selected_attr:
+            wx_suffix = "尾"
+        elif "肖" in selected_attr:
+            wx_suffix = "肖"
+        else:
+            wx_suffix = ""
+        
         if selected_file_type == "升序全套":
             target_file = "升序全套.xlsx"
             sheet_name = "升序全套分析"
@@ -695,7 +705,7 @@ def render_multi_analysis(df_data):
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}")
         else:
-            # 增加进度条，让你知道它没卡死
+            # 进度条功能原封不动
             progress_bar = st.progress(0)
             status_text = st.empty()
             
@@ -713,7 +723,7 @@ def render_multi_analysis(df_data):
                     return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
                     
                 def get_wx(s):
-                    core = s.replace("肖", "")
+                    core = s.replace("肖", "").replace("号", "").replace("尾", "")
                     zx2wx = {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}
                     return zx2wx.get(core, core)
                     
@@ -772,14 +782,16 @@ def render_multi_analysis(df_data):
                                 sr = valid_data[k][0]
                                 er = valid_data[k + real_l - 1][0]
                                 
+                                # 上下文自动补全
                                 def get_ctx(r_idx):
                                     if r_idx < 0 or r_idx >= len(col_data): return "无"
                                     v = col_data[r_idx]
-                                    if v and v[-1] != "肖" and v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
+                                    if not v: return "空"
+                                    if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
                                         return v + "肖"
                                     if v in ["金", "木", "水", "火", "土"]:
-                                        return v + "肖"
-                                    return v if v else "空"
+                                        return v + wx_suffix # 🔥 动态后缀
+                                    return v
                                     
                                 w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                                 
@@ -787,8 +799,17 @@ def render_multi_analysis(df_data):
                                     detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                                 else:
                                     core_w1 = get_wx(w1)
-                                    sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
-                                    ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
+                                    
+                                    # 🔥 动态生成生克字典
+                                    sheng_dict = {
+                                        "金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", 
+                                        "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"
+                                    }
+                                    ke_dict = {
+                                        "金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", 
+                                        "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"
+                                    }
+                                    
                                     if is_sheng_mode:
                                         rule_str = sheng_dict.get(core_w1, "")
                                         full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
@@ -837,7 +858,6 @@ def render_multi_analysis(df_data):
                         ball_lines.append(item["line"])
                         ball_lines.append("")
                 
-                # 🔥 关键修复 1：换成单斜杠，生成真正的换行
                 ball_text = "\\n".join(ball_lines)
 
                 st.session_state.multi_results_dict[ball_num] = ball_text
@@ -847,7 +867,6 @@ def render_multi_analysis(df_data):
                     if i in st.session_state.multi_results_dict:
                         combined_text.append(st.session_state.multi_results_dict[i])
                         
-                # 🔥 关键修复 2：换成单斜杠，生成真正的空行
                 st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
                 
                 progress_bar.progress(100)
@@ -866,12 +885,9 @@ def render_multi_analysis(df_data):
             st.session_state.multi_result_text = ""
             st.rerun()
 
-    # 🔥 关键修复 3：全部缩进到 if 里面，否则报错！
     if st.session_state.multi_result_text != "":
-        # 先清理掉多余的假换行符号
+        # 完美排版与下载，原封不动
         clean_text = st.session_state.multi_result_text.replace("\\r", "")
-        
-        # 网页展示
         html_content = clean_text.replace("\\n", "<br>")
         st.markdown(
             f"""
@@ -885,8 +901,6 @@ def render_multi_analysis(df_data):
         st.write("") 
         
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        
-        # 文件下载
         download_text = clean_text.replace("\\n", "\\r\\n")
         
         st.download_button(
