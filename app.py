@@ -618,14 +618,19 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (绝对列号防串台版)
+# 页面 6：多维分析系统 (极速秒出版)
 # ==========================================
-def render_multi_analysis(df_data):
-    import pandas as pd
-    import os
-    from datetime import datetime
-    from openpyxl.utils import get_column_letter
+import pandas as pd
+import os
+from datetime import datetime
+from openpyxl.utils import get_column_letter
 
+# 🔥 核心优化：把读取 Excel 做成缓存，只要文件没变，绝不重复读取！
+@st.cache_data(show_spinner=False)
+def load_excel_data(file_path, sheet_name):
+    return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+
+def render_multi_analysis(df_data):
     st.title("多维分析系统")
     
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
@@ -633,7 +638,7 @@ def render_multi_analysis(df_data):
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
-    # 🔥 绝对防错字典：直接填入 1球 对应的绝对列号 (A=1, B=2... G=7)
+    # 绝对列号字典
     ATTR_MAP = {
         "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11,
         "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17,
@@ -662,7 +667,6 @@ def render_multi_analysis(df_data):
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    # 校验区：清清楚楚告诉你，当前选中的球号在哪个字母列
     check_excel_col = ATTR_MAP[selected_attr] + (ball_num - 1) * 30
     check_col_letter = get_column_letter(check_excel_col)
     st.info(f"💡 校验信息：属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
@@ -691,11 +695,11 @@ def render_multi_analysis(df_data):
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}")
         else:
-            with st.spinner(f"正在扫描 {selected_file_type} 的 {selected_attr} 数据..."):
+            with st.spinner(f"正在极速扫描数据..."):
                 try:
-                    df = pd.read_excel(target_file, sheet_name=sheet_name, header=None)
+                    # 使用缓存读取
+                    df = load_excel_data(target_file, sheet_name)
                     
-                    # 🔥 直接用绝对列号，减去1给pandas用
                     base_excel_col = ATTR_MAP[selected_attr]
                     ref_excel_col = base_excel_col + (ball_num - 1) * 30
                     ref_col_idx = ref_excel_col - 1 
@@ -719,10 +723,13 @@ def render_multi_analysis(df_data):
                         elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
                         return False
                     
+                    # 🔥 核心优化：把 Pandas 的列直接转成 Python 原生列表，速度提升几十倍！
+                    ref_col_data = [clean_str(x) for x in df.iloc[:, ref_col_idx].tolist()]
+                    
                     template = []
-                    for r in range(2, len(df)):
-                        val = clean_str(df.iloc[r, ref_col_idx])
-                        if val: template.append(val)
+                    for r in range(2, len(ref_col_data)):
+                        if ref_col_data[r]:
+                            template.append(ref_col_data[r])
                         if len(template) >= max_len: break
                             
                     if len(template) < min_len:
@@ -738,10 +745,9 @@ def render_multi_analysis(df_data):
                         disp_name = f"{n}球({col_name})"
                         is_self = (current_excel_col == ref_excel_col)
                         
-                        valid_data = []
-                        for r in range(2, len(df)):
-                            val = clean_str(df.iloc[r, current_col_idx])
-                            if val: valid_data.append((r, val))
+                        # 🔥 同样是先转列表，再遍历
+                        col_data = [clean_str(x) for x in df.iloc[:, current_col_idx].tolist()]
+                        valid_data = [(r, col_data[r]) for r in range(2, len(col_data)) if col_data[r]]
                                 
                         vc = len(valid_data)
                         if vc >= min_len:
@@ -760,10 +766,9 @@ def render_multi_analysis(df_data):
                                     sr = valid_data[k][0]
                                     er = valid_data[k + real_l - 1][0]
                                     
-                                    # 显示上下文，生肖自动加“肖”字
                                     def get_ctx(r_idx):
-                                        if r_idx < 0 or r_idx >= len(df): return "无"
-                                        v = clean_str(df.iloc[r_idx, current_col_idx])
+                                        if r_idx < 0 or r_idx >= len(col_data): return "无"
+                                        v = col_data[r_idx]
                                         if v and v[-1] != "肖" and v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
                                             return v + "肖"
                                         if v in ["金", "木", "水", "火", "土"]:
@@ -833,7 +838,7 @@ def render_multi_analysis(df_data):
                             combined_text.append(st.session_state.multi_results_dict[i])
                             
                     st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
-                    st.success(f"{ball_str} 计算完成并已追加到报告！")
+                    st.success(f"{ball_str} 计算完成！极速出结果。")
                     
                 except Exception as e:
                     st.error(f"计算报错: {e}")
@@ -860,7 +865,11 @@ def render_multi_analysis(df_data):
         )
         st.write("") 
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button("保存完整报告到本地 (TXT格式)", data=st.session_state.multi_result_text, file_name=file_name, mime="text/plain", use_container_width=True, type="secondary")
+
+        # 🔥 核心修复：强制加上 \\r，解决 Windows 记事本不换行的问题
+        download_text = st.session_state.multi_result_text.replace("\\n", "\\r\\n")
+
+        st.download_button("保存完整报告到本地 (TXT格式)", data=download_text, file_name=file_name, mime="text/plain", use_container_width=True, type="secondary")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
