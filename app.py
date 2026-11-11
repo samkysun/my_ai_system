@@ -897,30 +897,69 @@ def render_multi_analysis(df_data):
     if st.session_state.multi_result_text != "":
         import streamlit.components.v1 as components
         import html
-        # 1. 强制清理文本，把所有的 < 和 > 变成纯文本字符
-        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
-        # 用 html.escape 把所有的标签符号全部“封印”
-        safe_text = html.escape(clean_text).replace("\\\\n", "<br>")
+        import base64
         
-        # 2. 使用 components.html 在独立的 iframe 里渲染，绝对不会被外界干扰
+        # 1. 强制清理文本，把所有的 < 和 > 变成纯文本字符
+        clean_text = st.session_state.multi_result_text.replace('\\r', '')
+        # 用 html.escape 把所有的标签符号全部“封印”
+        safe_text = html.escape(clean_text).replace("\\n", "<br>")
+        
+        # 2. 构建一个专门用于打印的干净 HTML 页面（带基础排版）
+        print_html = f"""
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
+            pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
+        </style>
+        </head>
+        <body>
+        <pre>{html.escape(clean_text)}</pre>
+        </body>
+        </html>
+        """
+        # 转码，方便塞进 JavaScript 里
+        b64_html = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+    
+        # 3. 在 iframe 里渲染显示区和打印按钮
         components.html(
             f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; height: 600px; overflow-y: auto;">
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; height: 500px; overflow-y: auto;">
                 {safe_text}
             </div>
+            
+            <div style="margin-top: 15px; text-align: center;">
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s;" onmouseover="this.style.backgroundColor='#0369a1'" onmouseout="this.style.backgroundColor='#0284c7'">
+                    🖨️ 打印当前报告 (排版不乱)
+                </button>
+            </div>
+    
+            <script>
+            function printReport() {{
+                // 打开新窗口
+                var win = window.open("");
+                // 将排版好的内容写入新窗口
+                win.document.write(atob("{b64_html}"));
+                win.document.close();
+                win.focus();
+                // 延迟 500 毫秒触发打印，确保渲染完成
+                setTimeout(function() {{
+                    win.print();
+                }}, 500);
+            }}
+            </script>
             """,
-            height=620,
-            scrolling=True
+            height=600,  # 总高度 = 文本框500 + 按钮高度
+            scrolling=False
         )
-
-        
-        
+    
         st.write("") 
         
-        # --- 顺便把下载按钮也放在这里，保证功能不断 ---
+        # --- 原有的下载按钮保留 ---
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="?? 保存完整报告到本地 (TXT格式)", 
+            label="📥 保存完整报告到本地 (TXT格式)", 
             data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
