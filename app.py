@@ -846,7 +846,8 @@ def render_multi_analysis(df_data):
                                     # 🔥 新增：如果命中5到9期一致，就打个标记
                                     if 5 <= real_l <= 9:
                                         st.session_state.play_alert = True
-
+                                        # 用特殊的占位符包裹起来
+                                        line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
                                 # 无论是否加入结果，k 都要前进，防止死循环
                                 k += real_l
                             else:
@@ -954,7 +955,12 @@ def render_multi_analysis(df_data):
         import base64
         
         # 1. 清理文本
-        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
+        clean_text = st.session_state.multi_result_text.replace('\r', '')
+        safe_text = html.escape(clean_text).replace("\n", "<br>")
+        
+        # 🔥 新增：把占位符替换成真正的 HTML 高亮标签（红字+黄底加粗）
+        safe_text = safe_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">')
+        safe_text = safe_text.replace("[[/HIGHLIGHT]]", '</span>')
         
         # 2. 构建展示用的 HTML 和 打印用的 HTML
         display_html = f"""
@@ -962,7 +968,12 @@ def render_multi_analysis(df_data):
             {html.escape(clean_text).replace(chr(10), '<br>')}
         </div>
         """
+        # 2. 把占位符替换成真正的高亮标签(红字+黄底+加粗)
+        highlighted_print_text = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">')
+        highlighted_print_text = highlighted_print_text.replace("[[/HIGHLIGHT]]", '</span>')
         
+        # 3. 把处理好的高亮文本塞进 HTML 模板
+            
         print_html = f"""
         <html>
         <head>
@@ -973,7 +984,7 @@ def render_multi_analysis(df_data):
         </style>
         </head>
         <body>
-        <pre>{html.escape(clean_text)}</pre>
+        <pre>{highlighted_print_text}</pre>
         </body>
         </html>
         """
