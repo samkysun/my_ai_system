@@ -976,10 +976,10 @@ def render_multi_analysis(df_data):
             wx_suffix = ""
         
         if selected_file_type == "升序全套":
-            target_file = "升序全套.xlsx"
+            target_file = "升序分析_纯净版.xlsx"  # 👈 改这里
             sheet_name = "升序全套分析"
         else:
-            target_file = "按序全套.xlsx"
+            target_file = "按序分析_纯净版.xlsx"  # 👈 改这里
             sheet_name = "按序全套分析"
             
         if not os.path.exists(target_file):
