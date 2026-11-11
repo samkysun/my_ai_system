@@ -896,77 +896,7 @@ def render_multi_analysis(df_data):
             st.session_state.multi_result_text = ""
             st.rerun()
 
-    if st.session_state.multi_result_text != "":
-        1. 彻底清洗假换行（单反斜杠）
-        clean_text = st.session_state.multi_result_text.replace("\\r", "")
-        html_content = clean_text.replace("\\n", "<br>")
-        st.markdown(
-            f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
-                {html_content}
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        st.write("") 
-        # ==========================================
-        # 🔥 3. 按钮区：一键复制、直接打印
-        # ==========================================
-        import json
-        import html
-        import streamlit.components.v1 as components
-        
-        js_text = json.dumps(clean_text)
-        escaped_text = html.escape(clean_text) 
-        
-        col_btn1, col_btn2 = st.columns(2)
-        
-        with col_btn1:
-            # 一键复制并提示打开空文件
-            copy_html = f"""
-            <button onclick="copyToClipboard()" style="background-color:#0284c7; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%; font-size:16px;">
-                📋 一键复制并提示打开空文件
-            </button>
-            <script>
-            function copyToClipboard() {{
-                var text = {js_text};
-                navigator.clipboard.writeText(text).then(function() {{
-                    alert('✅ 内容已复制！\\n\\n由于浏览器安全限制，无法自动帮你打开电脑上的记事本。请手动打开一个空记事本，按 Ctrl+V 粘贴即可。');
-                }}, function(err) {{
-                    alert('❌ 浏览器限制导致复制失败，请在下方文本框里手动拖拽全选复制。');
-                }});
-            }}
-            </script>
-            """
-            components.html(copy_html, height=50)
-            
-        with col_btn2:
-            # 直接打印
-            print_html = f"""
-            <button onclick="printReport()" style="background-color:#10b981; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%; font-size:16px;">
-                🖨️ 打印完整报告
-            </button>
-            <script>
-            function printReport() {{
-                var printWindow = window.open('', '_blank');
-                printWindow.document.write('<html><head><title>打印报告</title>');
-                printWindow.document.write('<style>body {{ font-family: Consolas, monospace; font-size: 14px; line-height: 1.6; white-space: pre-wrap; padding: 20px; }}</style>');
-                printWindow.document.write('</head><body>');
-                printWindow.document.write('<pre>' + {json.dumps(escaped_text)} + '</pre>');
-                printWindow.document.write('</body></html>');
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(function() {{ printWindow.print(); }}, 500);
-            }}
-            </script>
-            """
-            components.html(print_html, height=50)
     
-        st.write("")
-        # ==========================================
-        # 🔥 4. 按钮区：一键复制、直接打印
-        # ==========================================
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         download_text = clean_text.replace("\\n", "\\r\\n")
         
