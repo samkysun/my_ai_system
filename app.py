@@ -865,25 +865,27 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
-        # 🔥 网页展示：老老实实换行，绝不显示 \\r\\n
-        html_content = st.session_state.multi_result_text.replace("\\n", "<br>")
-        st.markdown(
-            f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
-                {html_content}
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+    # 🔥 网页展示：先清理掉所有该死的假换行符号
+    clean_text = st.session_state.multi_result_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\r", "")
+    
+    # 网页展示：把真正的换行替换成 <br>
+    html_content = clean_text.replace("\\n", "<br>")
+    st.markdown(
+        f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
+            {html_content}
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
     st.write("") 
     
     file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     
-    # 🔥 核心修复 1：先清理可能存在的假换行，再用真正的 \\n 替换成 \\r\\n
-    clean_text = st.session_state.multi_result_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\r", "")
+    # 🔥 文件下载：把真正的换行替换成 Windows 记事本认识的 \\r\\n
     download_text = clean_text.replace("\\n", "\\r\\n")
     
-    # 🔥 核心修复 2：加上 .encode('utf-8-sig')，这是让 Windows 记事本不瞎眼的关键
     st.download_button(
         label="保存完整报告到本地 (TXT格式)", 
         data=download_text.encode('utf-8-sig'), 
