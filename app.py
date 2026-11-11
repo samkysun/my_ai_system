@@ -240,7 +240,7 @@ def render_console(df_data):
                         n = st.number_input(label, min_value=1, max_value=49, value=i+1, key=f"manual_num_{i}")
                         nums.append(n)
                         
-                submit_btn = st.form_submit_button("?? 保存并同步到云端两个文件", use_container_width=True, type="primary")
+                submit_btn = st.form_submit_button("💾保存并同步到云端两个文件", use_container_width=True, type="primary")
     
                 if submit_btn:
                     if not year_val or not p1 or not p2 or not p3:
