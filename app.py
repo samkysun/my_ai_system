@@ -861,11 +861,12 @@ with col_btn:
         st.session_state.multi_result_text = ""
         st.rerun()
 
-if st.session_state.multi_result_text == "":
+if st.session_state.get("multi_result_text", "") == "":
     st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 else:
     # 清洗掉可能存在的假换行
-    clean_text = st.session_state.multi_result_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\\\r", "").replace("\\r", "")
+    raw_text = st.session_state.get("multi_result_text", "")
+    clean_text = raw_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\\\r", "").replace("\\r", "")
     
     # 网页展示
     html_content = clean_text.replace("\\n", "<br>")
