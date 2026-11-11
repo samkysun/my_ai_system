@@ -618,100 +618,120 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (自动追加统合版)
+# 页面 6：多维分析系统 (双文件独立版)
 # ==========================================
 def render_multi_analysis(df_data):
-    # 直接在函数内导入，解决报错
     import pandas as pd
     import os
     from datetime import datetime
+    from openpyxl.utils import get_column_letter
 
     st.title("多维分析系统")
     
     # ==========================================
-    # 1. 状态初始化与属性切换监控
+    # 1. 状态初始化
     # ==========================================
-    if "current_attr" not in st.session_state:
-        st.session_state.current_attr = "升序生肖相生"
-    if "multi_results_dict" not in st.session_state:
-        # 这个字典用来存储 {球号: 计算结果文本}
-        st.session_state.multi_results_dict = {}
-    if "multi_result_text" not in st.session_state:
-        st.session_state.multi_result_text = ""
+    if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
+    if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
+    if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
+    if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
-    # 顶部控制面板
+    ATTR_MAP = {
+        "生肖": 3, "数字五行": 2, "尾数": 4, "数字合": 5, "门数": 6, "段数": 7,
+        "单双组合": 8, "单双笔": 9, "独合字": 10, "单双头": 11, "单双": 12, "波单双": 13,
+        "生肖五行": 14, "颜色肖": 15, "四宝": 16, "物象": 17, "波色": 18, "阴阳": 19,
+        "家野": 20, "天地": 21, "阴阳天地": 22, "吉凶": 23, "男女": 24, "方位": 25,
+        "3模": 26, "尾五行": 27, "福禄寿": 28, "大小肖": 29,
+        "生肖五行相生": 14, "生肖五行相克": 14,
+        "数字五行相生": 2, "数字五行相克": 2,
+        "尾五行相生": 27, "尾五行相克": 27,
+        "生肖与五行相生": 14, "生肖与五行相克": 14
+    }
+
+    # ==========================================
+    # 2. 顶部控制面板
+    # ==========================================
     st.markdown("### 分析参数设置")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
-        # 为了兼容未来的大表，把分析属性单独提出来作为下拉框
-        selected_attr = st.selectbox("分析属性", ["升序生肖相生", "升序生肖相克"]) 
-        
+        # 🔥 第一个下拉框：专门选择文件
+        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
     with col2:
-        ball_options = ["第1球(F列)", "第2球(J列)", "第3球(N列)", "第4球(R列)", "第5球(V列)", "第6球(Z列)", "第7球(AD列)"]
+        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=0) 
+    with col3:
+        ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
         ball_str = st.selectbox("基准球号", ball_options)
         ball_num = int(ball_str.replace("第", "").split("球")[0])
-        
-    with col3:
-        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col4:
-        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col5:
+        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+    with col6:
         st.write("")
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    # 🔥 核心逻辑：如果切换了分析属性，自动清空之前累积的所有球的结果
-    if selected_attr != st.session_state.current_attr:
+    # 切换文件或属性时，自动清空旧数据
+    if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
         st.session_state.current_attr = selected_attr
+        st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
-        st.info(f"已切换分析属性为【{selected_attr}】，历史记录已清空，请重新计算。")
+        st.info(f"已切换为【{selected_file_type} - {selected_attr}】，历史记录已清空。")
 
     st.divider()
     
     # ==========================================
-    # 2. 核心计算引擎
+    # 3. 核心计算引擎
     # ==========================================
     if run_btn:
-        # 根据属性判断是相生还是相克 (未来扩展用)
-        is_ke = "相克" in selected_attr
+        is_sheng_mode = "相生" in selected_attr
+        is_ke_mode = "相克" in selected_attr
+        is_normal_mode = not (is_sheng_mode or is_ke_mode)
         
-        # 这里目前写死读取 升序生肖相生1.xlsx，未来如果是大表，改这里即可
-        target_file = "升序生肖相生1.xlsx" 
-        
-        if not os.path.exists(target_file):
-            st.error(f"找不到文件：{target_file}")
+        # 🔥 核心：根据选中的文件，自动映射真实的 Excel 文件和工作表
+        if selected_file_type == "升序全套":
+            target_file = "升序全套.xlsx"
+            sheet_name = "升序全套分析"
         else:
-            with st.spinner(f"正在扫描 {ball_str} 数据，请稍候..."):
+            target_file = "按序全套.xlsx"
+            sheet_name = "按序全套分析"
+            
+        if not os.path.exists(target_file):
+            st.error(f"❌ 找不到文件：{target_file}，请确认已上传至根目录！")
+        else:
+            with st.spinner(f"正在扫描 {selected_file_type} 的 {selected_attr} 数据..."):
                 try:
-                    df = pd.read_excel(target_file, sheet_name="多方面", header=None)
+                    df = pd.read_excel(target_file, sheet_name=sheet_name, header=None)
                     
-                    ref_col_map = {1: 5, 2: 9, 3: 13, 4: 17, 5: 21, 6: 25, 7: 29}
-                    ref_col_idx = ref_col_map[ball_num]
-                    
-                    scan_cols = [5, 9, 13, 17, 21, 25, 29]
-                    col_names = {5: "1球(F)", 9: "2球(J)", 13: "3球(N)", 17: "4球(R)", 21: "5球(V)", 25: "6球(Z)", 29: "7球(AD)"}
+                    base_attr_idx = 4 + ATTR_MAP[selected_attr]
+                    ref_col_idx = base_attr_idx + (ball_num - 1) * 30
                     
                     def clean_str(v):
                         if pd.isna(v): return ""
                         return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
                         
-                    def get_child(s): return {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}.get(s, "")
-                    def get_mother(s): return {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}.get(s, "")
-                    
-                    # 兼容相生和相克
+                    def get_wx(s):
+                        core = s.replace("肖", "")
+                        zx2wx = {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}
+                        return zx2wx.get(core, core)
+                        
                     def check_match(a, b):
-                        if is_ke: return (get_child(b) == a) or (get_mother(b) == a) # 简单取反
-                        return (get_child(a) == b) or (get_mother(a) == b)
+                        if is_normal_mode: return a == b
+                        core_a, core_b = get_wx(a), get_wx(b)
+                        child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
+                        mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
+                        ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
+                        if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
+                        elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
+                        return False
                     
                     template = []
                     for r in range(2, len(df)):
                         val = clean_str(df.iloc[r, ref_col_idx])
-                        if val in ["金", "木", "水", "火", "土"]:
-                            template.append(val)
-                        if len(template) >= 14:
-                            break
+                        if val: template.append(val)
+                        if len(template) >= max_len: break
                             
                     if len(template) < min_len:
                         st.warning(f"基准列数据不足 {min_len} 个")
@@ -719,15 +739,16 @@ def render_multi_analysis(df_data):
                         
                     gColl = {i: [] for i in range(min_len, max_len + 1)}
                     
-                    for col_idx in scan_cols:
-                        disp_name = col_names[col_idx]
+                    for n in range(1, 8):
+                        col_idx = base_attr_idx + (n - 1) * 30
+                        col_name = get_column_letter(col_idx)
+                        disp_name = f"{n}球({col_name})"
                         is_self = (col_idx == ref_col_idx)
                         
                         valid_data = []
                         for r in range(2, len(df)):
                             val = clean_str(df.iloc[r, col_idx])
-                            if val in ["金", "木", "水", "火", "土"]:
-                                valid_data.append((r, val))
+                            if val: valid_data.append((r, val))
                                 
                         vc = len(valid_data)
                         if vc >= min_len:
@@ -735,7 +756,7 @@ def render_multi_analysis(df_data):
                             while k <= vc - min_len:
                                 max_l = 0
                                 for j in range(vc - k):
-                                    if j >= 14 or j >= len(template): break
+                                    if j >= len(template): break
                                     if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
                                     if not check_match(template[j], valid_data[k+j][1]): break
                                     max_l = j + 1
@@ -749,34 +770,26 @@ def render_multi_analysis(df_data):
                                     def get_ctx(r_idx):
                                         if r_idx < 0 or r_idx >= len(df): return "无"
                                         v = clean_str(df.iloc[r_idx, col_idx])
-                                        if v in ["金", "木", "水", "火", "土"]: return v + "肖"
                                         return v if v else "空"
                                         
-                                    w1 = get_ctx(sr-1)
-                                    w2 = get_ctx(er+1)
-                                    w3 = get_ctx(er+2)
-                                    w4 = get_ctx(er+3)
+                                    w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                                     
-                                    base_w = w1.replace("肖", "") if "肖" in w1 else w1
-                                    
-                                    # 根据生克动态拼接文字
-                                    sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
-                                    ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
-                                    
-                                    if is_ke:
-                                        rule_str = ke_dict.get(base_w, "")
-                                        full_w1 = f"{w1} (克{rule_str})"
-                                        sha_str = f"本期杀{rule_str}。"
+                                    if is_normal_mode:
+                                        detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                                     else:
-                                        rule_str = sheng_dict.get(base_w, "")
-                                        full_w1 = f"{w1} (生{rule_str})"
-                                        sha_str = f"本期杀{rule_str}。"
+                                        core_w1 = get_wx(w1)
+                                        sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
+                                        ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
+                                        if is_sheng_mode:
+                                            rule_str = sheng_dict.get(core_w1, "")
+                                            full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
+                                            sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                        else:
+                                            rule_str = ke_dict.get(core_w1, "")
+                                            full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
+                                            sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                        detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                         
-                                    if not rule_str:
-                                        full_w1 = w1
-                                        sha_str = ""
-                                        
-                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     if is_self: detail_txt += " [自身参考列匹配]"
                                         
                                     line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
@@ -785,9 +798,8 @@ def render_multi_analysis(df_data):
                                 else:
                                     k += 1
 
-                    # 整理【当前球】的报告文本
                     ball_lines = []
-                    ball_lines.append(f"========== {selected_attr} - {ball_str} ==========")
+                    ball_lines.append(f"========== {selected_file_type} - {selected_attr} - {ball_str} ==========")
                     
                     minSr = 999999
                     finalC = []
@@ -815,10 +827,8 @@ def render_multi_analysis(df_data):
                     
                     ball_text = "\\n".join(ball_lines)
 
-                    # 🔥 将当前球的结果存入字典（这样不仅不会覆盖，还会把之前的球保留下来）
                     st.session_state.multi_results_dict[ball_num] = ball_text
                     
-                    # 🔥 按1到7球顺序拼接总报告
                     combined_text = []
                     for i in range(1, 8):
                         if i in st.session_state.multi_results_dict:
@@ -831,7 +841,7 @@ def render_multi_analysis(df_data):
                     st.error(f"计算报错: {e}")
 
     # ==========================================
-    # 3. 详细结果展示区
+    # 4. 详细结果展示区
     # ==========================================
     st.divider()
     
@@ -846,7 +856,6 @@ def render_multi_analysis(df_data):
 
     if st.session_state.multi_result_text != "":
         
-        # 用 HTML 强制自动换行
         html_content = st.session_state.multi_result_text.replace("\\n", "<br>")
         st.markdown(
             f"""
@@ -859,7 +868,7 @@ def render_multi_analysis(df_data):
         
         st.write("") 
         
-        file_name = f"{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
             label="保存完整报告到本地 (TXT格式)",
             data=st.session_state.multi_result_text,
@@ -869,7 +878,7 @@ def render_multi_analysis(df_data):
             type="secondary"
         )
     else:
-        st.info("请选择球号并点击【执行当前球分析】，系统会按顺序自动拼接。")
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
