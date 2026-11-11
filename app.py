@@ -875,16 +875,25 @@ def render_multi_analysis(df_data):
             """, 
             unsafe_allow_html=True
         )
-        st.write("") 
-        
-        file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        
-        # 🔥 文件下载：在传给下载按钮的那一瞬间，替换成 Windows 记事本认识的 \\r\\n
-        download_text = st.session_state.multi_result_text.replace("\\n", "\\r\\n")
-        
-        st.download_button("保存完整报告到本地 (TXT格式)", data=download_text, file_name=file_name, mime="text/plain", use_container_width=True, type="secondary")
-    else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+    st.write("") 
+    
+    file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    
+    # 🔥 核心修复 1：先清理可能存在的假换行，再用真正的 \\n 替换成 \\r\\n
+    clean_text = st.session_state.multi_result_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\r", "")
+    download_text = clean_text.replace("\\n", "\\r\\n")
+    
+    # 🔥 核心修复 2：加上 .encode('utf-8-sig')，这是让 Windows 记事本不瞎眼的关键
+    st.download_button(
+        label="保存完整报告到本地 (TXT格式)", 
+        data=download_text.encode('utf-8-sig'), 
+        file_name=file_name, 
+        mime="text/plain", 
+        use_container_width=True, 
+        type="secondary"
+    )
+else:
+    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
