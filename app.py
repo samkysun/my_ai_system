@@ -908,18 +908,7 @@ def render_multi_analysis(df_data):
         )
         
         st.write("") 
-        # 🔥 这里是新增的打印按钮代码（注意前面的 8 个空格）
-        import streamlit.components.v1 as components
-        import json
-        import html
-        escaped_text = html.escape(clean_text) 
         
-        print_html = f"""
-        <button onclick="var w=window.open('','_blank');w.document.write('<html><body><pre>'+{json.dumps(escaped_text)}+'</pre></body></html>');w.document.close();w.print();" style="background-color:#10b981; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold; width:100%; cursor:pointer; margin-bottom: 15px;">
-            🖨️ 打印完整报告
-        </button>
-        """
-        components.html(print_html, height=50)
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         download_text = clean_text.replace("\\n", "\\r\\n")
         
