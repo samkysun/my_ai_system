@@ -458,130 +458,42 @@ def render_console(df_data):
                         except Exception as e:
                             st.error(f"同步异常: {e}")
     
+        
         # ------------------------------------------
-        # 📊 右边按钮：同步到全套分析表 (带公式，带大文件突破)
+        # 📊 右边按钮：通知云端更新全套分析表 (发送指令)
         # ------------------------------------------
         with col_sync2:
-            if st.button("🚀 将【源文件】同步至【全套分析表】", use_container_width=True, type="secondary"):
-                with st.spinner("正在同步数据到全套分析表，并自动复制公式..."):
-                    import requests
-                    import openpyxl
-                    import io
-                    import base64
-                    from copy import copy 
-                    
-                    token = st.secrets.get("GITHUB_TOKEN")
-                    repo = st.secrets.get("GITHUB_REPO")
-                    
-                    if not token or not repo:
-                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                    else:
-                        try:
-                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                            
-                            def get_github_file_info(file_path):
-                                url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-                                r = requests.get(url, headers=headers)
-                                return r.json() if r.status_code == 200 else None
-                            
-                            def sync_to_full_set(src_file, dst_file, dst_sheet_name):
-                                # 1. 拉取源文件
-                                src_info = get_github_file_info(src_file)
-                                if not src_info: return False, f"找不到源文件 {src_file}"
-                                src_content = requests.get(src_info["download_url"]).content
-                                wb_src = openpyxl.load_workbook(io.BytesIO(src_content), data_only=True)
-                                if "数据源" not in wb_src.sheetnames: return False, f"{src_file} 缺少数据源表"
-                                ws_src = wb_src["数据源"]
-                                
-                                # 2. 拉取目标大文件
-                                dst_info = get_github_file_info(dst_file)
-                                if not dst_info: return False, f"找不到目标文件 {dst_file}"
-                                dst_content = requests.get(dst_info["download_url"]).content
-                                wb_dst = openpyxl.load_workbook(io.BytesIO(dst_content), keep_vba=True)
-                                if dst_sheet_name not in wb_dst.sheetnames: return False, f"{dst_file} 缺少表 {dst_sheet_name}"
-                                ws_dst = wb_dst[dst_sheet_name]
-                                
-                                # 3. 插入行并复制公式格式
-                                ws_dst.insert_rows(3)
-                                max_col = ws_dst.max_column
-                                for col in range(1, max_col + 1):
-                                    old_cell = ws_dst.cell(row=4, column=col)
-                                    new_cell = ws_dst.cell(row=3, column=col)
-                                    new_cell.value = old_cell.value
-                                    if old_cell.has_style:
-                                        new_cell._style = copy(old_cell._style)
-                                
-                                # 4. 覆盖数字
-                                mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
-                                for s_col, d_col in mapping.items():
-                                    val = ws_src[f"{s_col}3"].value
-                                    ws_dst[f"{d_col}3"] = val if val is not None else ""
-                                
-                                # 5. 保存为二进制流
-                                output = io.BytesIO()
-                                wb_dst.save(output)
-                                b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
-                                
-                                # 🔥 核心升级：使用 Git Data API 绕过 1MB 限制
-                                headers_git = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                                
-                                # 5.1 获取当前分支的最新 commit SHA
-                                ref_url = f"https://api.github.com/repos/{repo}/git/ref/heads/main"
-                                ref_res = requests.get(ref_url, headers=headers_git)
-                                if ref_res.status_code != 200: return False, f"获取分支信息失败: {ref_res.text}"
-                                latest_commit_sha = ref_res.json()["object"]["sha"]
-                                
-                                # 5.2 获取该 commit 的 tree SHA
-                                commit_url = f"https://api.github.com/repos/{repo}/git/commits/{latest_commit_sha}"
-                                commit_res = requests.get(commit_url, headers=headers_git)
-                                base_tree_sha = commit_res.json()["tree"]["sha"]
-                                
-                                # 5.3 创建新的 Blob (这就是上传大文件的地方)
-                                blob_url = f"https://api.github.com/repos/{repo}/git/blobs"
-                                blob_data = {"content": b64_content, "encoding": "base64"}
-                                blob_res = requests.post(blob_url, headers=headers_git, json=blob_data)
-                                if blob_res.status_code != 201: return False, f"创建Blob失败: {blob_res.text}"
-                                new_blob_sha = blob_res.json()["sha"]
-                                
-                                # 5.4 创建新 Tree (把新文件挂载到目录树中)
-                                tree_url = f"https://api.github.com/repos/{repo}/git/trees"
-                                tree_data = {
-                                    "base_tree": base_tree_sha,
-                                    "tree": [{"path": dst_file, "mode": "100644", "type": "blob", "sha": new_blob_sha}]
-                                }
-                                tree_res = requests.post(tree_url, headers=headers_git, json=tree_data)
-                                if tree_res.status_code != 201: return False, f"创建Tree失败: {tree_res.text}"
-                                new_tree_sha = tree_res.json()["sha"]
-                                
-                                # 5.5 创建新 Commit
-                                new_commit_url = f"https://api.github.com/repos/{repo}/git/commits"
-                                new_commit_data = {"message": f"更新 {dst_sheet_name} (大文件)", "tree": new_tree_sha, "parents": [latest_commit_sha]}
-                                new_commit_res = requests.post(new_commit_url, headers=headers_git, json=new_commit_data)
-                                if new_commit_res.status_code != 201: return False, f"创建Commit失败: {new_commit_res.text}"
-                                new_commit_sha = new_commit_res.json()["sha"]
-                                
-                                # 5.6 更新分支指针，指向新 Commit
-                                update_ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/main"
-                                update_data = {"sha": new_commit_sha, "force": True}
-                                update_res = requests.patch(update_ref_url, headers=headers_git, json=update_data)
-                                
-                                if update_res.status_code == 200:
-                                    return True, "成功"
-                                else:
-                                    return False, f"更新分支失败: {update_res.text}"
+            if st.button("🚀 通知云端更新【全套分析表】", use_container_width=True, type="secondary"):
+                import requests
+                
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                
+                if not token or not repo:
+                    st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                else:
+                    try:
+                        workflow_file = "sync_full_set.yml" 
+                        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+                        
+                        headers = {
+                            "Accept": "application/vnd.github.v3+json",
+                            "Authorization": f"Bearer {token}"
+                        }
+                        # ⚠️ 如果你的主分支叫 master，请把下面的 main 改成 master
+                        data = {"ref": "main"} 
+                        
+                        res = requests.post(url, headers=headers, json=data)
+                        
+                        if res.status_code == 204:
+                            st.success("✅ 指令已发送！GitHub 机器人正在后台处理。")
+                            st.info("⏳ 请去 GitHub 的 Actions 页面查看进度（约需 1 分钟）。")
+                        else:
+                            st.error(f"指令发送失败，状态码: {res.status_code}。请检查 Token 权限或分支名。")
+                    except Exception as e:
+                        st.error(f"网络请求异常: {e}")
     
-                            # 👇 刚才你漏掉的就是这里！执行双写操作并处理结果
-                            s1, m1 = sync_to_full_set("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
-                            s2, m2 = sync_to_full_set("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
-                            
-                            if s1 and s2:
-                                st.success("✅ 升序全套 & 按序全套 均已成功更新！(大文件推送成功)")
-                            else:
-                                if not s1: st.error(f"❌ 升序全套同步失败: {m1}")
-                                if not s2: st.error(f"❌ 按序全套同步失败: {m2}")
-    
-                        except Exception as e:
-                            st.error(f"同步异常: {e}") 
+                        
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
     try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
