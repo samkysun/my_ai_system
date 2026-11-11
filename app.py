@@ -899,12 +899,16 @@ def render_multi_analysis(df_data):
         import html
         import base64
         
-        # 1. 强制清理文本，把所有的 < 和 > 变成纯文本字符
-        clean_text = st.session_state.multi_result_text.replace('\\r', '')
-        # 用 html.escape 把所有的标签符号全部“封印”
-        safe_text = html.escape(clean_text).replace("\\n", "<br>")
+        # 1. 清理文本
+        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
         
-        # 2. 构建一个专门用于打印的干净 HTML 页面（带基础排版）
+        # 2. 构建展示用的 HTML 和 打印用的 HTML
+        display_html = f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
+            {html.escape(clean_text).replace(chr(10), '<br>')}
+        </div>
+        """
+        
         print_html = f"""
         <html>
         <head>
@@ -919,47 +923,54 @@ def render_multi_analysis(df_data):
         </body>
         </html>
         """
-        # 转码，方便塞进 JavaScript 里
-        b64_html = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+        
+        # 3. 把两段 HTML 都转成 Base64
+        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
+        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
     
-        # 3. 在 iframe 里渲染显示区和打印按钮
+        # 4. 注入前端代码（使用了 JavaScript 的 decodeURIComponent 来完美解析中文）
         components.html(
             f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; height: 500px; overflow-y: auto;">
-                {safe_text}
-            </div>
+            <div id="report-container"></div>
             
             <div style="margin-top: 15px; text-align: center;">
                 <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s;" onmouseover="this.style.backgroundColor='#0369a1'" onmouseout="this.style.backgroundColor='#0284c7'">
-                    🖨️ 打印当前报告 (排版不乱)
+                    ??? 打印当前报告 (排版不乱)
                 </button>
             </div>
     
             <script>
+            // ?? 核心修复：这个函数专门用来正确解析含有中文的 Base64 字符串
+            function b64DecodeUnicode(str) {{
+                return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }}).join(''));
+            }}
+    
+            // 把展示的文本塞进上面的 div 里
+            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+    
+            // 打印函数
             function printReport() {{
-                // 打开新窗口
                 var win = window.open("");
-                // 将排版好的内容写入新窗口
-                win.document.write(atob("{b64_html}"));
+                // 这里也换成新的解码函数，打印出来的中文就不会乱码了
+                win.document.write(b64DecodeUnicode("{b64_print}"));
                 win.document.close();
                 win.focus();
-                // 延迟 500 毫秒触发打印，确保渲染完成
-                setTimeout(function() {{
-                    win.print();
-                }}, 500);
+                setTimeout(function() {{ win.print(); }}, 500);
             }}
             </script>
             """,
-            height=600,  # 总高度 = 文本框500 + 按钮高度
+            height=620,
             scrolling=False
         )
     
         st.write("") 
         
-        # --- 原有的下载按钮保留 ---
+        # --- 下载按钮保留 ---
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="📥 保存完整报告到本地 (TXT格式)", 
+            label="?? 保存完整报告到本地 (TXT格式)", 
             data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
