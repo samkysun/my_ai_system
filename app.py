@@ -681,9 +681,9 @@ def render_multi_analysis(df_data):
 
     st.divider()
     if run_btn:
-    is_sheng = "相生" in selected_attr
-    is_ke = "相克" in selected_attr
-    is_normal = not (is_sheng or is_ke)
+        is_sheng = "相生" in selected_attr
+        is_ke = "相克" in selected_attr
+        is_normal = not (is_sheng or is_ke)
     
     if "数字" in selected_attr or "号" in selected_attr: wx_suffix = "号"
     elif "尾" in selected_attr: wx_suffix = "尾"
