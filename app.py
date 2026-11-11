@@ -261,6 +261,11 @@ def render_console(df_data):
                         else:
                             # 3. 核心函数：拉取 -> 修改 -> 推送 GitHub
                             def update_github_excel(file_path, nums_list, commit_msg):
+                                # 🔥 核心修复：必须在这里加一遍，打破 Streamlit 的作用域魔咒
+                                import requests
+                                import openpyxl
+                                import io
+                                import base64
                                 try:
                                     api_url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
                                     headers = {
