@@ -371,8 +371,15 @@ def render_console(df_data):
     # 🔥 管理员专属：源文件同步至主数据总表 (.xlsm)
     # ==========================================
     if st.session_state.username == admin_name:
+        
         if st.button("🚀 将【升序源文件】数据同步至【主总数据表】", use_container_width=True, type="secondary"):
             with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
+                # 🔥 核心修复：在这里重新引入模块，彻底打破 Streamlit 的作用域限制！
+                import requests
+                import openpyxl
+                import io
+                import base64
+                
                 token = st.secrets.get("GITHUB_TOKEN")
                 repo = st.secrets.get("GITHUB_REPO")
                 
@@ -381,6 +388,16 @@ def render_console(df_data):
                 else:
                     try:
                         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                        # ... 下面的代码保持原样 ...
+                with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
+                    token = st.secrets.get("GITHUB_TOKEN")
+                    repo = st.secrets.get("GITHUB_REPO")
+                    
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
                         
                         # 1. 定义获取文件信息的函数
                         def get_github_file_info(file_path):
