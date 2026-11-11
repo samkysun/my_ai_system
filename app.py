@@ -618,14 +618,14 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (极速秒出版)
+# 页面 6：多维分析系统 (终极完美版)
 # ==========================================
 import pandas as pd
 import os
 from datetime import datetime
 from openpyxl.utils import get_column_letter
 
-# 🔥 核心优化：把读取 Excel 做成缓存，只要文件没变，绝不重复读取！
+# 🔥 核心优化：使用缓存读取，极大提升速度
 @st.cache_data(show_spinner=False)
 def load_excel_data(file_path, sheet_name):
     return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
@@ -695,153 +695,164 @@ def render_multi_analysis(df_data):
         if not os.path.exists(target_file):
             st.error(f"找不到文件：{target_file}")
         else:
-            with st.spinner(f"正在极速扫描数据..."):
-                try:
-                    # 使用缓存读取
-                    df = load_excel_data(target_file, sheet_name)
+            # 增加进度条，让你知道它没卡死
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                status_text.text("正在读取 Excel 数据...")
+                df = load_excel_data(target_file, sheet_name)
+                progress_bar.progress(20)
+                
+                base_excel_col = ATTR_MAP[selected_attr]
+                ref_excel_col = base_excel_col + (ball_num - 1) * 30
+                ref_col_idx = ref_excel_col - 1 
+                
+                def clean_str(v):
+                    if pd.isna(v): return ""
+                    return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
                     
-                    base_excel_col = ATTR_MAP[selected_attr]
-                    ref_excel_col = base_excel_col + (ball_num - 1) * 30
-                    ref_col_idx = ref_excel_col - 1 
+                def get_wx(s):
+                    core = s.replace("肖", "")
+                    zx2wx = {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}
+                    return zx2wx.get(core, core)
                     
-                    def clean_str(v):
-                        if pd.isna(v): return ""
-                        return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
+                def check_match(a, b):
+                    if is_normal_mode: return a == b
+                    core_a, core_b = get_wx(a), get_wx(b)
+                    child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
+                    mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
+                    ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
+                    if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
+                    elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
+                    return False
+                
+                status_text.text("正在提取基准列...")
+                ref_col_data = [clean_str(x) for x in df.iloc[:, ref_col_idx].tolist()]
+                
+                template = []
+                for r in range(2, len(ref_col_data)):
+                    if ref_col_data[r]:
+                        template.append(ref_col_data[r])
+                    if len(template) >= max_len: break
                         
-                    def get_wx(s):
-                        core = s.replace("肖", "")
-                        zx2wx = {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}
-                        return zx2wx.get(core, core)
-                        
-                    def check_match(a, b):
-                        if is_normal_mode: return a == b
-                        core_a, core_b = get_wx(a), get_wx(b)
-                        child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
-                        mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
-                        ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
-                        if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
-                        elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
-                        return False
+                if len(template) < min_len:
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.warning(f"基准列数据不足 {min_len} 个")
+                    st.stop()
                     
-                    # 🔥 核心优化：把 Pandas 的列直接转成 Python 原生列表，速度提升几十倍！
-                    ref_col_data = [clean_str(x) for x in df.iloc[:, ref_col_idx].tolist()]
+                gColl = {i: [] for i in range(min_len, max_len + 1)}
+                
+                status_text.text("正在扫描匹配项...")
+                for n in range(1, 8):
+                    current_excel_col = base_excel_col + (n - 1) * 30
+                    current_col_idx = current_excel_col - 1
+                    col_name = get_column_letter(current_excel_col)
+                    disp_name = f"{n}球({col_name})"
+                    is_self = (current_excel_col == ref_excel_col)
                     
-                    template = []
-                    for r in range(2, len(ref_col_data)):
-                        if ref_col_data[r]:
-                            template.append(ref_col_data[r])
-                        if len(template) >= max_len: break
+                    col_data = [clean_str(x) for x in df.iloc[:, current_col_idx].tolist()]
+                    valid_data = [(r, col_data[r]) for r in range(2, len(col_data)) if col_data[r]]
                             
-                    if len(template) < min_len:
-                        st.warning(f"基准列数据不足 {min_len} 个")
-                        st.stop()
-                        
-                    gColl = {i: [] for i in range(min_len, max_len + 1)}
-                    
-                    for n in range(1, 8):
-                        current_excel_col = base_excel_col + (n - 1) * 30
-                        current_col_idx = current_excel_col - 1
-                        col_name = get_column_letter(current_excel_col)
-                        disp_name = f"{n}球({col_name})"
-                        is_self = (current_excel_col == ref_excel_col)
-                        
-                        # 🔥 同样是先转列表，再遍历
-                        col_data = [clean_str(x) for x in df.iloc[:, current_col_idx].tolist()]
-                        valid_data = [(r, col_data[r]) for r in range(2, len(col_data)) if col_data[r]]
+                    vc = len(valid_data)
+                    if vc >= min_len:
+                        k = 0
+                        while k <= vc - min_len:
+                            max_l = 0
+                            for j in range(vc - k):
+                                if j >= len(template): break
+                                if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
+                                if not check_match(template[j], valid_data[k+j][1]): break
+                                max_l = j + 1
                                 
-                        vc = len(valid_data)
-                        if vc >= min_len:
-                            k = 0
-                            while k <= vc - min_len:
-                                max_l = 0
-                                for j in range(vc - k):
-                                    if j >= len(template): break
-                                    if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                                    if not check_match(template[j], valid_data[k+j][1]): break
-                                    max_l = j + 1
+                            if max_l >= min_len:
+                                real_l = max_l
+                                group_l = min(real_l, max_len)
+                                sr = valid_data[k][0]
+                                er = valid_data[k + real_l - 1][0]
+                                
+                                def get_ctx(r_idx):
+                                    if r_idx < 0 or r_idx >= len(col_data): return "无"
+                                    v = col_data[r_idx]
+                                    if v and v[-1] != "肖" and v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
+                                        return v + "肖"
+                                    if v in ["金", "木", "水", "火", "土"]:
+                                        return v + "肖"
+                                    return v if v else "空"
                                     
-                                if max_l >= min_len:
-                                    real_l = max_l
-                                    group_l = min(real_l, max_len)
-                                    sr = valid_data[k][0]
-                                    er = valid_data[k + real_l - 1][0]
-                                    
-                                    def get_ctx(r_idx):
-                                        if r_idx < 0 or r_idx >= len(col_data): return "无"
-                                        v = col_data[r_idx]
-                                        if v and v[-1] != "肖" and v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
-                                            return v + "肖"
-                                        if v in ["金", "木", "水", "火", "土"]:
-                                            return v + "肖"
-                                        return v if v else "空"
-                                        
-                                    w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
-                                    
-                                    if is_normal_mode:
-                                        detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
-                                    else:
-                                        core_w1 = get_wx(w1)
-                                        sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
-                                        ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
-                                        if is_sheng_mode:
-                                            rule_str = sheng_dict.get(core_w1, "")
-                                            full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
-                                            sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                        else:
-                                            rule_str = ke_dict.get(core_w1, "")
-                                            full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
-                                            sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                        detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
-                                        
-                                    if is_self: detail_txt += " [自身参考列匹配]"
-                                        
-                                    line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
-                                    gColl[group_l].append({"line": line_txt, "sr": sr})
-                                    k += real_l
+                                w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
+                                
+                                if is_normal_mode:
+                                    detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                                 else:
-                                    k += 1
-
-                    ball_lines = []
-                    ball_lines.append(f"========== {selected_file_type} - {selected_attr} - {ball_str} ==========")
-                    
-                    minSr = 999999
-                    finalC = []
-                    for L in range(min_len, max_len + 1):
-                        for item in gColl[L]:
-                            if item["sr"] < 500:
-                                if item["sr"] < minSr:
-                                    minSr = item["sr"]
-                                    finalC = [item]
-                                elif item["sr"] == minSr:
-                                    finalC.append(item)
+                                    core_w1 = get_wx(w1)
+                                    sheng_dict = {"金": "水肖土肖", "木": "水肖火肖", "水": "金肖木肖", "火": "土肖木肖", "土": "金肖火肖"}
+                                    ke_dict = {"金": "火肖木肖", "木": "土肖金肖", "水": "火肖土肖", "火": "水肖金肖", "土": "木肖水肖"}
+                                    if is_sheng_mode:
+                                        rule_str = sheng_dict.get(core_w1, "")
+                                        full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
+                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                    else:
+                                        rule_str = ke_dict.get(core_w1, "")
+                                        full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
+                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                     
-                    if finalC:
-                        ball_lines.append("起始行最近且<500行:")
-                        for item in finalC:
-                            ball_lines.append(item["line"])
-                            ball_lines.append("")
+                                if is_self: detail_txt += " [自身参考列匹配]"
+                                    
+                                line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
+                                gColl[group_l].append({"line": line_txt, "sr": sr})
+                                k += real_l
+                            else:
+                                k += 1
+                                
+                progress_bar.progress(90)
+                status_text.text("正在整理报告...")
+                
+                ball_lines = []
+                ball_lines.append(f"========== {selected_file_type} - {selected_attr} - {ball_str} ==========")
+                
+                minSr = 999999
+                finalC = []
+                for L in range(min_len, max_len + 1):
+                    for item in gColl[L]:
+                        if item["sr"] < 500:
+                            if item["sr"] < minSr:
+                                minSr = item["sr"]
+                                finalC = [item]
+                            elif item["sr"] == minSr:
+                                finalC.append(item)
+                                
+                if finalC:
+                    ball_lines.append("起始行最近且<500行:")
+                    for item in finalC:
+                        ball_lines.append(item["line"])
+                        ball_lines.append("")
 
-                    for L in range(min_len, max_len + 1):
-                        if not gColl[L]: continue
-                        ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
-                        for item in gColl[L]:
-                            ball_lines.append(item["line"])
-                            ball_lines.append("")
-                    
-                    ball_text = "\\n".join(ball_lines)
+                for L in range(min_len, max_len + 1):
+                    if not gColl[L]: continue
+                    ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
+                    for item in gColl[L]:
+                        ball_lines.append(item["line"])
+                        ball_lines.append("")
+                
+                ball_text = "\\n".join(ball_lines)
 
-                    st.session_state.multi_results_dict[ball_num] = ball_text
-                    
-                    combined_text = []
-                    for i in range(1, 8):
-                        if i in st.session_state.multi_results_dict:
-                            combined_text.append(st.session_state.multi_results_dict[i])
-                            
-                    st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
-                    st.success(f"{ball_str} 计算完成！极速出结果。")
-                    
-                except Exception as e:
-                    st.error(f"计算报错: {e}")
+                st.session_state.multi_results_dict[ball_num] = ball_text
+                
+                combined_text = []
+                for i in range(1, 8):
+                    if i in st.session_state.multi_results_dict:
+                        combined_text.append(st.session_state.multi_results_dict[i])
+                        
+                st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
+                
+                progress_bar.progress(100)
+                status_text.text("计算完成！")
+                
+            except Exception as e:
+                st.error(f"计算报错: {e}")
 
     st.divider()
     
@@ -854,6 +865,7 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
+        # 🔥 网页展示：老老实实换行，绝不显示 \\r\\n
         html_content = st.session_state.multi_result_text.replace("\\n", "<br>")
         st.markdown(
             f"""
@@ -864,11 +876,12 @@ def render_multi_analysis(df_data):
             unsafe_allow_html=True
         )
         st.write("") 
+        
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-        # 🔥 核心修复：强制加上 \\r，解决 Windows 记事本不换行的问题
+        
+        # 🔥 文件下载：在传给下载按钮的那一瞬间，替换成 Windows 记事本认识的 \\r\\n
         download_text = st.session_state.multi_result_text.replace("\\n", "\\r\\n")
-
+        
         st.download_button("保存完整报告到本地 (TXT格式)", data=download_text, file_name=file_name, mime="text/plain", use_container_width=True, type="secondary")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
