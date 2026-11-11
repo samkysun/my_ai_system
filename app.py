@@ -618,7 +618,7 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (双文件独立版)
+# 页面 6：多维分析系统 (绝对列号防错版)
 # ==========================================
 def render_multi_analysis(df_data):
     import pandas as pd
@@ -628,37 +628,32 @@ def render_multi_analysis(df_data):
 
     st.title("多维分析系统")
     
-    # ==========================================
-    # 1. 状态初始化
-    # ==========================================
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
+    # 🔥 我已经把所有的参数，全部换算成了“1球对应的真实列号”，代码里不用再算公式了！
+    # 如：生肖=7(G), 数字五行=6(F), 尾数=8(H), 单双=16(P)...
     ATTR_MAP = {
-        "生肖": 3, "数字五行": 2, "尾数": 4, "数字合": 5, "门数": 6, "段数": 7,
-        "单双组合": 8, "单双笔": 9, "独合字": 10, "单双头": 11, "单双": 12, "波单双": 13,
-        "生肖五行": 14, "颜色肖": 15, "四宝": 16, "物象": 17, "波色": 18, "阴阳": 19,
-        "家野": 20, "天地": 21, "阴阳天地": 22, "吉凶": 23, "男女": 24, "方位": 25,
-        "3模": 26, "尾五行": 27, "福禄寿": 28, "大小肖": 29,
-        "生肖五行相生": 14, "生肖五行相克": 14,
-        "数字五行相生": 2, "数字五行相克": 2,
-        "尾五行相生": 27, "尾五行相克": 27,
-        "生肖与五行相生": 14, "生肖与五行相克": 14
+        "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11,
+        "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17,
+        "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23,
+        "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29,
+        "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
+        "生肖五行相生": 18, "生肖五行相克": 18,
+        "数字五行相生": 6, "数字五行相克": 6,
+        "尾五行相生": 31, "尾五行相克": 31,
+        "生肖与五行相生": 18, "生肖与五行相克": 18
     }
 
-    # ==========================================
-    # 2. 顶部控制面板
-    # ==========================================
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
-        # 🔥 第一个下拉框：专门选择文件
         selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
     with col2:
-        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=0) 
+        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) # 默认选中生肖
     with col3:
         ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
         ball_str = st.selectbox("基准球号", ball_options)
@@ -672,25 +667,25 @@ def render_multi_analysis(df_data):
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    # 切换文件或属性时，自动清空旧数据
+    # 🔥 校验区：直接显示当前选中的属性对应的列号
+    check_col_idx = ATTR_MAP[selected_attr]
+    check_col_letter = get_column_letter(check_col_idx)
+    st.info(f"💡 当前属性【{selected_attr}】对应的 1球列号: {check_col_letter} (第 {check_col_idx} 列)")
+
     if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
         st.session_state.current_attr = selected_attr
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
-        st.info(f"已切换为【{selected_file_type} - {selected_attr}】，历史记录已清空。")
+        st.rerun()
 
     st.divider()
     
-    # ==========================================
-    # 3. 核心计算引擎
-    # ==========================================
     if run_btn:
         is_sheng_mode = "相生" in selected_attr
         is_ke_mode = "相克" in selected_attr
         is_normal_mode = not (is_sheng_mode or is_ke_mode)
         
-        # 🔥 核心：根据选中的文件，自动映射真实的 Excel 文件和工作表
         if selected_file_type == "升序全套":
             target_file = "升序全套.xlsx"
             sheet_name = "升序全套分析"
@@ -699,13 +694,14 @@ def render_multi_analysis(df_data):
             sheet_name = "按序全套分析"
             
         if not os.path.exists(target_file):
-            st.error(f"❌ 找不到文件：{target_file}，请确认已上传至根目录！")
+            st.error(f"找不到文件：{target_file}")
         else:
             with st.spinner(f"正在扫描 {selected_file_type} 的 {selected_attr} 数据..."):
                 try:
                     df = pd.read_excel(target_file, sheet_name=sheet_name, header=None)
                     
-                    base_attr_idx = 3 + ATTR_MAP[selected_attr]
+                    # 🔥 绝对列号直接使用，无需公式
+                    base_attr_idx = ATTR_MAP[selected_attr]
                     ref_col_idx = base_attr_idx + (ball_num - 1) * 30
                     
                     def clean_str(v):
@@ -840,14 +836,10 @@ def render_multi_analysis(df_data):
                 except Exception as e:
                     st.error(f"计算报错: {e}")
 
-    # ==========================================
-    # 4. 详细结果展示区
-    # ==========================================
     st.divider()
     
     col_title, col_btn = st.columns([8, 2])
-    with col_title:
-        st.subheader("详细结果 (累积报告)")
+    with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
         if st.button("清空所有结果", use_container_width=True):
             st.session_state.multi_results_dict = {}
@@ -855,7 +847,6 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
-        
         html_content = st.session_state.multi_result_text.replace("\\n", "<br>")
         st.markdown(
             f"""
@@ -865,18 +856,9 @@ def render_multi_analysis(df_data):
             """, 
             unsafe_allow_html=True
         )
-        
         st.write("") 
-        
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button(
-            label="保存完整报告到本地 (TXT格式)",
-            data=st.session_state.multi_result_text,
-            file_name=file_name,
-            mime="text/plain",
-            use_container_width=True,
-            type="secondary"
-        )
+        st.download_button("保存完整报告到本地 (TXT格式)", data=st.session_state.multi_result_text, file_name=file_name, mime="text/plain", use_container_width=True, type="secondary")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
