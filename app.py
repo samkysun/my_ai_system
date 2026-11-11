@@ -897,15 +897,15 @@ def render_multi_analysis(df_data):
             st.session_state.multi_result_text = ""
             st.rerun()
 
-if st.session_state.multi_result_text != "":
-    # ?? 缩进修复：这里的代码前面必须有 8 个空格
+    if st.session_state.multi_result_text != "":
+    # 🔥 缩进修复：这里的代码前面必须有 8 个空格
     raw_text = st.session_state.multi_result_text
     
     # 1. 清洗假换行
-    clean_text = raw_text.replace("\\\\\\\\r\\\\\\\\n", "\\\\n").replace("\\\\\\\\n", "\\\\n").replace("\\\\\\\\r", "").replace("\\\\r", "")
+    clean_text = raw_text.replace("\\\\r\\\\n", "\\n").replace("\\\\n", "\\n").replace("\\\\r", "").replace("\\r", "")
     
     # 2. 网页完美展示
-    html_content = clean_text.replace("\\\\n", "<br>")
+    html_content = clean_text.replace("\\n", "<br>")
     st.markdown(
         f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
@@ -930,15 +930,15 @@ if st.session_state.multi_result_text != "":
     with col_btn1:
         copy_html = f"""
         <button onclick="copyToClipboard()" style="background-color:#0284c7; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%; font-size:16px;">
-            ?? 一键复制全文本
+            📋 一键复制全文本
         </button>
         <script>
         function copyToClipboard() {{
             var text = {js_text};
             navigator.clipboard.writeText(text).then(function() {{
-                alert('? 复制成功！请去记事本按 Ctrl+V 粘贴。');
+                alert('✅ 复制成功！请去记事本按 Ctrl+V 粘贴。');
             }}, function(err) {{
-                alert('? 浏览器限制导致复制失败，请手动拖拽全选复制。');
+                alert('❌ 浏览器限制导致复制失败，请手动拖拽全选复制。');
             }});
         }}
         </script>
@@ -948,7 +948,7 @@ if st.session_state.multi_result_text != "":
     with col_btn2:
         print_html = f"""
         <button onclick="printReport()" style="background-color:#10b981; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; font-weight:bold; width:100%; font-size:16px;">
-            ??? 打印完整报告
+            🖨️ 打印完整报告
         </button>
         <script>
         function printReport() {{
@@ -970,10 +970,10 @@ if st.session_state.multi_result_text != "":
     
     # 4. 原生 TXT 下载
     file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    download_text = clean_text.replace("\\\\n", "\\\\r\\\\n")
+    download_text = clean_text.replace("\\n", "\\r\\n")
     
     st.download_button(
-        label="?? 或者下载为 TXT 文件", 
+        label="⬇️ 或者下载为 TXT 文件", 
         data=download_text.encode('utf-8-sig'), 
         file_name=file_name, 
         mime="text/plain", 
@@ -981,7 +981,7 @@ if st.session_state.multi_result_text != "":
         type="secondary"
     )
 else:
-    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
+    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
