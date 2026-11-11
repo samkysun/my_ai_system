@@ -221,9 +221,9 @@ def render_console(df_data):
     
     # 只有当前登录的用户名和 Secrets 里一致，才显示录入面板
     if st.session_state.username == admin_name:
-        with st.expander("?? 管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
+        with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
-                st.info("?? 提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
+                st.info("💡提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
                 
                 col_year, col_p1, col_p2, col_p3 = st.columns(4)
                 with col_year: year_val = st.text_input("年份 (AA列)", value="2026")
@@ -337,8 +337,8 @@ def render_console(df_data):
                                 s2, m2 = update_github_excel("按序源文件.xlsx", raw_nums, f"更新按序数据 {year_val}-{p1}{p2}{p3}")
                                 
                                 if s1 and s2:
-                                    st.success("? 数据已永久存入 GitHub 云端！")
-                                    st.info("?? 云端数据已刷新，请点击上方【同步数据】按钮重新加载。")
+                                    st.success("✅数据已永久存入 GitHub 云端！")
+                                    st.info("👉云端数据已刷新，请点击上方【同步数据】按钮重新加载。")
                                     load_real_data.clear()
                                 else:
                                     if not s1: st.error(f"? 升序文件同步失败: {m1}")
