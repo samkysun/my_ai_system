@@ -956,7 +956,8 @@ def render_multi_analysis(df_data):
         
         # 1. 清理文本
         clean_text = st.session_state.multi_result_text.replace('\r', '')
-        safe_text = html.escape(clean_text).replace("\n", "<br>")
+        # 一步到位：转义 + 换行 + 替换高亮标签
+        safe_text = html.escape(clean_text).replace("\\n", "<br>").replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
         
         # 🔥 新增：把占位符替换成真正的 HTML 高亮标签（红字+黄底加粗）
         safe_text = safe_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">')
@@ -968,11 +969,11 @@ def render_multi_analysis(df_data):
             {html.escape(clean_text).replace(chr(10), '<br>')}
         </div>
         """
-        # 2. 把占位符替换成真正的高亮标签(红字+黄底+加粗)
-        highlighted_print_text = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">')
-        highlighted_print_text = highlighted_print_text.replace("[[/HIGHLIGHT]]", '</span>')
+        # 1. 直接合并成一步：转义 + 替换标签（这样绝对不会找不到变量）
+        highlighted_print_text = html.escape(clean_text).replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
         
-        # 3. 把处理好的高亮文本塞进 HTML 模板
+        # 2. 塞进打印模板
+
             
         print_html = f"""
         <html>
