@@ -841,13 +841,14 @@ def render_multi_analysis(df_data):
                                     else:
                                         line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
                                     
-                                    # 只有通过了上面的判断，才会加入到最终结果中
-                                    gColl[group_l].append({"line": line_txt, "sr": sr})
+                                    
                                     # 🔥 新增：如果命中5到9期一致，就打个标记
                                     if 5 <= real_l <= 9:
                                         st.session_state.play_alert = True
                                         # 用特殊的占位符包裹起来
                                         line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
+                                    # 只有通过了上面的判断，才会加入到最终结果中
+                                    gColl[group_l].append({"line": line_txt, "sr": sr})
                                 # 无论是否加入结果，k 都要前进，防止死循环
                                 k += real_l
                             else:
