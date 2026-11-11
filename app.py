@@ -791,6 +791,17 @@ def render_multi_analysis(df_data):
                                         return v + "肖"
                                     if v in ["金", "木", "水", "火", "土"]:
                                         return v + wx_suffix # 🔥 动态后缀
+                                    # 🔥 新增的智能后缀补齐逻辑：
+                                    if selected_attr == "尾数": return v if "尾" in v else v + "尾"
+                                    if selected_attr == "数字合": return v if "合" in v else v + "合"
+                                    if selected_attr == "门数": return v if "门" in v else v + "门"
+                                    if selected_attr == "段数": return v if "段" in v else v + "段"
+                                    if selected_attr == "颜色肖": return v if "肖" in v else v + "肖"
+                                    if selected_attr == "四宝": return v if "肖" in v else v + "肖"
+                                    if selected_attr == "波色": return v if "波" in v else v + "波"
+                                    if selected_attr == "单双头": return v if "头" in v else v + "头"
+                                    if selected_attr == "单双笔": return v if "笔" in v else v + "笔"
+    
                                     return v
                                     
                                 w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
