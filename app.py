@@ -895,40 +895,36 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
-        import re
+        import streamlit.components.v1 as components
         import html
+        # 1. 强制清理文本，把所有的 < 和 > 变成纯文本字符
+        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
+        # 用 html.escape 把所有的标签符号全部“封印”
+        safe_text = html.escape(clean_text).replace("\\\\n", "<br>")
         
-        # 1. 先把你文本里可能藏着的 &lt;/div&gt; 这类的转义符还原成真实的 </div>
-        unescaped_text = html.unescape(str(st.session_state.multi_result_text))
-        
-        # 2. 强力清除所有的 < > 标签（不管它是 <div> 还是 <br>）
-        cleaned_text = re.sub(r'<[^>]+>', '', unescaped_text)
-        
-        # 3. 注意这里换成了单斜杠 '\\\\\\\\r' 和 '\\\\\\\\n'，这才是真正的回车和换行！
-        clean_text = cleaned_text.replace('\\\\\\\\r', '')
-        html_content = clean_text.replace('\\\\\\\\n', '<br>')
-        
-        st.markdown(
+        # 2. 使用 components.html 在独立的 iframe 里渲染，绝对不会被外界干扰
+        components.html(
             f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
-                {html_content}
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; height: 600px; overflow-y: auto;">
+                {safe_text}
             </div>
-            """, 
-            unsafe_allow_html=True
+            """,
+            height=620,
+            scrolling=True
         )
+
+        
         
         st.write("") 
         
-        file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        download_text = clean_text.replace("\\n", "\\r\\n")
-        
+        # --- 顺便把下载按钮也放在这里，保证功能不断 ---
+        file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="保存完整报告到本地 (TXT格式)", 
-            data=download_text.encode('utf-8-sig'), 
+            label="?? 保存完整报告到本地 (TXT格式)", 
+            data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
-            use_container_width=True, 
-            type="secondary"
+            use_container_width=True
         )
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
