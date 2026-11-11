@@ -854,11 +854,11 @@ def render_multi_analysis(df_data):
                             elif item["sr"] == minSr:
                                 finalC.append(item)
                                 
-                if finalC:
-                    ball_lines.append("起始行最近且<500行:")
-                    for item in finalC:
-                        ball_lines.append(item["line"])
-                        ball_lines.append("")
+                #if finalC:
+                    #ball_lines.append("起始行最近且<500行:")
+                    #for item in finalC:
+                        #ball_lines.append(item["line"])
+                        #ball_lines.append("")
 
                 for L in range(min_len, max_len + 1):
                     if not gColl[L]: continue
@@ -867,7 +867,7 @@ def render_multi_analysis(df_data):
                         ball_lines.append(item["line"])
                         ball_lines.append("")
                 
-                ball_text = "\\n".join(ball_lines)
+                ball_text = "\n".join(ball_lines)
 
                 st.session_state.multi_results_dict[ball_num] = ball_text
                 
@@ -876,7 +876,7 @@ def render_multi_analysis(df_data):
                     if i in st.session_state.multi_results_dict:
                         combined_text.append(st.session_state.multi_results_dict[i])
                         
-                st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
+                st.session_state.multi_result_text = "\n\n\n".join(combined_text)
                 
                 progress_bar.progress(100)
                 status_text.text("计算完成！")
