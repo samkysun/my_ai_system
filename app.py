@@ -935,7 +935,7 @@ def render_multi_analysis(df_data):
             
             <div style="margin-top: 15px; text-align: center;">
                 <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s;" onmouseover="this.style.backgroundColor='#0369a1'" onmouseout="this.style.backgroundColor='#0284c7'">
-                    ??? 打印当前报告 (排版不乱)
+                    🖨️ 打印当前报告 (排版不乱)
                 </button>
             </div>
     
@@ -970,7 +970,7 @@ def render_multi_analysis(df_data):
         # --- 下载按钮保留 ---
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="?? 保存完整报告到本地 (TXT格式)", 
+            label="📥保存完整报告到本地 (TXT格式)", 
             data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
