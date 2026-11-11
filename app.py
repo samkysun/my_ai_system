@@ -618,7 +618,7 @@ def render_ai(df_data):
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
 
 # ==========================================
-# 页面 6：多维分析系统 (绝对列号防错版)
+# 页面 6：多维分析系统 (绝对列号防串台版)
 # ==========================================
 def render_multi_analysis(df_data):
     import pandas as pd
@@ -633,8 +633,7 @@ def render_multi_analysis(df_data):
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
-    # 🔥 我已经把所有的参数，全部换算成了“1球对应的真实列号”，代码里不用再算公式了！
-    # 如：生肖=7(G), 数字五行=6(F), 尾数=8(H), 单双=16(P)...
+    # 🔥 绝对防错字典：直接填入 1球 对应的绝对列号 (A=1, B=2... G=7)
     ATTR_MAP = {
         "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11,
         "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17,
@@ -650,27 +649,23 @@ def render_multi_analysis(df_data):
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
-    with col1:
-        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
-    with col2:
-        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) # 默认选中生肖
+    with col1: selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
+    with col2: selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
     with col3:
         ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
         ball_str = st.selectbox("基准球号", ball_options)
         ball_num = int(ball_str.replace("第", "").split("球")[0])
-    with col4:
-        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
-    with col5:
-        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+    with col4: min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
+    with col5: max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
     with col6:
         st.write("")
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    # 🔥 校验区：直接显示当前选中的属性对应的列号
-    check_col_idx = ATTR_MAP[selected_attr]
-    check_col_letter = get_column_letter(check_col_idx)
-    st.info(f"💡 当前属性【{selected_attr}】对应的 1球列号: {check_col_letter} (第 {check_col_idx} 列)")
+    # 校验区：清清楚楚告诉你，当前选中的球号在哪个字母列
+    check_excel_col = ATTR_MAP[selected_attr] + (ball_num - 1) * 30
+    check_col_letter = get_column_letter(check_excel_col)
+    st.info(f"💡 校验信息：属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
 
     if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
         st.session_state.current_attr = selected_attr
@@ -700,9 +695,10 @@ def render_multi_analysis(df_data):
                 try:
                     df = pd.read_excel(target_file, sheet_name=sheet_name, header=None)
                     
-                    # 🔥 绝对列号直接使用，无需公式
-                    base_attr_idx = 3 + ATTR_MAP[selected_attr]
-                    ref_col_idx = base_attr_idx + (ball_num - 1) * 30
+                    # 🔥 直接用绝对列号，减去1给pandas用
+                    base_excel_col = ATTR_MAP[selected_attr]
+                    ref_excel_col = base_excel_col + (ball_num - 1) * 30
+                    ref_col_idx = ref_excel_col - 1 
                     
                     def clean_str(v):
                         if pd.isna(v): return ""
@@ -736,14 +732,15 @@ def render_multi_analysis(df_data):
                     gColl = {i: [] for i in range(min_len, max_len + 1)}
                     
                     for n in range(1, 8):
-                        col_idx = base_attr_idx + (n - 1) * 30
-                        col_name = get_column_letter(col_idx)
+                        current_excel_col = base_excel_col + (n - 1) * 30
+                        current_col_idx = current_excel_col - 1
+                        col_name = get_column_letter(current_excel_col)
                         disp_name = f"{n}球({col_name})"
-                        is_self = (col_idx == ref_col_idx)
+                        is_self = (current_excel_col == ref_excel_col)
                         
                         valid_data = []
                         for r in range(2, len(df)):
-                            val = clean_str(df.iloc[r, col_idx])
+                            val = clean_str(df.iloc[r, current_col_idx])
                             if val: valid_data.append((r, val))
                                 
                         vc = len(valid_data)
@@ -763,9 +760,14 @@ def render_multi_analysis(df_data):
                                     sr = valid_data[k][0]
                                     er = valid_data[k + real_l - 1][0]
                                     
+                                    # 显示上下文，生肖自动加“肖”字
                                     def get_ctx(r_idx):
                                         if r_idx < 0 or r_idx >= len(df): return "无"
-                                        v = clean_str(df.iloc[r_idx, col_idx])
+                                        v = clean_str(df.iloc[r_idx, current_col_idx])
+                                        if v and v[-1] != "肖" and v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
+                                            return v + "肖"
+                                        if v in ["金", "木", "水", "火", "土"]:
+                                            return v + "肖"
                                         return v if v else "空"
                                         
                                     w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
