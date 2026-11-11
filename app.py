@@ -895,19 +895,27 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
-        # 完美排版与下载，原封不动
-        import re
-        # 使用正则把所有的 < 和 > 标签彻底干掉，并清理换行符
-        clean_text = re.sub(r'<[^>]+>', '', str(st.session_state.multi_result_text)).replace("\\r", "")
-        html_content = clean_text.replace("\\n", "<br>")
-        st.markdown(
-            f"""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
-                {html_content}
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+    import re
+    import html
+    
+    # 1. 先把你文本里可能藏着的 &lt;/div&gt; 这类的转义符还原成真实的 </div>
+    unescaped_text = html.unescape(str(st.session_state.multi_result_text))
+    
+    # 2. 强力清除所有的 < > 标签（不管它是 <div> 还是 <br>）
+    cleaned_text = re.sub(r'<[^>]+>', '', unescaped_text)
+    
+    # 3. 注意这里换成了单斜杠 '\\\\\\\\r' 和 '\\\\\\\\n'，这才是真正的回车和换行！
+    clean_text = cleaned_text.replace('\\\\\\\\r', '')
+    html_content = clean_text.replace('\\\\\\\\n', '<br>')
+    
+    st.markdown(
+        f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
+            {html_content}
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
         
         st.write("") 
         
