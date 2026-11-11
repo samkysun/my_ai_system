@@ -681,40 +681,40 @@ def render_multi_analysis(df_data):
 
     st.divider()
     if run_btn:
-    is_sheng_mode = "相生" in selected_attr
-    is_ke_mode = "相克" in selected_attr
-    is_normal_mode = not (is_sheng_mode or is_ke_mode)
-    
-    if "数字" in selected_attr or "号" in selected_attr:
-        wx_suffix = "号"
-    elif "尾" in selected_attr:
-        wx_suffix = "尾"
-    elif "肖" in selected_attr:
-        wx_suffix = "肖"
-    else:
-        wx_suffix = ""
-    
-    if selected_file_type == "升序全套":
-        target_file = "升序全套.xlsx"
-        sheet_name = "升序全套分析"
-    else:
-        target_file = "按序全套.xlsx"
-        sheet_name = "按序全套分析"
-        
-    if not os.path.exists(target_file):
-        st.error(f"找不到文件：{target_file}")
-    else:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        try:
-            status_text.text("正在读取 Excel 数据...")
-            df = load_excel_data(target_file, sheet_name)
-            progress_bar.progress(20)
+            is_sheng_mode = "相生" in selected_attr
+            is_ke_mode = "相克" in selected_attr
+            is_normal_mode = not (is_sheng_mode or is_ke_mode)
             
-            base_excel_col = ATTR_MAP[selected_attr]
-            ref_excel_col = base_excel_col + (ball_num - 1) * 30
-            ref_col_idx = ref_excel_col - 1 
+            if "数字" in selected_attr or "号" in selected_attr:
+                wx_suffix = "号"
+            elif "尾" in selected_attr:
+                wx_suffix = "尾"
+            elif "肖" in selected_attr:
+                wx_suffix = "肖"
+            else:
+                wx_suffix = ""
+            
+            if selected_file_type == "升序全套":
+                target_file = "升序全套.xlsx"
+                sheet_name = "升序全套分析"
+            else:
+                target_file = "按序全套.xlsx"
+                sheet_name = "按序全套分析"
+                
+            if not os.path.exists(target_file):
+                st.error(f"找不到文件：{target_file}")
+            else:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    status_text.text("正在读取 Excel 数据...")
+                    df = load_excel_data(target_file, sheet_name)
+                    progress_bar.progress(20)
+                    
+                    base_excel_col = ATTR_MAP[selected_attr]
+                    ref_excel_col = base_excel_col + (ball_num - 1) * 30
+                    ref_col_idx = ref_excel_col - 1 
             
             def clean_str(v):
                 if pd.isna(v): return ""
