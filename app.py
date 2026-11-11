@@ -627,10 +627,10 @@ if st.session_state.multi_result_text == "":
 raw_text = st.session_state.multi_result_text
 
 # 1. 清洗假换行 (全部用单反斜杠)
-clean_text = raw_text.replace("\\\\\\\\r\\\\\\\\n", "\\\\n").replace("\\\\\\\\n", "\\\\n").replace("\\\\\\\\r", "").replace("\\\\r", "")
+clean_text = raw_text.replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", "\\\\\\\\\\\\\\\\n").replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", "\\\\\\\\\\\\\\\\n").replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\r", "").replace("\\\\\\\\\\\\\\\\r", "")
 
 # 2. 网页完美展示
-html_content = clean_text.replace("\\\\n", "<br>")
+html_content = clean_text.replace("\\\\\\\\\\\\\\\\n", "<br>")
 st.markdown(
     f"""
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
@@ -695,7 +695,7 @@ st.write("")
 
 # 4. 原生 TXT 下载
 file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-download_text = clean_text.replace("\\\\n", "\\\\r\\\\n")
+download_text = clean_text.replace("\\\\\\\\\\\\\\\\n", "\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n")
 
 st.download_button(
     label="?? 或者下载为 TXT 文件", 
