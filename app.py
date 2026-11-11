@@ -367,128 +367,194 @@ def render_console(df_data):
                                     if not s2: st.error(f"? 按序文件同步失败: {m2}")
     
     st.divider()
+   
     # ==========================================
-    # 🔥 管理员专属：源文件同步至主数据总表 (.xlsm)
+    # 🔥 管理员专属：文件同步控制台
     # ==========================================
     if st.session_state.username == admin_name:
-        if st.button("🚀 将【升序源文件】数据同步至【主总数据表】", use_container_width=True, type="secondary"):
-            with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
-                # 🔥 核心修复：在这里重新引入模块，彻底打破 Streamlit 的作用域限制！
-                import requests
-                import openpyxl
-                import io
-                import base64
-                
-                token = st.secrets.get("GITHUB_TOKEN")
-                repo = st.secrets.get("GITHUB_REPO")
-                
-                if not token or not repo:
-                    st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                else:
-                    try:
-                        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                        
-                        
-                        # 1. 定义获取文件信息的函数
-                        def get_github_file_info(file_path):
-                            url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-                            r = requests.get(url, headers=headers)
-                            if r.status_code == 200: return r.json()
-                            return None
+        st.markdown("### ☁️ 云端数据流转 (管理员操作)")
+        col_sync1, col_sync2 = st.columns(2)
+        
+        # ==========================================
+        # 📦 按钮 1：同步到主总数据表 (纯数字，不带公式)
+        # ==========================================
+        with col_sync1:
+            if st.button("🚀 将【升序源文件】同步至【主总数据表】", use_container_width=True, type="primary"):
+                with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
+                    import requests
+                    import openpyxl
+                    import io
+                    import base64
+                    
+                    token = st.secrets.get("GITHUB_TOKEN")
+                    repo = st.secrets.get("GITHUB_REPO")
+                    
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
                             
-                        # 2. 下载升序源文件
-                        src_info = get_github_file_info("升序源文件.xlsx")
-                        if not src_info:
-                            st.error("找不到云端的 升序源文件.xlsx")
-                            st.stop()
-                        src_content = requests.get(src_info["download_url"]).content
-                        df_src = pd.read_excel(io.BytesIO(src_content), sheet_name="数据源", header=None)
-                        
-                        # 3. 下载主文件 .xlsm
-                        master_file = "数据分析系统最终版本(智能全套).xlsm"
-                        master_info = get_github_file_info(master_file)
-                        if not master_info:
-                            st.error(f"找不到云端的主文件 {master_file}")
-                            st.stop()
-                        master_content = requests.get(master_info["download_url"]).content
-                        
-                        # 4. 用 openpyxl 加载主文件，保留宏
-                        import openpyxl
-                        wb = openpyxl.load_workbook(io.BytesIO(master_content), keep_vba=True)
-                        
-                        if "总数据" not in wb.sheetnames:
-                            st.error("主文件中找不到“总数据”工作表！")
-                            st.stop()
-                            
-                        ws_master = wb["总数据"]
-                        
-                        # 清空原有的总数据（保留第一行表头，从第二行开始删）
-                        if ws_master.max_row > 1:
-                            ws_master.delete_rows(2, ws_master.max_row)
-                            
-                        # 5. 解析源文件并写入主表
-                        def clean_val(v):
-                            if pd.isna(v) or v is None: return ""
-                            try: return str(int(float(v)))
-                            except: return str(v).strip()
-                            
-                        row_idx_master = 2 # 从第二行开始写
-                        for idx, row in df_src.iterrows():
-                            if idx < 2: continue # 跳过源文件的表头
-                            
-                            # 解析期号
-                            p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
-                            if not p1 and not p2 and not p3: continue
-                            
-                            year_val = clean_val(row[26]) if len(row) > 26 else "2026"
-                            period_str = f"{year_val}{p1}{p2}{p3}"
-                            
-                            # 解析号码
-                            nums = []
-                            for i in range(7):
-                                t_str = clean_val(row[3 + i*2])
-                                u_str = clean_val(row[4 + i*2])
-                                if t_str == "" and u_str == "": nums.append(None)
-                                else:
-                                    t_int = int(t_str) if t_str.isdigit() else 0
-                                    u_int = int(u_str) if u_str.isdigit() else 0
-                                    nums.append(t_int * 10 + u_int)
-                            
-                            # 按你原有代码的列索引写入：期号在第19列(index 19, openpyxl是第19列)
-                            # 注意：openpyxl 的列是从 1 开始数的
-                            ws_master.cell(row=row_idx_master, column=19, value=period_str)
-                            
-                            # 平码 1-6 (第 20 到 25 列)
-                            for i in range(6):
-                                ws_master.cell(row=row_idx_master, column=20 + i, value=nums[i])
+                            def get_github_file_info(file_path):
+                                url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+                                r = requests.get(url, headers=headers)
+                                return r.json() if r.status_code == 200 else None
                                 
-                            # 特码 (第 26 列)
-                            ws_master.cell(row=row_idx_master, column=26, value=nums[6])
+                            # 拉取源文件
+                            src_info = get_github_file_info("升序源文件.xlsx")
+                            if not src_info: st.error("找不到云端升序源文件"); st.stop()
+                            src_content = requests.get(src_info["download_url"]).content
+                            df_src = pd.read_excel(io.BytesIO(src_content), sheet_name="数据源", header=None)
                             
-                            row_idx_master += 1
+                            # 拉取主文件
+                            master_file = "数据分析系统最终版本(智能全套).xlsm"
+                            master_info = get_github_file_info(master_file)
+                            if not master_info: st.error(f"找不到云端主文件 {master_file}"); st.stop()
+                            master_content = requests.get(master_info["download_url"]).content
                             
-                        # 6. 保存并推送到 GitHub
-                        output = io.BytesIO()
-                        wb.save(output)
-                        b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
-                        
-                        url = f"https://api.github.com/repos/{repo}/contents/{master_file}"
-                        payload = {
-                            "message": f"自动合并源数据至总数据表",
-                            "content": b64_content,
-                            "sha": master_info["sha"],
-                            "branch": "main" # 请确保分支正确
-                        }
-                        
-                        res = requests.put(url, headers=headers, json=payload)
-                        if res.status_code in [200, 201]:
-                            st.success("✅ 同步大功告成！主数据总表已更新！")
-                            load_real_data.clear() # 清除缓存，下次读取直接读最新数据
-                        else:
-                            st.error(f"❌ 推送主文件失败: {res.text}")
+                            wb = openpyxl.load_workbook(io.BytesIO(master_content), keep_vba=True)
+                            if "总数据" not in wb.sheetnames: st.error("找不到总数据工作表"); st.stop()
+                            
+                            ws_master = wb["总数据"]
+                            if ws_master.max_row > 1: ws_master.delete_rows(2, ws_master.max_row)
+                                
+                            def clean_val(v):
+                                if pd.isna(v) or v is None: return ""
+                                try: return str(int(float(v)))
+                                except: return str(v).strip()
+                                
+                            row_idx_master = 2
+                            for idx, row in df_src.iterrows():
+                                if idx < 2: continue
+                                p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
+                                if not p1 and not p2 and not p3: continue
+                                year_val = clean_val(row[26]) if len(row) > 26 else "2026"
+                                
+                                ws_master.cell(row=row_idx_master, column=19, value=f"{year_val}{p1}{p2}{p3}")
+                                for i in range(6):
+                                    t_str, u_str = clean_val(row[3 + i*2]), clean_val(row[4 + i*2])
+                                    num = int(t_str)*10 + int(u_str) if t_str.isdigit() and u_str.isdigit() else (int(t_str) if t_str.isdigit() else 0)
+                                    ws_master.cell(row=row_idx_master, column=20 + i, value=num)
+                                t_str, u_str = clean_val(row[15]), clean_val(row[16])
+                                z_num = int(t_str)*10 + int(u_str) if t_str.isdigit() and u_str.isdigit() else (int(t_str) if t_str.isdigit() else 0)
+                                ws_master.cell(row=row_idx_master, column=26, value=z_num)
+                                row_idx_master += 1
+                                
+                            output = io.BytesIO()
+                            wb.save(output)
+                            b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
+                            
+                            url = f"https://api.github.com/repos/{repo}/contents/{master_file}"
+                            payload = {"message": "自动更新主总数据表", "content": b64_content, "sha": master_info["sha"], "branch": "main"}
+                            res = requests.put(url, headers=headers, json=payload)
+                            if res.status_code in [200, 201]:
+                                st.success("✅ 主总数据表已更新！纯数字全覆盖。")
+                                load_real_data.clear()
+                            else:
+                                st.error(f"❌ 推送失败: {res.text}")
+                        except Exception as e:
+                            st.error(f"同步异常: {e}")
     
-                    except Exception as e:
-                        st.error(f"同步过程发生异常: {e}")
+        # ==========================================
+        # 📊 按钮 2：同步到全套分析表 (复制公式，连带属性)
+        # ==========================================
+        with col_sync2:
+            if st.button("🚀 将【源文件】同步至【全套分析表】", use_container_width=True, type="secondary"):
+                with st.spinner("正在同步 D到Q、AA 列到全套分析表，并自动复制公式..."):
+                    import requests
+                    import openpyxl
+                    import io
+                    import base64
+                    from copy import copy # 必须要有这个，用于复制样式
+                    
+                    token = st.secrets.get("GITHUB_TOKEN")
+                    repo = st.secrets.get("GITHUB_REPO")
+                    
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                            
+                            def get_github_file_info(file_path):
+                                url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+                                r = requests.get(url, headers=headers)
+                                return r.json() if r.status_code == 200 else None
+                            
+                            def sync_to_full_set(src_file, dst_file, dst_sheet_name):
+                                # 拉取源文件
+                                src_info = get_github_file_info(src_file)
+                                if not src_info: return False, f"找不到源文件 {src_file}"
+                                src_content = requests.get(src_info["download_url"]).content
+                                wb_src = openpyxl.load_workbook(io.BytesIO(src_content), data_only=True)
+                                if "数据源" not in wb_src.sheetnames: return False, f"{src_file} 缺少数据源表"
+                                ws_src = wb_src["数据源"]
+                                
+                                # 拉取目标文件
+                                dst_info = get_github_file_info(dst_file)
+                                if not dst_info: return False, f"找不到目标文件 {dst_file}"
+                                dst_content = requests.get(dst_info["download_url"]).content
+                                wb_dst = openpyxl.load_workbook(io.BytesIO(dst_content), keep_vba=True)
+                                if dst_sheet_name not in wb_dst.sheetnames: return False, f"{dst_file} 缺少表 {dst_sheet_name}"
+                                ws_dst = wb_dst[dst_sheet_name]
+                                
+                                # 目标文件插入第 3 行
+                                ws_dst.insert_rows(3)
+                                
+                                # 🔥 核心：复制上一行的公式和样式
+                                max_col = ws_dst.max_column
+                                for col in range(1, max_col + 1):
+                                    old_cell = ws_dst.cell(row=4, column=col)
+                                    new_cell = ws_dst.cell(row=3, column=col)
+                                    new_cell.value = old_cell.value
+                                    if old_cell.has_style:
+                                        new_cell._style = copy(old_cell._style)
+                                
+                                # 严格按你的映射要求覆盖写入新数字
+                                mapping = {
+                                    'D': 'D', 'E': 'E',
+                                    'F': 'AH', 'G': 'AI',
+                                    'H': 'BL', 'I': 'BM',
+                                    'J': 'CP', 'K': 'CQ',
+                                    'L': 'DT', 'M': 'DU',
+                                    'N': 'EX', 'O': 'EY',
+                                    'P': 'GB', 'Q': 'GC',
+                                    'AA': 'HF'
+                                }
+                                
+                                for s_col, d_col in mapping.items():
+                                    val = ws_src[f"{s_col}3"].value
+                                    if val is None: val = ""
+                                    ws_dst[f"{d_col}3"] = val
+                                
+                                # 保存并推送
+                                output = io.BytesIO()
+                                wb_dst.save(output)
+                                b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
+                                
+                                url = f"https://api.github.com/repos/{repo}/contents/{dst_file}"
+                                payload = {"message": f"自动更新 {dst_sheet_name}", "content": b64_content, "sha": dst_info["sha"], "branch": "main"}
+                                put_res = requests.put(url, headers=headers, json=payload)
+                                
+                                if put_res.status_code in [200, 201]:
+                                    return True, "成功"
+                                else:
+                                    return False, put_res.text
+    
+                            # 执行双写操作
+                            s1, m1 = sync_to_full_set("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
+                            s2, m2 = sync_to_full_set("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
+                            
+                            if s1 and s2:
+                                st.success("✅ 升序全套 & 按序全套 均已成功更新！(已自动复制公式)")
+                            else:
+                                if not s1: st.error(f"❌ 升序全套同步失败: {m1}")
+                                if not s2: st.error(f"❌ 按序全套同步失败: {m2}")
+    
+                        except Exception as e:
+                            st.error(f"同步异常: {e}")
+    
+                    
     
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
