@@ -892,8 +892,8 @@ def render_multi_analysis(df_data):
         use_container_width=True, 
         type="secondary"
     )
-else:
-    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+   else:
+       st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
