@@ -368,16 +368,19 @@ def render_console(df_data):
     
     st.divider()
    
+    
     # ==========================================
-    # 🔥 管理员专属：文件同步控制台
+    # 🔥 管理员专属：云端数据流转控制台 (双按钮+大文件处理版)
     # ==========================================
     if st.session_state.username == admin_name:
         st.markdown("### ☁️ 云端数据流转 (管理员操作)")
+        
+        # 将页面分为左右两列，用于并排显示两个按钮
         col_sync1, col_sync2 = st.columns(2)
         
-        # ==========================================
-        # 📦 按钮 1：同步到主总数据表 (纯数字，不带公式)
-        # ==========================================
+        # ------------------------------------------
+        # 📦 左边按钮：同步到主总数据表 (纯数字)
+        # ------------------------------------------
         with col_sync1:
             if st.button("🚀 将【升序源文件】同步至【主总数据表】", use_container_width=True, type="primary"):
                 with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
@@ -455,17 +458,17 @@ def render_console(df_data):
                         except Exception as e:
                             st.error(f"同步异常: {e}")
     
-        # ==========================================
-        # 📊 按钮 2：同步到全套分析表 (复制公式，连带属性)
-        # ==========================================
+        # ------------------------------------------
+        # 📊 右边按钮：同步到全套分析表 (带公式，带大文件突破)
+        # ------------------------------------------
         with col_sync2:
             if st.button("🚀 将【源文件】同步至【全套分析表】", use_container_width=True, type="secondary"):
-                with st.spinner("正在同步 D到Q、AA 列到全套分析表，并自动复制公式..."):
+                with st.spinner("正在同步数据到全套分析表，并自动复制公式..."):
                     import requests
                     import openpyxl
                     import io
                     import base64
-                    from copy import copy # 必须要有这个，用于复制样式
+                    from copy import copy 
                     
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
@@ -480,18 +483,14 @@ def render_console(df_data):
                                 url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
                                 r = requests.get(url, headers=headers)
                                 return r.json() if r.status_code == 200 else None
-                            def sync_to_full_set(src_file, dst_file, dst_sheet_name):
-                                import base64
-                                import io
-                                import requests
-                                import openpyxl
-                                from copy import copy
                             
+                            def sync_to_full_set(src_file, dst_file, dst_sheet_name):
                                 # 1. 拉取源文件
                                 src_info = get_github_file_info(src_file)
                                 if not src_info: return False, f"找不到源文件 {src_file}"
                                 src_content = requests.get(src_info["download_url"]).content
                                 wb_src = openpyxl.load_workbook(io.BytesIO(src_content), data_only=True)
+                                if "数据源" not in wb_src.sheetnames: return False, f"{src_file} 缺少数据源表"
                                 ws_src = wb_src["数据源"]
                                 
                                 # 2. 拉取目标大文件
@@ -499,6 +498,7 @@ def render_console(df_data):
                                 if not dst_info: return False, f"找不到目标文件 {dst_file}"
                                 dst_content = requests.get(dst_info["download_url"]).content
                                 wb_dst = openpyxl.load_workbook(io.BytesIO(dst_content), keep_vba=True)
+                                if dst_sheet_name not in wb_dst.sheetnames: return False, f"{dst_file} 缺少表 {dst_sheet_name}"
                                 ws_dst = wb_dst[dst_sheet_name]
                                 
                                 # 3. 插入行并复制公式格式
@@ -522,26 +522,24 @@ def render_console(df_data):
                                 wb_dst.save(output)
                                 b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
                                 
-                                # ========================================================
                                 # 🔥 核心升级：使用 Git Data API 绕过 1MB 限制
-                                # ========================================================
-                                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                                headers_git = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
                                 
                                 # 5.1 获取当前分支的最新 commit SHA
                                 ref_url = f"https://api.github.com/repos/{repo}/git/ref/heads/main"
-                                ref_res = requests.get(ref_url, headers=headers)
-                                if ref_res.status_code != 200: return False, "获取分支信息失败"
+                                ref_res = requests.get(ref_url, headers=headers_git)
+                                if ref_res.status_code != 200: return False, f"获取分支信息失败: {ref_res.text}"
                                 latest_commit_sha = ref_res.json()["object"]["sha"]
                                 
                                 # 5.2 获取该 commit 的 tree SHA
                                 commit_url = f"https://api.github.com/repos/{repo}/git/commits/{latest_commit_sha}"
-                                commit_res = requests.get(commit_url, headers=headers)
+                                commit_res = requests.get(commit_url, headers=headers_git)
                                 base_tree_sha = commit_res.json()["tree"]["sha"]
                                 
                                 # 5.3 创建新的 Blob (这就是上传大文件的地方)
                                 blob_url = f"https://api.github.com/repos/{repo}/git/blobs"
                                 blob_data = {"content": b64_content, "encoding": "base64"}
-                                blob_res = requests.post(blob_url, headers=headers, json=blob_data)
+                                blob_res = requests.post(blob_url, headers=headers_git, json=blob_data)
                                 if blob_res.status_code != 201: return False, f"创建Blob失败: {blob_res.text}"
                                 new_blob_sha = blob_res.json()["sha"]
                                 
@@ -551,29 +549,39 @@ def render_console(df_data):
                                     "base_tree": base_tree_sha,
                                     "tree": [{"path": dst_file, "mode": "100644", "type": "blob", "sha": new_blob_sha}]
                                 }
-                                tree_res = requests.post(tree_url, headers=headers, json=tree_data)
+                                tree_res = requests.post(tree_url, headers=headers_git, json=tree_data)
                                 if tree_res.status_code != 201: return False, f"创建Tree失败: {tree_res.text}"
                                 new_tree_sha = tree_res.json()["sha"]
                                 
                                 # 5.5 创建新 Commit
                                 new_commit_url = f"https://api.github.com/repos/{repo}/git/commits"
                                 new_commit_data = {"message": f"更新 {dst_sheet_name} (大文件)", "tree": new_tree_sha, "parents": [latest_commit_sha]}
-                                new_commit_res = requests.post(new_commit_url, headers=headers, json=new_commit_data)
+                                new_commit_res = requests.post(new_commit_url, headers=headers_git, json=new_commit_data)
                                 if new_commit_res.status_code != 201: return False, f"创建Commit失败: {new_commit_res.text}"
                                 new_commit_sha = new_commit_res.json()["sha"]
                                 
                                 # 5.6 更新分支指针，指向新 Commit
                                 update_ref_url = f"https://api.github.com/repos/{repo}/git/refs/heads/main"
                                 update_data = {"sha": new_commit_sha, "force": True}
-                                update_res = requests.patch(update_ref_url, headers=headers, json=update_data)
+                                update_res = requests.patch(update_ref_url, headers=headers_git, json=update_data)
                                 
                                 if update_res.status_code == 200:
                                     return True, "成功"
                                 else:
                                     return False, f"更新分支失败: {update_res.text}"
     
-                    
+                            # 👇 刚才你漏掉的就是这里！执行双写操作并处理结果
+                            s1, m1 = sync_to_full_set("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
+                            s2, m2 = sync_to_full_set("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
+                            
+                            if s1 and s2:
+                                st.success("✅ 升序全套 & 按序全套 均已成功更新！(大文件推送成功)")
+                            else:
+                                if not s1: st.error(f"❌ 升序全套同步失败: {m1}")
+                                if not s2: st.error(f"❌ 按序全套同步失败: {m2}")
     
+                        except Exception as e:
+                            st.error(f"同步异常: {e}") 
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
     try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
