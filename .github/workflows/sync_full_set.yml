@@ -27,5 +27,5 @@ jobs:
       - name: 提交并推送更改
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: "🤖 Action 自动更新全套分析表"
-          file_pattern: "*.xlsx"
+          commit_message: "?? 安全生成纯净版分析数据"
+          file_pattern: "*纯净版.xlsx"
