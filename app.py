@@ -705,7 +705,7 @@ def render_multi_analysis(df_data):
                 try:
                     df = pd.read_excel(target_file, sheet_name=sheet_name, header=None)
                     
-                    base_attr_idx = 4 + ATTR_MAP[selected_attr]
+                    base_attr_idx = 3 + ATTR_MAP[selected_attr]
                     ref_col_idx = base_attr_idx + (ball_num - 1) * 30
                     
                     def clean_str(v):
