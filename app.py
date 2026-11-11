@@ -894,9 +894,7 @@ def render_multi_analysis(df_data):
         if st.button("清空所有结果", use_container_width=True):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
-            st.rerun()
-
-    
+            st.rerun()    
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         download_text = clean_text.replace("\\n", "\\r\\n")
         
@@ -909,7 +907,7 @@ def render_multi_analysis(df_data):
             type="secondary"
         )
     else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+        st.info("Please run analysis first.")
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
