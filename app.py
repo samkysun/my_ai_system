@@ -831,9 +831,9 @@ def render_multi_analysis(df_data):
                                     
                                 if is_self: detail_txt += " [自身参考列匹配]"
 
-                                # 🌟 核心新增：判断“上”属性是不是空的。如果是"空"或"无"，就直接跳过，不写入结果！
-                                if w1 not in ["空", "无", ""]:
-                                    
+                                # 1. 先把 w1 转成纯文本去掉多余空格
+                                w1_str = str(w1).strip()
+                                # 2. 只要不在这个黑名单里(0尾 不在里面，所以0尾会被保留)    
                                     # 原有的25行以内判断
                                     if er + 1 <= 25:
                                         line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
