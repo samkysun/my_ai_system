@@ -843,7 +843,10 @@ def render_multi_analysis(df_data):
                                     
                                     # 只有通过了上面的判断，才会加入到最终结果中
                                     gColl[group_l].append({"line": line_txt, "sr": sr})
-                                
+                                    # 🔥 新增：如果命中5到9期一致，就打个标记
+                                    if 5 <= real_l <= 9:
+                                        st.session_state.play_alert = True
+
                                 # 无论是否加入结果，k 都要前进，防止死循环
                                 k += real_l
                             else:
@@ -889,7 +892,46 @@ def render_multi_analysis(df_data):
                         combined_text.append(st.session_state.multi_results_dict[i])
                         
                 st.session_state.multi_result_text = "\n\n\n".join(combined_text)
+                # ================= 新增声音提醒 =================
+                # 只要标记为 True，就说明检测到了 5-9 期一致的数据
+                if st.session_state.get("play_alert", False):
+                    import streamlit.components.v1 as components
+                    components.html(
+                        """
+                        <script>
+                        var AudioContext = window.AudioContext || window.webkitAudioContext;
+                        var ctx = new AudioContext();
+                        function playCoin() {
+                            if (ctx.state === 'suspended') ctx.resume();
+                            var osc1 = ctx.createOscillator();
+                            var gain1 = ctx.createGain();
+                            osc1.type = 'sine';
+                            osc1.frequency.setValueAtTime(987.77, ctx.currentTime);
+                            gain1.gain.setValueAtTime(0.5, ctx.currentTime);
+                            gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                            osc1.connect(gain1);
+                            gain1.connect(ctx.destination);
+                            osc1.start();
+                            osc1.stop(ctx.currentTime + 0.3);
                 
+                            var osc2 = ctx.createOscillator();
+                            var gain2 = ctx.createGain();
+                            osc2.type = 'sine';
+                            osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1);
+                            gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1);
+                            gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                            osc2.connect(gain2);
+                            gain2.connect(ctx.destination);
+                            osc2.start(ctx.currentTime + 0.1);
+                            osc2.stop(ctx.currentTime + 0.4);
+                        }
+                        playCoin();
+                        </script>
+                        """,
+                        height=0, width=0
+                    )
+                    st.session_state.play_alert = False
+                # =================================================
                 progress_bar.progress(100)
                 status_text.text("计算完成！")
                 
