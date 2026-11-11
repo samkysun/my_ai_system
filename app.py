@@ -896,7 +896,7 @@ def render_multi_analysis(df_data):
 
     if st.session_state.multi_result_text != "":
         # 完美排版与下载，原封不动
-        clean_text = st.session_state.multi_result_text.replace("\\r", "")
+        clean_text = st.session_state.multi_result_text.replace("\\r", "").replace("</div>", "")
         html_content = clean_text.replace("\\n", "<br>")
         st.markdown(
             f"""
