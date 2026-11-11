@@ -620,11 +620,11 @@ def render_ai(df_data):
 # ==========================================
 # 结果展示区 (极简缩进防报错版)
 # ==========================================
-if st.session_state.multi_result_text == "":
+if st.session_state.get("multi_result_text", "") == "":
     st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
     st.stop() # ?? 用 st.stop() 替代 return，绝对不会报错
     
-raw_text = st.session_state.multi_result_text
+raw_text = st.session_state.get("multi_result_text", "")
 
 # 1. 清洗假换行 (全部用单反斜杠)
 clean_text = raw_text.replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", "\\\\\\\\\\\\\\\\n").replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", "\\\\\\\\\\\\\\\\n").replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\r", "").replace("\\\\\\\\\\\\\\\\r", "")
