@@ -616,7 +616,6 @@ def render_ai(df_data):
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
     st.text_area("DeepSeek 返回：", value=st.session_state.ai_api_result, height=300)
-
 # ==========================================
 # 页面 6：多维分析系统 (功能原封不动，仅修复后缀版)
 # ==========================================
@@ -800,8 +799,7 @@ def render_multi_analysis(df_data):
                                     if selected_attr == "四宝": return v if "肖" in v else v + "肖"
                                     if selected_attr == "波色": return v if "波" in v else v + "波"
                                     if selected_attr == "单双头": return v if "头" in v else v + "头"
-                                    if selected_attr == "单双笔": return v if "笔" in v else v + "笔"
-    
+                                    if selected_attr == "单双笔": return v if "笔" in v else v + "笔"    
                                     return v
                                     
                                 w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
@@ -894,12 +892,28 @@ def render_multi_analysis(df_data):
         if st.button("清空所有结果", use_container_width=True):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
-            st.rerun()    
+            st.rerun()
+
+    if st.session_state.multi_result_text != "":
+        # 完美排版与下载，原封不动
+        clean_text = st.session_state.multi_result_text.replace("\\r", "")
+        html_content = clean_text.replace("\\n", "<br>")
+        st.markdown(
+            f"""
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 800px; overflow-y: auto;">
+                {html_content}
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        st.write("") 
+        
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         download_text = clean_text.replace("\\n", "\\r\\n")
         
         st.download_button(
-            label="⬇️ 或者下载为 TXT 文件（绝对不会乱码）", 
+            label="保存完整报告到本地 (TXT格式)", 
             data=download_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
@@ -907,7 +921,7 @@ def render_multi_analysis(df_data):
             type="secondary"
         )
     else:
-        st.info("Please run analysis first.")
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
