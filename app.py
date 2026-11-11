@@ -920,7 +920,6 @@ def render_multi_analysis(df_data):
         </button>
         """
         components.html(print_html, height=50)
-
         file_name = f"{selected_file_type}_{selected_attr}_完整报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         download_text = clean_text.replace("\\n", "\\r\\n")
         
