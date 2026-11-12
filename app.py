@@ -593,13 +593,18 @@ def render_console(df_data):
                             
                             if s1 and s2:
                                 st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
+                                
+                                # 👇 👇 就是这里，加上这一行代码 👇 👇
+                                load_excel_data.clear() 
+                                # 👆 👆 清除网页内存中的旧表格 👆 👆
+                                
                                 if m1 == "成功" or m2 == "成功":
                                     st.info("👉 请点上方【同步数据】刷新网页！")
                             else:
                                 if not s1: st.error(f"❌ 升序失败: {m1}")
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
-                            st.error(f"运行异常: {e}")
+                            st.error(f"运行异常: {e}")    
 
 
     
@@ -1018,7 +1023,7 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter
 
 # 🔥 核心优化：使用缓存读取，极大提升速度
-@st.cache_data(show_spinner=False, ttl=10) # 缓存10秒，过期后自动重新去云端拉取
+@st.cache_data(show_spinner=False, ttl=1800) # 缓存10秒，过期后自动重新去云端拉取
 def load_excel_data(file_path, sheet_name):
     import requests
     import io
