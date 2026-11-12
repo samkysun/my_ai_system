@@ -141,14 +141,83 @@ def clean_period(val):
     if s.endswith(".0"): s = s[:-2]
     return s
 
-@st.cache_data
+
+@st.cache_data(ttl=60, show_spinner=False) # 缓存60秒，防止频繁请求
 def load_real_data():
-    if not os.path.exists(EXCEL_FILE): return None
+    import requests
+    import io
+    
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    
+    # 默认读取升序源文件
+    file_name = "升序源文件.xlsx"
+    
+    if not token or not repo:
+        if not os.path.exists(file_name): return None
+        try:
+            df_raw = pd.read_excel(file_name, sheet_name="数据源", header=None)
+        except Exception as e:
+            return str(e)
+    else:
+        try:
+            url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
+            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+            r = requests.get(url, headers=headers)
+            if r.status_code == 200:
+                download_url = r.json()["download_url"]
+                content = requests.get(download_url).content
+                df_raw = pd.read_excel(io.BytesIO(content), sheet_name="数据源", header=None)
+            else:
+                return "云端源文件读取失败"
+        except Exception as e:
+            return str(e)
+
     try:
-        df = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME)
-        return df.dropna(how='all')
+        synced_rows = []
+        def clean_val(v):
+            if pd.isna(v): return ""
+            try: return str(int(float(v)))
+            except: return str(v).strip()
+            
+        for idx, row in df_raw.iterrows():
+            p1 = clean_val(row[0])
+            p2 = clean_val(row[1])
+            p3 = clean_val(row[2])
+            
+            if not p1 and not p2 and not p3:
+                continue
+            
+            year_val = clean_val(row[26]) if len(row) > 26 else "2026"
+            period_str = f"{year_val}{p1}{p2}{p3}"
+            
+            nums = []
+            for i in range(7):
+                tens = clean_val(row[3 + i*2])
+                units = clean_val(row[4 + i*2])
+                if tens == "" and units == "":
+                    nums.append(None)
+                else:
+                    t = tens if tens.isdigit() else "0"
+                    u = units if units.isdigit() else "0"
+                    nums.append(int(t + u))
+                    
+            new_row = [None] * 30
+            new_row[18] = period_str
+            for i in range(6): new_row[19+i] = nums[i]
+            new_row[25] = nums[6]
+            
+            synced_rows.append(new_row)
+            
+        result_df = pd.DataFrame(synced_rows)
+        try:
+            result_df = result_df.sort_values(by=18, ascending=False).reset_index(drop=True)
+        except:
+            pass
+            
+        return result_df
     except Exception as e:
-        return str(e)
+        return f"数据转换异常: {e}"
 def generate_20_combos(nums):
     combos = list(itertools.combinations(nums, 3))
     return [",".join([str(x).zfill(2) for x in c]) for c in combos]
