@@ -1746,6 +1746,8 @@ def render_deep_linkage(df_data):
             import requests
             import io
             import itertools
+            import openpyxl
+            from openpyxl.utils import get_column_letter, column_index_from_string
             
             token = st.secrets.get("GITHUB_TOKEN")
             repo = st.secrets.get("GITHUB_REPO")
@@ -1759,56 +1761,61 @@ def render_deep_linkage(df_data):
                     download_url = r.json()["download_url"]
                     file_content = requests.get(download_url).content
                     
-                    df_target = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_name, header=None)
-                    df_target = df_target.iloc[2:].dropna(how='all')
+                    # ?? 核心绝杀：彻底抛弃 pandas 的错位，改用 openpyxl 绝对精准定位
+                    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+                    ws = wb[sheet_name]
                     
                     grouped_data = {}
                     
-                    # 🔥 精准列号映射（绝对偏移量）
+                    def clean_cell(c):
+                        if c is None: return ""
+                        try: return str(int(float(c)))
+                        except: return str(c).strip()
+                        
+                    # 根据你的要求，定义精准的字母列
                     if "生肖" in mode:
-                        target_indices = [6, 36, 66, 96, 126, 156, 186] # G, AK, BO, CS, DW, FA, GE
+                        col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
                     elif "尾数" in mode:
-                        target_indices = [7, 37, 67, 97, 127, 157, 187] # H, AL, BP, CT, DX, FB, GF
+                        col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
                     else:
-                        target_indices = [3, 33, 63, 93, 123, 153, 183] # D, AH, BL, CP, DT, EX, GB
-                    
-                    def get_val(row_data, col_idx):
-                        if col_idx < len(row_data) and pd.notna(row_data[col_idx]):
-                            v = row_data[col_idx]
-                            try: return str(int(float(v)))
-                            except: return str(v).strip()
-                        return ""
-
-                    for idx, row in df_target.iterrows():
-                        try:
-                            p1 = get_val(row, 0)
-                            p2 = get_val(row, 1)
-                            p3 = get_val(row, 2)
+                        col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
+    
+                    # 遍历每一行（跳过前两行表头）
+                    for r in range(3, ws.max_row + 1):
+                        p1 = clean_cell(ws.cell(row=r, column=1).value) # A列
+                        p2 = clean_cell(ws.cell(row=r, column=2).value) # B列
+                        p3 = clean_cell(ws.cell(row=r, column=3).value) # C列
+                        year_val = clean_cell(ws.cell(row=r, column=214).value) # HF列(214列)
+                        
+                        if not p1 and not p2 and not p3: continue
+                        if not year_val: year_val = "2026" 
                             
-                            year_val = get_val(row, 213) # HF列
-                            if not year_val: year_val = "2026" 
-                                
-                            period_str = f"{year_val}{p1}{p2}{p3}"
-                            
-                            if not p1 and not p2 and not p3: continue
-                            
-                            ball_attrs = []
-                            for ball_i in range(7):
-                                col_idx = target_indices[ball_i]
-                                if "数字" in mode:
-                                    tens = get_val(row, col_idx)
-                                    units = get_val(row, col_idx + 1)
-                                    if not tens: tens = "0"
-                                    if not units: units = "0"
-                                    val = f"{tens}{units}"
-                                else:
-                                    val = get_val(row, col_idx)
-                                
-                                ball_attrs.append(val)
-                                
-                            grouped_data[period_str] = ball_attrs
-                        except Exception as e:
+                        period_str = f"{year_val}{p1}{p2}{p3}"
+                        
+                        # ?? 防覆盖盾：如果这期已经有了，绝对不让后面的脏行覆盖
+                        if period_str in grouped_data:
                             continue
+                            
+                        ball_attrs = []
+                        for ball_i in range(7):
+                            col_letter = col_names[ball_i]
+                            
+                            if "数字" in mode:
+                                # 数字模式，取当前字母列（十位）和它的下一列（个位）
+                                col_idx = column_index_from_string(col_letter)
+                                next_col_letter = get_column_letter(col_idx + 1)
+                                tens = clean_cell(ws[f"{col_letter}{r}"].value)
+                                units = clean_cell(ws[f"{next_col_letter}{r}"].value)
+                                if not tens: tens = "0"
+                                if not units: units = "0"
+                                val = f"{tens}{units}"
+                            else:
+                                # 生肖和尾数，直接取对应字母列
+                                val = clean_cell(ws[f"{col_letter}{r}"].value)
+                                
+                            ball_attrs.append(val)
+                            
+                        grouped_data[period_str] = ball_attrs
                             
                     sorted_periods = sorted(list(grouped_data.keys()))
                     
@@ -1844,7 +1851,7 @@ def render_deep_linkage(df_data):
                     report_lines.append(f"【基准期数】: {selected_period}")
                     report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
                     report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
-                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\n")
+                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\\\n")
                     
                     ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
                     
@@ -1861,14 +1868,14 @@ def render_deep_linkage(df_data):
                             line += f"  | 杀({','.join(kill_names)})"
                         report_lines.append(line)
                         
-                    report_lines.append("\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
+                    report_lines.append("\\\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
                     
-                    # 🔥 修复了原本被转义的 \\\\n 换行符
-                    st.session_state.deep_linkage_result = "\\n".join(report_lines)
+                    # ?? 修复了原本的 \\\\\\\\n 换行符，让报告可以直接正常显示
+                    st.session_state.deep_linkage_result = "\\\\n".join(report_lines)
                 else:
-                    st.error(f"❌云端文件 {target_file} 读取失败。")
+                    st.error(f"?云端文件 {target_file} 读取失败。")
             except Exception as e:
-                st.error(f"❌分析异常: {e}")
+                st.error(f"?分析异常: {e}")
 
     # ==========================
     # 4. 结果显示与打印
