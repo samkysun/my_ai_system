@@ -1765,7 +1765,7 @@ def render_deep_linkage(df_data):
                     
                     for idx, row in df_target.iterrows():
                         try:
-                            year_val = str(int(float(row[26]))) if pd.notna(row[26]) else ""
+                            year_val = str(int(float(row[213]))) if len(row) > 213 and pd.notna(row[213]) else ""
                             p1 = str(int(float(row[0]))) if pd.notna(row[0]) else ""
                             p2 = str(int(float(row[1]))) if pd.notna(row[1]) else ""
                             p3 = str(int(float(row[2]))) if pd.notna(row[2]) else ""
