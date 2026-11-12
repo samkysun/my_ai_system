@@ -1,0 +1,31 @@
+name: 自动同步全套分析表
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-excel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+        
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: 安装依赖
+        run: pip install openpyxl
+        
+      - name: 运行同步脚本
+        run: python sync_full_set.py
+        
+      - name: 提交并推送更改
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "?? 安全生成纯净版分析数据"
+          file_pattern: "*纯净版.xlsx"
