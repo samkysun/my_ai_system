@@ -140,9 +140,8 @@ def clean_period(val):
     s = str(val).strip()
     if s.endswith(".0"): s = s[:-2]
     return s
-
-
-@st.cache_data(ttl=60, show_spinner=False) # 缓存60秒，防止频繁请求
+    
+@st.cache_data(ttl=60, show_spinner=False) 
 def load_real_data():
     import requests
     import io
@@ -150,7 +149,6 @@ def load_real_data():
     token = st.secrets.get("GITHUB_TOKEN")
     repo = st.secrets.get("GITHUB_REPO")
     
-    # 默认读取升序源文件
     file_name = "升序源文件.xlsx"
     
     if not token or not repo:
@@ -175,20 +173,21 @@ def load_real_data():
 
     try:
         synced_rows = []
+        
         def clean_val(v):
             if pd.isna(v): return ""
             try: return str(int(float(v)))
             except: return str(v).strip()
             
         for idx, row in df_raw.iterrows():
+            year_val = clean_val(row[26]) if len(row) > 26 else ""
             p1 = clean_val(row[0])
             p2 = clean_val(row[1])
             p3 = clean_val(row[2])
             
-            if not p1 and not p2 and not p3:
+            if not year_val.isdigit() or not p1.isdigit():
                 continue
-            
-            year_val = clean_val(row[26]) if len(row) > 26 else "2026"
+                
             period_str = f"{year_val}{p1}{p2}{p3}"
             
             nums = []
@@ -210,6 +209,7 @@ def load_real_data():
             synced_rows.append(new_row)
             
         result_df = pd.DataFrame(synced_rows)
+        
         try:
             result_df = result_df.sort_values(by=18, ascending=False).reset_index(drop=True)
         except:
