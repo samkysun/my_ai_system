@@ -1879,29 +1879,28 @@ def render_deep_linkage(df_data):
             
             # 修复换行符
             st.session_state.deep_linkage_result = "\\n".join(report_lines)
-
-    
+      
     # ==========================
-    # 4. 结果显示与打印 (完美复刻多维分析)
+    # 4. 结果显示与打印 (完美排版版)
     # ==========================
     if "deep_linkage_result" in st.session_state and st.session_state.deep_linkage_result != "":
-        # 🔥 核心修复 1：清洗换行符，防止排版挤成一团
-        clean_text = st.session_state.deep_linkage_result.replace('\\r', '').replace('\\\\n', '\\n')
+        # 强制清洗所有可能的转义符
+        clean_text = st.session_state.deep_linkage_result.replace('\\\\r', '').replace('\\\\\\\\n', '\\\\n')
         
         import html
         import base64
         import streamlit.components.v1 as components
         from datetime import datetime
         
-        # 网页显示用的 HTML (转义防乱码，加 <br> 换行)
-        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
+        # 网页显示 HTML (带灰底和滚动条)
+        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
             {escaped_text}
         </div>
         """
         
-        # 打印用的 HTML (使用 <pre> 保持纯文本等宽格式)
+        # 打印 HTML
         print_html = f"""
         <html>
         <head>
@@ -1920,12 +1919,12 @@ def render_deep_linkage(df_data):
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
         
-        # 1. 渲染网页展示框 + 一键打印按钮
+        # 1. 显示灰底文本框 + 打印按钮
         components.html(
             f"""
             <div id="report-container" style="margin-bottom: 15px;"></div>
             <div style="text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告</button>
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">??? 打印当前报告</button>
             </div>
             <script>
             function b64DecodeUnicode(str) {{
@@ -1946,17 +1945,29 @@ def render_deep_linkage(df_data):
             height=600,
             scrolling=False
         )
-
-    # 2. 添加本地保存按钮 (TXT格式，防Excel乱码)
-    file_name = f"联动报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    st.download_button(
-        label="📥 保存完整报告到本地 (TXT格式)", 
-        data=clean_text.encode('utf-8-sig'), 
-        file_name=file_name, 
-        mime="text/plain", 
-        use_container_width=True,
-        type="secondary"
-    )
+    
+        # 2. 保存到本地按钮
+        st.write("") 
+        file_name = f"联动分析_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        st.download_button(
+            label="?? 保存完整报告到本地 (TXT格式)", 
+            data=clean_text.encode('utf-8-sig'), 
+            file_name=file_name, 
+            mime="text/plain", 
+            use_container_width=True,
+            type="secondary"
+        )
+    
+        # 2. 添加本地保存按钮 (TXT格式，防Excel乱码)
+        file_name = f"联动报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        st.download_button(
+            label="📥 保存完整报告到本地 (TXT格式)", 
+            data=clean_text.encode('utf-8-sig'), 
+            file_name=file_name, 
+            mime="text/plain", 
+            use_container_width=True,
+            type="secondary"
+        )
 
 def main_app():
     with st.sidebar:
