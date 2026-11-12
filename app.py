@@ -235,9 +235,21 @@ def calculate_prize(df_data, target_period, predicted_nums):
     }
     return result, None
 
+
 def login_page():
     st.title("🔐 智能系统客户端登录")
+    
+    # 显示注册成功的提示（刷新后不消失）
+    if st.session_state.get("reg_success", False):
+        st.success("✅ 注册成功！账号已永久保存至云端，请去左侧登录。")
+        st.session_state.reg_success = False
+
     tab1, tab2 = st.tabs(["登录", "注册新账号"])
+    
+    # 动态版本号，用来一键清空输入框
+    if "reg_version" not in st.session_state:
+        st.session_state.reg_version = 0
+    v = st.session_state.reg_version
     
     with tab1:
         user = st.text_input("用户名", key="login_user")
@@ -251,12 +263,15 @@ def login_page():
                     st.session_state.logged_in = True
                     st.session_state.username = user
                     st.rerun()
-                else: st.error("用户名或密码错误！")
+                else: 
+                    st.error("用户名或密码错误！")
                 
     with tab2:
-        reg_user = st.text_input("设置用户名", key="reg_user")
-        reg_pwd = st.text_input("设置密码", type="password", key="reg_pass")
-        reg_confirm = st.text_input("确认密码", type="password", key="reg_confirm")
+        # 注意这里的 key，加上了版本号 v
+        reg_user = st.text_input("设置用户名", key=f"v{v}_reg_user")
+        reg_pwd = st.text_input("设置密码", type="password", key=f"v{v}_reg_pass")
+        reg_confirm = st.text_input("确认密码", type="password", key=f"v{v}_reg_confirm")
+        
         if st.button("注册", use_container_width=True):
             if reg_user and reg_pwd:
                 if reg_pwd != reg_confirm: 
@@ -269,9 +284,6 @@ def login_page():
                         new_user = pd.DataFrame({'username': [reg_user], 'password': [hashlib.sha256(reg_pwd.encode()).hexdigest()]})
                         updated_df = pd.concat([users_df, new_user], ignore_index=True)
                         
-                        # ==========================================
-                        # 🔥 核心修改：将用户数据推送到 GitHub 云端
-                        # ==========================================
                         token = st.secrets.get("GITHUB_TOKEN")
                         repo = st.secrets.get("GITHUB_REPO")
                         
@@ -284,31 +296,30 @@ def login_page():
                                 url = f"https://api.github.com/repos/{repo}/contents/users.csv"
                                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
                                 
-                                # 1. 获取原文件的 sha (每次覆盖必须要有这个)
                                 r = requests.get(url, headers=headers)
                                 sha = r.json()["sha"] if r.status_code == 200 else None
                                 
-                                # 2. 将新数据转成 CSV 格式并编码
                                 out = io.StringIO()
                                 updated_df.to_csv(out, index=False)
                                 b64_content = base64.b64encode(out.getvalue().encode('utf-8')).decode('utf-8')
                                 
-                                # 3. 推送到 GitHub
                                 payload = {"message": f"新用户注册: {reg_user}", "content": b64_content, "branch": "main"}
                                 if sha: payload["sha"] = sha
                                 
                                 res = requests.put(url, headers=headers, json=payload)
                                 
                                 if res.status_code in [200, 201]:
-                                    st.success("✅ 注册成功！账号已永久保存至云端，请去左侧登录。")
+                                    # 🔥 核心：注册成功后，标记成功状态，把版本号+1（输入框立马清空），然后刷新页面
+                                    st.session_state.reg_success = True
+                                    st.session_state.reg_version += 1
+                                    st.rerun()
                                 else:
-                                    st.error(f"❌ 注册失败，状态码: {res.status_code}，请检查网络或权限。")
+                                    st.error(f"❌ 注册失败，状态码: {res.status_code}")
                             except Exception as e:
                                 st.error(f"❌ 云端保存异常: {e}")
                         else:
-                            # 如果没配置 GitHub Secrets，就保存在本地（本地测试用）
                             updated_df.to_csv(USER_FILE, index=False)
-                            st.success("✅ 注册成功（仅保存在本地）！请去左侧登录。")    
+                            st.success("✅ 注册成功（仅保存在本地）！请去左侧登录。")        
 
 def render_console(df_data):
     # 👇 导入模块
