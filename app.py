@@ -1689,23 +1689,225 @@ def render_multi_analysis(df_data):
         )
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
+def render_deep_linkage(df_data):
+    #🌟页面大标题
+    st.title("🔗深度联动分析系统")
+    
+    #🌟间隔区说明
+    st.info("""
+    **💡功能说明：** 
+    本系统通过提取基准期开奖号码的属性组合（每3个一组），在全历史数据中寻找相同组合，并统计命中后**下一期各球位的属性频次**。
+    系统会自动将出现次数最多的排在前列，剩余次数较少的作为杀码参考。
+    """)
+    
+    st.divider()
+
+    # ==========================
+    # 1. 界面参数设置
+    # ==========================
+    st.markdown("### 分析参数设置")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数", "升序数字", "按序数字"])
+    with col2:
+        if df_data is not None and not isinstance(df_data, str):
+            unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
+            try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+            except: unique_periods.sort(reverse=True)
+        else:
+            unique_periods = ["暂无数据"]
+        selected_period = st.selectbox("基准期数", unique_periods)
+    with col3:
+        if "生肖" in mode:
+            pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5)
+        else:
+            pick_num = st.number_input("预测前N名", min_value=3, max_value=7, value=5)
+    with col4:
+        st.write("")
+        st.write("")
+        run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
+
+    if "升序" in mode:
+        target_file = "升序全套.xlsx"
+        sheet_name = "升序全套分析"
+    else:
+        target_file = "按序全套.xlsx"
+        sheet_name = "按序全套分析"
+
+    st.info(f"💡当前读取文件：【{target_file}】 | 工作表：【{sheet_name}】")
+
+    # ==========================
+    # 2. 执行分析逻辑
+    # ==========================
+    if run_btn:
+        with st.spinner(f"正在从云端读取 {target_file} 并进行按球位的深度频次统计..."):
+            import requests
+            import io
+            import itertools
+            
+            token = st.secrets.get("GITHUB_TOKEN")
+            repo = st.secrets.get("GITHUB_REPO")
+            
+            try:
+                url = f"https://api.github.com/repos/{repo}/contents/{target_file}"
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                r = requests.get(url, headers=headers)
+                
+                if r.status_code == 200:
+                    download_url = r.json()["download_url"]
+                    file_content = requests.get(download_url).content
+                    
+                    df_target = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_name, header=None)
+                    df_target = df_target.iloc[2:].dropna(how='all')
+                    
+                    grouped_data = {}
+                    
+                    for idx, row in df_target.iterrows():
+                        try:
+                            year_val = str(int(float(row[26]))) if pd.notna(row[26]) else ""
+                            p1 = str(int(float(row[0]))) if pd.notna(row[0]) else ""
+                            p2 = str(int(float(row[1]))) if pd.notna(row[1]) else ""
+                            p3 = str(int(float(row[2]))) if pd.notna(row[2]) else ""
+                            period_str = f"{year_val}{p1}{p2}{p3}"
+                            
+                            if len(period_str) < 5: continue 
+                            
+                            ball_attrs = []
+                            for ball_i in range(7):
+                                offset = ball_i * 30
+                                if "生肖" in mode:
+                                    val = row[6 + offset] 
+                                elif "尾数" in mode:
+                                    val = row[7 + offset] 
+                                else: 
+                                    tens = str(int(float(row[3 + offset]))) if pd.notna(row[3 + offset]) else "0"
+                                    units = str(int(float(row[4 + offset]))) if pd.notna(row[4 + offset]) else "0"
+                                    val = f"{tens}{units}"
+                                
+                                ball_attrs.append(str(val).strip())
+                                
+                            grouped_data[period_str] = ball_attrs
+                        except:
+                            continue
+                            
+                    sorted_periods = sorted(list(grouped_data.keys()))
+                    
+                    if selected_period not in sorted_periods:
+                        st.error(f"在历史数据中找不到基准期数 {selected_period}！")
+                        st.stop()
+                        
+                    target_idx = sorted_periods.index(selected_period)
+                    base_attrs = grouped_data[selected_period]
+                    target_combos = list(itertools.combinations(base_attrs, 3))
+                    
+                    if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+                    elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
+                    else: all_possible = [f"{i:02d}" for i in range(1, 50)]
+                        
+                    freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
+                    hit_count = 0
+                    
+                    for i in range(target_idx):
+                        hist_attrs = grouped_data[sorted_periods[i]]
+                        is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
+                                
+                        if is_hit and i + 1 < target_idx:
+                            next_attrs = grouped_data[sorted_periods[i+1]]
+                            hit_count += 1
+                            for ball_i in range(7):
+                                attr = next_attrs[ball_i]
+                                if attr in freq_dict[ball_i]:
+                                    freq_dict[ball_i][attr] += 1
+                                    
+                    report_lines = []
+                    report_lines.append(f"========== {mode} 3码联动分析 ==========")
+                    report_lines.append(f"【基准期数】: {selected_period}")
+                    report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
+                    report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
+                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\\\n")
+                    
+                    ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+                    
+                    for ball_i in range(7):
+                        sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
+                        top_N = sorted_freq[:pick_num]
+                        kills = sorted_freq[pick_num:]
+                        
+                        top_names = [item[0] for item in top_N]
+                        kill_names = [item[0] for item in kills]
+                        
+                        line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
+                        if kill_names:
+                            line += f"  | 杀({','.join(kill_names)})"
+                        report_lines.append(line)
+                        
+                    report_lines.append("\\\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
+                    st.session_state.deep_linkage_result = "\\\\n".join(report_lines)
+                else:
+                    st.error(f"❌云端文件 {target_file} 读取失败。")
+            except Exception as e:
+                st.error(f"❌分析异常: {e}")
+
+    # ==========================
+    # 4. 结果显示与打印
+    # ==========================
+    if "deep_linkage_result" in st.session_state and st.session_state.deep_linkage_result != "":
+        clean_text = st.session_state.deep_linkage_result
+        st.text_area("联动分析报告:", value=clean_text, height=400)
+        
+        import html
+        import base64
+        import streamlit.components.v1 as components
+        
+        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
+        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{escaped_text}</div>'
+        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{html.escape(clean_text)}</pre></body></html>'
+        
+        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
+        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+        
+        components.html(
+            f"""
+            <div id="report-container"></div>
+            <div style="margin-top: 15px; text-align: center;">
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">??? 打印当前报告</button>
+            </div>
+            <script>
+            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
+            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
+            </script>
+            """, height=620, scrolling=False
+        )
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
-        menu = st.radio("功能导航：", ["主控制台", "同现统计", "AI推演", "多维分析"])
+            
+        st.divider()  
+        
+        # 🔥 加上 Emoji 小图标
+        menu = st.radio("功能导航：", [
+            "🖥️ 主控制台", 
+            "📊 同现统计", 
+            "🤖 AI推演", 
+            "📐 多维分析", 
+            "🔗 深度联动"
+        ])
+        
+        st.divider()  
 
     if "synced_df" in st.session_state and st.session_state.synced_df is not None:
         df_data = st.session_state.synced_df
     else:
         df_data = load_real_data()
     
-    if menu == "主控制台": render_console(df_data)
-    elif menu == "同现统计": render_stats(df_data)
-    elif menu == "AI推演": render_ai(df_data)  # 🔥 核心修改：传参进去
-    elif menu == "多维分析": render_multi_analysis(df_data) # 🔥 新增这一行    
-
-if not st.session_state.logged_in: login_page()
-else: main_app()
+    # 🔥 核心修改：使用 'in' 进行模糊匹配，这样加了图标也能正确跳转
+    if "主控制台" in menu: render_console(df_data)
+    elif "同现统计" in menu: render_stats(df_data)
+    elif "AI推演" in menu: render_ai(df_data)
+    elif "多维分析" in menu: render_multi_analysis(df_data)
+    elif "深度联动" in menu: render_deep_linkage(df_data)    
