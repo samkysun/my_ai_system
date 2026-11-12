@@ -247,6 +247,14 @@ def login_page():
                         st.success("注册成功！请去左侧登录。")
 
 def render_console(df_data):
+    # 👇 加在这里
+    import requests
+    import openpyxl
+    import io
+    import base64
+    
+    st.title("智能数据分析总控台")
+    # ... 下面的代码保持不变 ...    
     st.title("智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
@@ -440,7 +448,6 @@ def render_console(df_data):
         with col_sync1:
             if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
                 with st.spinner("正在合并总表..."):
-                    import requests, openpyxl, io, base64
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
                     if not token or not repo:
@@ -497,7 +504,6 @@ def render_console(df_data):
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
                 with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
-                    import requests, openpyxl, io, base64
                     
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
