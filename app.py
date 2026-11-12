@@ -1761,35 +1761,61 @@ def render_deep_linkage(df_data):
                     df_target = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_name, header=None)
                     df_target = df_target.iloc[2:].dropna(how='all')
                     
+                    
                     grouped_data = {}
+                    debug_printed = False # 用于只打印一次调试信息
                     
                     for idx, row in df_target.iterrows():
                         try:
-                            year_val = str(int(float(row[213]))) if len(row) > 213 and pd.notna(row[213]) else ""
-                            p1 = str(int(float(row[0]))) if pd.notna(row[0]) else ""
-                            p2 = str(int(float(row[1]))) if pd.notna(row[1]) else ""
-                            p3 = str(int(float(row[2]))) if pd.notna(row[2]) else ""
+                            # 内部安全取值函数
+                            def get_val(c):
+                                if c < len(row) and pd.notna(row[c]):
+                                    v = row[c]
+                                    try: return str(int(float(v)))
+                                    except: return str(v).strip()
+                                return ""
+                                
+                            # 1. 提取期数
+                            p1 = get_val(0)
+                            p2 = get_val(1)
+                            p3 = get_val(2)
+                            
+                            # 2. 提取年份（🔥 终极兜底：如果 HF 列读不到，强制设为 2026，绝不让它变空）
+                            year_val = get_val(213)
+                            if not year_val:
+                                year_val = "2026" 
+                                
                             period_str = f"{year_val}{p1}{p2}{p3}"
                             
-                            if len(period_str) < 5: continue 
-                            
+                            # 3. 如果 p1, p2, p3 全是空，说明是空行，跳过
+                            if not p1 and not p2 and not p3:
+                                continue
+                                
+                            # 🔥 照妖镜：只打印最前面几行，看看拼出来的是什么
+                            if not debug_printed:
+                                st.info(f"👀 调试透视：抓到的第一行数据拼装结果为 -> 【{period_str}】")
+                                debug_printed = True
+                    
                             ball_attrs = []
                             for ball_i in range(7):
                                 offset = ball_i * 30
                                 if "生肖" in mode:
-                                    val = row[6 + offset] 
+                                    val = get_val(6 + offset)
                                 elif "尾数" in mode:
-                                    val = row[7 + offset] 
+                                    val = get_val(7 + offset)
                                 else: 
-                                    tens = str(int(float(row[3 + offset]))) if pd.notna(row[3 + offset]) else "0"
-                                    units = str(int(float(row[4 + offset]))) if pd.notna(row[4 + offset]) else "0"
+                                    tens = get_val(3 + offset)
+                                    units = get_val(4 + offset)
+                                    if not tens: tens = "0"
+                                    if not units: units = "0"
                                     val = f"{tens}{units}"
                                 
                                 ball_attrs.append(str(val).strip())
                                 
                             grouped_data[period_str] = ball_attrs
-                        except:
+                        except Exception as e:
                             continue
+                    
                             
                     sorted_periods = sorted(list(grouped_data.keys()))
                     
