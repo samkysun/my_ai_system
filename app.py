@@ -1253,7 +1253,6 @@ def load_excel_data(file_path, sheet_name):
 
 
 def render_multi_analysis(df_data):
-    def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
     # 1. 标题和初始化（必须在最上面）
