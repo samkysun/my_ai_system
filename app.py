@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import hashlib
 import time
+
 import os
 import itertools
 from collections import Counter
@@ -1270,30 +1271,30 @@ def render_multi_analysis(df_data):
     # 2. 参数设置区（必须在计算逻辑上方）
     st.markdown("### 分析参数设置")
     # 🔥 第一排：只放 4 个宽框（期数、文件、属性、球号）
-row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-with row1_col1:
-    unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
-    try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
-    except: unique_periods.sort(reverse=True)
-    selected_period = st.selectbox("基准期数", unique_periods)
-with row1_col2: 
-    selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
-with row1_col3: 
-    selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
-with row1_col4:
+    row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+    with row1_col1:
+        unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
+        try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+        except: unique_periods.sort(reverse=True)
+        selected_period = st.selectbox("基准期数", unique_periods)
+    with row1_col2: 
+        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
+    with row1_col3: 
+        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
+    with row1_col4:
     ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
     ball_num = int(ball_str.replace("第", "").split("球")[0])
 
-# 🔥 第二排：只放 2 个宽宽的数字框 + 按钮，给足空间，保证加减号出来
-row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
-with row2_col1: 
-    min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
-with row2_col2: 
-    max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
-with row2_col3:
-    st.write("")
-    st.write("")
-    run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
+    # 🔥 第二排：只放 2 个宽宽的数字框 + 按钮，给足空间，保证加减号出来
+    row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
+    with row2_col1: 
+        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
+    with row2_col2: 
+        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
+    with row2_col3:
+        st.write("")
+        st.write("")
+        run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
     base_excel_col = ATTR_MAP[selected_attr]
     check_col_letter = get_column_letter(base_excel_col + (ball_num - 1) * 30)
