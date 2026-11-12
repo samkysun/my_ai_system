@@ -1018,9 +1018,36 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter
 
 # 🔥 核心优化：使用缓存读取，极大提升速度
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=10) # 缓存10秒，过期后自动重新去云端拉取
 def load_excel_data(file_path, sheet_name):
-    return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+    import requests
+    import io
+    
+    # 从 st.secrets 获取你的仓库配置
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    
+    # 如果没有配置云端，退回到本地读取（用于你本地测试）
+    if not token or not repo:
+        return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+        
+    try:
+        # 直接从 GitHub 实时下载最新文件
+        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+        
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            download_url = r.json()["download_url"]
+            # 下载文件内容到内存并读取
+            content = requests.get(download_url).content
+            return pd.read_excel(io.BytesIO(content), sheet_name=sheet_name, header=None)
+        else:
+            st.error(f"读取云端文件失败，状态码: {r.status_code}")
+            return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+    except Exception as e:
+        st.error(f"云端读取异常: {e}")
+        return pd.read_excel(file_path, sheet_name=sheet_name, header=None)
 
 def render_multi_analysis(df_data):
     st.title("多维分析系统")
