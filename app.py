@@ -1689,13 +1689,14 @@ def render_multi_analysis(df_data):
         )
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
+
 def render_deep_linkage(df_data):
-    #🌟页面大标题
-    st.title("🔗深度联动分析系统")
+    # 🌟 页面大标题
+    st.title("🔗 深度联动分析系统")
     
-    #🌟间隔区说明
+    # 🌟 间隔区说明
     st.info("""
-    **💡功能说明：** 
+    **💡 功能说明：** 
     本系统通过提取基准期开奖号码的属性组合（每3个一组），在全历史数据中寻找相同组合，并统计命中后**下一期各球位的属性频次**。
     系统会自动将出现次数最多的排在前列，剩余次数较少的作为杀码参考。
     """)
@@ -1761,61 +1762,53 @@ def render_deep_linkage(df_data):
                     df_target = pd.read_excel(io.BytesIO(file_content), sheet_name=sheet_name, header=None)
                     df_target = df_target.iloc[2:].dropna(how='all')
                     
-                    
                     grouped_data = {}
-                    debug_printed = False # 用于只打印一次调试信息
                     
+                    # 🔥 精准列号映射（绝对偏移量）
+                    if "生肖" in mode:
+                        target_indices = [6, 36, 66, 96, 126, 156, 186] # G, AK, BO, CS, DW, FA, GE
+                    elif "尾数" in mode:
+                        target_indices = [7, 37, 67, 97, 127, 157, 187] # H, AL, BP, CT, DX, FB, GF
+                    else:
+                        target_indices = [3, 33, 63, 93, 123, 153, 183] # D, AH, BL, CP, DT, EX, GB
+                    
+                    def get_val(row_data, col_idx):
+                        if col_idx < len(row_data) and pd.notna(row_data[col_idx]):
+                            v = row_data[col_idx]
+                            try: return str(int(float(v)))
+                            except: return str(v).strip()
+                        return ""
+
                     for idx, row in df_target.iterrows():
                         try:
-                            # 内部安全取值函数
-                            def get_val(c):
-                                if c < len(row) and pd.notna(row[c]):
-                                    v = row[c]
-                                    try: return str(int(float(v)))
-                                    except: return str(v).strip()
-                                return ""
-                                
-                            # 1. 提取期数
-                            p1 = get_val(0)
-                            p2 = get_val(1)
-                            p3 = get_val(2)
+                            p1 = get_val(row, 0)
+                            p2 = get_val(row, 1)
+                            p3 = get_val(row, 2)
                             
-                            # 2. 提取年份（🔥 终极兜底：如果 HF 列读不到，强制设为 2026，绝不让它变空）
-                            year_val = get_val(213)
-                            if not year_val:
-                                year_val = "2026" 
+                            year_val = get_val(row, 213) # HF列
+                            if not year_val: year_val = "2026" 
                                 
                             period_str = f"{year_val}{p1}{p2}{p3}"
                             
-                            # 3. 如果 p1, p2, p3 全是空，说明是空行，跳过
-                            if not p1 and not p2 and not p3:
-                                continue
-                                
-                            # 🔥 照妖镜：只打印最前面几行，看看拼出来的是什么
-                            if not debug_printed:
-                                st.info(f"👀 调试透视：抓到的第一行数据拼装结果为 -> 【{period_str}】")
-                                debug_printed = True
-                    
+                            if not p1 and not p2 and not p3: continue
+                            
                             ball_attrs = []
                             for ball_i in range(7):
-                                offset = ball_i * 30
-                                if "生肖" in mode:
-                                    val = get_val(6 + offset)
-                                elif "尾数" in mode:
-                                    val = get_val(7 + offset)
-                                else: 
-                                    tens = get_val(3 + offset)
-                                    units = get_val(4 + offset)
+                                col_idx = target_indices[ball_i]
+                                if "数字" in mode:
+                                    tens = get_val(row, col_idx)
+                                    units = get_val(row, col_idx + 1)
                                     if not tens: tens = "0"
                                     if not units: units = "0"
                                     val = f"{tens}{units}"
+                                else:
+                                    val = get_val(row, col_idx)
                                 
-                                ball_attrs.append(str(val).strip())
+                                ball_attrs.append(val)
                                 
                             grouped_data[period_str] = ball_attrs
                         except Exception as e:
                             continue
-                    
                             
                     sorted_periods = sorted(list(grouped_data.keys()))
                     
@@ -1851,7 +1844,7 @@ def render_deep_linkage(df_data):
                     report_lines.append(f"【基准期数】: {selected_period}")
                     report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
                     report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
-                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\\\n")
+                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\n")
                     
                     ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
                     
@@ -1868,8 +1861,10 @@ def render_deep_linkage(df_data):
                             line += f"  | 杀({','.join(kill_names)})"
                         report_lines.append(line)
                         
-                    report_lines.append("\\\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
-                    st.session_state.deep_linkage_result = "\\\\n".join(report_lines)
+                    report_lines.append("\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
+                    
+                    # 🔥 修复了原本被转义的 \\\\n 换行符
+                    st.session_state.deep_linkage_result = "\\n".join(report_lines)
                 else:
                     st.error(f"❌云端文件 {target_file} 读取失败。")
             except Exception as e:
@@ -1886,7 +1881,8 @@ def render_deep_linkage(df_data):
         import base64
         import streamlit.components.v1 as components
         
-        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
+        # 🔥 修复了原本被转义的 \\\\n 换行符
+        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{escaped_text}</div>'
         print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{html.escape(clean_text)}</pre></body></html>'
         
@@ -1897,7 +1893,7 @@ def render_deep_linkage(df_data):
             f"""
             <div id="report-container"></div>
             <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">??? 打印当前报告</button>
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告</button>
             </div>
             <script>
             function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
@@ -1906,6 +1902,7 @@ def render_deep_linkage(df_data):
             </script>
             """, height=620, scrolling=False
         )
+
 def main_app():
     with st.sidebar:
         st.write("👤 欢迎，" + st.session_state.username)
