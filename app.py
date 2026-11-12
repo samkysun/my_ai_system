@@ -1690,81 +1690,6 @@ def render_multi_analysis(df_data):
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
 
-# ==========================================
-# 🚀 深度联动：极速缓存引擎（把你原来的读取代码装在了这里，为了加速）
-# ==========================================
-@st.cache_data(ttl=300, show_spinner=False)
-def get_cached_linkage_data(target_file, sheet_name, mode):
-    import requests
-    import io
-    import openpyxl
-    
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    
-    url = f"https://api.github.com/repos/{repo}/contents/{target_file}"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-    r = requests.get(url, headers=headers)
-    
-    if r.status_code != 200:
-        return None
-        
-    download_url = r.json()["download_url"]
-    file_content = requests.get(download_url).content
-    
-    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
-    ws = wb[sheet_name]
-    
-    grouped_data = {}
-    
-    def clean_cell(c):
-        if c is None: return ""
-        try: return str(int(float(c)))
-        except: return str(c).strip()
-        
-    if "生肖" in mode:
-        col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
-    elif "尾数" in mode:
-        col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
-    else:
-        col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
-
-    for r_idx in range(3, ws.max_row + 1):
-        p1 = clean_cell(ws.cell(row=r_idx, column=1).value)
-        p2 = clean_cell(ws.cell(row=r_idx, column=2).value)
-        p3 = clean_cell(ws.cell(row=r_idx, column=3).value)
-        year_val = clean_cell(ws.cell(row=r_idx, column=214).value)
-        
-        if not p1 and not p2 and not p3: continue
-        if not year_val: year_val = "2026" 
-            
-        period_str = f"{year_val}{p1}{p2}{p3}"
-        
-        if period_str in grouped_data: continue
-            
-        ball_attrs = []
-        for ball_i in range(7):
-            col_letter = col_names[ball_i]
-            
-            if "数字" in mode:
-                from openpyxl.utils import get_column_letter, column_index_from_string
-                col_idx = column_index_from_string(col_letter)
-                next_col_letter = get_column_letter(col_idx + 1)
-                tens = clean_cell(ws[f"{col_letter}{r_idx}"].value)
-                units = clean_cell(ws[f"{next_col_letter}{r_idx}"].value)
-                if not tens: tens = "0"
-                if not units: units = "0"
-                val = f"{tens}{units}"
-            else:
-                val = clean_cell(ws[f"{col_letter}{r_idx}"].value)
-                
-            ball_attrs.append(val)
-        grouped_data[period_str] = ball_attrs
-    return grouped_data
-
-# ==========================================
-# 🚀 深度联动：主页面 (你的原版逻辑 + 极速缓存)
-# ==========================================
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
     st.title("🔗 深度联动分析系统")
@@ -1817,71 +1742,140 @@ def render_deep_linkage(df_data):
     # 2. 执行分析逻辑
     # ==========================
     if run_btn:
-        with st.spinner(f"正在读取数据并统计..."):
+        with st.spinner(f"正在从云端读取 {target_file} 并进行按球位的深度频次统计..."):
+            import requests
+            import io
             import itertools
+            import openpyxl
+            from openpyxl.utils import get_column_letter, column_index_from_string
             
-            # 🔥 核心提速：直接调用缓存好的数据，第一次稍微等2秒，后续秒出！
-            grouped_data = get_cached_linkage_data(target_file, sheet_name, mode)
+            token = st.secrets.get("GITHUB_TOKEN")
+            repo = st.secrets.get("GITHUB_REPO")
             
-            if not grouped_data:
-                st.error(f"❌ 云端文件 {target_file} 读取失败。")
-                st.stop()
+            try:
+                url = f"https://api.github.com/repos/{repo}/contents/{target_file}"
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                r = requests.get(url, headers=headers)
                 
-            sorted_periods = sorted(list(grouped_data.keys()))
-            
-            if selected_period not in sorted_periods:
-                st.error(f"在历史数据中找不到基准期数 {selected_period}！")
-                st.stop()
-                
-            target_idx = sorted_periods.index(selected_period)
-            base_attrs = grouped_data[selected_period]
-            target_combos = list(itertools.combinations(base_attrs, 3))
-            
-            if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
-            elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
-            else: all_possible = [f"{i:02d}" for i in range(1, 50)]
-                
-            freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
-            hit_count = 0
-            
-            for i in range(target_idx):
-                hist_attrs = grouped_data[sorted_periods[i]]
-                is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
+                if r.status_code == 200:
+                    download_url = r.json()["download_url"]
+                    file_content = requests.get(download_url).content
+                    
+                    # ?? 核心绝杀：彻底抛弃 pandas 的错位，改用 openpyxl 绝对精准定位
+                    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+                    ws = wb[sheet_name]
+                    
+                    grouped_data = {}
+                    
+                    def clean_cell(c):
+                        if c is None: return ""
+                        try: return str(int(float(c)))
+                        except: return str(c).strip()
                         
-                if is_hit and i + 1 < target_idx:
-                    next_attrs = grouped_data[sorted_periods[i+1]]
-                    hit_count += 1
-                    for ball_i in range(7):
-                        attr = next_attrs[ball_i]
-                        if attr in freq_dict[ball_i]:
-                            freq_dict[ball_i][attr] += 1
+                    # 根据你的要求，定义精准的字母列
+                    if "生肖" in mode:
+                        col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
+                    elif "尾数" in mode:
+                        col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
+                    else:
+                        col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
+    
+                    # 遍历每一行（跳过前两行表头）
+                    for r in range(3, ws.max_row + 1):
+                        p1 = clean_cell(ws.cell(row=r, column=1).value) # A列
+                        p2 = clean_cell(ws.cell(row=r, column=2).value) # B列
+                        p3 = clean_cell(ws.cell(row=r, column=3).value) # C列
+                        year_val = clean_cell(ws.cell(row=r, column=214).value) # HF列(214列)
+                        
+                        if not p1 and not p2 and not p3: continue
+                        if not year_val: year_val = "2026" 
                             
-            report_lines = []
-            report_lines.append(f"========== {mode} 3码联动分析 ==========")
-            report_lines.append(f"【基准期数】: {selected_period}")
-            report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
-            report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
-            report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\n")
-            
-            ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
-            
-            for ball_i in range(7):
-                sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
-                top_N = sorted_freq[:pick_num]
-                kills = sorted_freq[pick_num:]
-                
-                top_names = [item[0] for item in top_N]
-                kill_names = [item[0] for item in kills]
-                
-                line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
-                if kill_names:
-                    line += f"  | 杀({','.join(kill_names)})"
-                report_lines.append(line)
-                
-            report_lines.append("\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
-            
-            # 🔥 修复了换行符，不再使用 \\\\\\\\n 这种错误写法，改为真正的换行
-            st.session_state.deep_linkage_result = "\\n".join(report_lines)
+                        period_str = f"{year_val}{p1}{p2}{p3}"
+                        
+                        # ?? 防覆盖盾：如果这期已经有了，绝对不让后面的脏行覆盖
+                        if period_str in grouped_data:
+                            continue
+                            
+                        ball_attrs = []
+                        for ball_i in range(7):
+                            col_letter = col_names[ball_i]
+                            
+                            if "数字" in mode:
+                                # 数字模式，取当前字母列（十位）和它的下一列（个位）
+                                col_idx = column_index_from_string(col_letter)
+                                next_col_letter = get_column_letter(col_idx + 1)
+                                tens = clean_cell(ws[f"{col_letter}{r}"].value)
+                                units = clean_cell(ws[f"{next_col_letter}{r}"].value)
+                                if not tens: tens = "0"
+                                if not units: units = "0"
+                                val = f"{tens}{units}"
+                            else:
+                                # 生肖和尾数，直接取对应字母列
+                                val = clean_cell(ws[f"{col_letter}{r}"].value)
+                                
+                            ball_attrs.append(val)
+                            
+                        grouped_data[period_str] = ball_attrs
+                            
+                    sorted_periods = sorted(list(grouped_data.keys()))
+                    
+                    if selected_period not in sorted_periods:
+                        st.error(f"在历史数据中找不到基准期数 {selected_period}！")
+                        st.stop()
+                        
+                    target_idx = sorted_periods.index(selected_period)
+                    base_attrs = grouped_data[selected_period]
+                    target_combos = list(itertools.combinations(base_attrs, 3))
+                    
+                    if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+                    elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
+                    else: all_possible = [f"{i:02d}" for i in range(1, 50)]
+                        
+                    freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
+                    hit_count = 0
+                    
+                    for i in range(target_idx):
+                        hist_attrs = grouped_data[sorted_periods[i]]
+                        is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
+                                
+                        if is_hit and i + 1 < target_idx:
+                            next_attrs = grouped_data[sorted_periods[i+1]]
+                            hit_count += 1
+                            for ball_i in range(7):
+                                attr = next_attrs[ball_i]
+                                if attr in freq_dict[ball_i]:
+                                    freq_dict[ball_i][attr] += 1
+                                    
+                    report_lines = []
+                    report_lines.append(f"========== {mode} 3码联动分析 ==========")
+                    report_lines.append(f"【基准期数】: {selected_period}")
+                    report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
+                    report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
+                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\\\n")
+                    
+                    ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+                    
+                    for ball_i in range(7):
+                        sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
+                        top_N = sorted_freq[:pick_num]
+                        kills = sorted_freq[pick_num:]
+                        
+                        top_names = [item[0] for item in top_N]
+                        kill_names = [item[0] for item in kills]
+                        
+                        line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
+                        if kill_names:
+                            line += f"  | 杀({','.join(kill_names)})"
+                        report_lines.append(line)
+                        
+                    report_lines.append("\\\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
+                    
+                    # ?? 修复了原本的 \\\\\\\\n 换行符，让报告可以直接正常显示
+                    st.session_state.deep_linkage_result = "\\\\n".join(report_lines)
+                else:
+                    st.error(f"?云端文件 {target_file} 读取失败。")
+            except Exception as e:
+                st.error(f"?分析异常: {e}")
 
     # ==========================
     # 4. 结果显示与打印
@@ -1894,7 +1888,7 @@ def render_deep_linkage(df_data):
         import base64
         import streamlit.components.v1 as components
         
-        # 🔥 修复了打印排版用的转义符
+        # 🔥 修复了原本被转义的 \\\\n 换行符
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{escaped_text}</div>'
         print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{html.escape(clean_text)}</pre></body></html>'
