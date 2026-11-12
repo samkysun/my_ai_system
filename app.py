@@ -1889,7 +1889,7 @@ def main_app():
             
         st.divider()  
         
-        # 🔥 加上 Emoji 小图标
+        # 🔥 带有 Emoji 的导航栏
         menu = st.radio("功能导航：", [
             "🖥️ 主控制台", 
             "📊 同现统计", 
@@ -1905,9 +1905,17 @@ def main_app():
     else:
         df_data = load_real_data()
     
-    # 🔥 核心修改：使用 'in' 进行模糊匹配，这样加了图标也能正确跳转
+    # 🔥 使用 'in' 进行模糊匹配（防止 Emoji 乱码导致点不动）
     if "主控制台" in menu: render_console(df_data)
     elif "同现统计" in menu: render_stats(df_data)
     elif "AI推演" in menu: render_ai(df_data)
     elif "多维分析" in menu: render_multi_analysis(df_data)
-    elif "深度联动" in menu: render_deep_linkage(df_data)    
+    elif "深度联动" in menu: render_deep_linkage(df_data)
+
+# ==========================================
+# 底部启动代码（这部分千万不能漏）
+# ==========================================
+if not st.session_state.logged_in: 
+    login_page()
+else: 
+    main_app()
