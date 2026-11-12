@@ -460,91 +460,36 @@ def render_console(df_data):
     
         
         # ------------------------------------------
-        # 📊 右边按钮：更新全套分析表
+        # 📊 右边按钮：通知机器人去更新云端全套分析表
         # ------------------------------------------
         with col_sync2:
-            if st.button("🚀 将【源文件】同步至【全套分析表】", use_container_width=True, type="secondary"):
-                with st.spinner("正在拉取文件、复制公式并同步（几兆文件秒传）..."):
-                    import requests
-                    import openpyxl
-                    import io
-                    import base64
-                    from copy import copy
-                    
-                    token = st.secrets.get("GITHUB_TOKEN")
-                    repo = st.secrets.get("GITHUB_REPO")
-                    
-                    if not token or not repo:
-                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                    else:
-                        try:
-                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                            
-                            def get_github_file_info(file_path):
-                                url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-                                r = requests.get(url, headers=headers)
-                                return r.json() if r.status_code == 200 else None
-                            
-                            def sync_to_full_set(src_file, dst_file, dst_sheet_name):
-                                # 1. 拉取源文件
-                                src_info = get_github_file_info(src_file)
-                                if not src_info: return False, f"找不到源文件 {src_file}"
-                                src_content = requests.get(src_info["download_url"]).content
-                                wb_src = openpyxl.load_workbook(io.BytesIO(src_content), data_only=True)
-                                ws_src = wb_src["数据源"]
-                                
-                                # 2. 拉取目标全套表（现在只有几兆，下载极快）
-                                dst_info = get_github_file_info(dst_file)
-                                if not dst_info: return False, f"找不到目标文件 {dst_file}"
-                                dst_content = requests.get(dst_info["download_url"]).content
-                                wb_dst = openpyxl.load_workbook(io.BytesIO(dst_content), keep_vba=True)
-                                
-                                if dst_sheet_name not in wb_dst.sheetnames: return False, f"{dst_file} 缺少表 {dst_sheet_name}"
-                                ws_dst = wb_dst[dst_sheet_name]
-                                
-                                # 3. 插入行并复制上一行的公式格式
-                                ws_dst.insert_rows(3)
-                                max_col = ws_dst.max_column
-                                for col in range(1, max_col + 1):
-                                    old_cell = ws_dst.cell(row=4, column=col)
-                                    new_cell = ws_dst.cell(row=3, column=col)
-                                    new_cell.value = old_cell.value
-                                    if old_cell.has_style:
-                                        new_cell._style = copy(old_cell._style)
-                                
-                                # 4. 严格按你的映射覆盖新数字
-                                mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
-                                for s_col, d_col in mapping.items():
-                                    val = ws_src[f"{s_col}3"].value
-                                    ws_dst[f"{d_col}3"] = val if val is not None else ""
-                                
-                                # 5. 保存并推送到 GitHub (因为文件小，直接用普通 API 即可)
-                                output = io.BytesIO()
-                                wb_dst.save(output)
-                                b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
-                                
-                                url = f"https://api.github.com/repos/{repo}/contents/{dst_file}"
-                                payload = {"message": f"管理员手动更新 {dst_sheet_name}", "content": b64_content, "sha": dst_info["sha"], "branch": "main"}
-                                put_res = requests.put(url, headers=headers, json=payload)
-                                
-                                if put_res.status_code in [200, 201]:
-                                    return True, "成功"
-                                else:
-                                    return False, put_res.text
-        
-                            # 6. 执行双写
-                            s1, m1 = sync_to_full_set("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
-                            s2, m2 = sync_to_full_set("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
-                            
-                            if s1 and s2:
-                                st.success("✅ 升序全套 & 按序全套 均已成功更新！")
-                                st.info("👉 提示：云端公式会自动计算属性，你可以直接去网页做多维分析了。")
-                            else:
-                                if not s1: st.error(f"❌ 升序全套同步失败: {m1}")
-                                if not s2: st.error(f"❌ 按序全套同步失败: {m2}")
-        
-                        except Exception as e:
-                            st.error(f"同步异常: {e}")
+            if st.button("🚀 通知机器人去更新带公式的全套表", use_container_width=True, type="secondary"):
+                import requests
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                
+                if not token or not repo:
+                    st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                else:
+                    try:
+                        # 这里填你之前建好的 YAML 文件名
+                        workflow_file = "sync_full_set.yml" 
+                        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+                        
+                        headers = {
+                            "Accept": "application/vnd.github.v3+json",
+                            "Authorization": f"Bearer {token}"
+                        }
+                        data = {"ref": "main"} # 注意分支名
+                        
+                        res = requests.post(url, headers=headers, json=data)
+                        
+                        if res.status_code == 204:
+                            st.success("✅ 指令已发送！机器人正在后台重算公式，约需 1 分钟。")
+                        else:
+                            st.error(f"指令发送失败: {res.status_code}")
+                    except Exception as e:
+                        st.error(f"网络异常: {e}")
     
                         
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
