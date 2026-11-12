@@ -1251,8 +1251,11 @@ def load_excel_data(file_path, sheet_name):
         st.error(f"云端读取异常: {e}")
         return []
 
+
 def render_multi_analysis(df_data):
+    # 🔥 必须加上这个导入，否则会报错
     from openpyxl.utils import get_column_letter, column_index_from_string
+    
     st.title("多维分析系统")
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
@@ -1260,11 +1263,21 @@ def render_multi_analysis(df_data):
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
     ATTR_MAP = {
-        "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33, "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18
+        "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
+        "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18
     }
 
     st.markdown("### 分析参数设置")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # 🔥 增加了一列，现在有 7 列
+    col0, col1, col2, col3, col4, col5, col6 = st.columns(7)
+    
+    with col0: 
+        # 🔥 这里是新增的期数下拉框
+        unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
+        try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+        except: unique_periods.sort(reverse=True)
+        selected_period = st.selectbox("基准期数", unique_periods)
+        
     with col1: selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
     with col2: selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
     with col3:
@@ -1279,7 +1292,7 @@ def render_multi_analysis(df_data):
 
     base_excel_col = ATTR_MAP[selected_attr]
     check_col_letter = get_column_letter(base_excel_col + (ball_num - 1) * 30)
-    st.info(f"💡 校验信息：属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
+    st.info(f"💡 校验信息：以【{selected_period}】期为基准，属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
 
     if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
         st.session_state.current_attr = selected_attr
@@ -1312,6 +1325,27 @@ def render_multi_analysis(df_data):
                 st.error(f"读取 {target_file} 失败或文件为空。"); st.stop()
             progress_bar.progress(20)
             
+            def clean_str(v):
+                if v is None: return ""
+                try: return str(int(float(v)))
+                except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
+
+            # 🔥 找到你选中的期数，在 Excel 里到底是第几行
+            target_row_idx = -1
+            for r_idx in range(len(all_rows)):
+                year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else ""
+                if not year_val: year_val = "2026"
+                p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
+                p2 = clean_str(all_rows[r_idx][1]) if len(all_rows[r_idx]) > 1 else ""
+                p3 = clean_str(all_rows[r_idx][2]) if len(all_rows[r_idx]) > 2 else ""
+                p_str = f"{year_val}{p1}{p2}{p3}"
+                if p_str == selected_period:
+                    target_row_idx = r_idx
+                    break
+            
+            if target_row_idx == -1:
+                st.error(f"在历史数据中找不到基准期数 {selected_period}！"); st.stop()
+            
             ball_cols = []
             for n in range(1, 8):
                 ball_cols.append(get_column_letter(base_excel_col + (n - 1) * 30))
@@ -1319,11 +1353,6 @@ def render_multi_analysis(df_data):
             ref_col_letter = ball_cols[ball_num - 1]
             ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
             
-            def clean_str(v):
-                if v is None: return ""
-                try: return str(int(float(v)))
-                except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
-                
             def get_wx(s):
                 core = s.replace("肖", "").replace("号", "").replace("尾", "")
                 return {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}.get(core, core)
@@ -1343,14 +1372,16 @@ def render_multi_analysis(df_data):
 
             status_text.text("正在提取基准列...")
             ref_col_data = get_col_data(ref_col_idx_0)
+            
+            # 🔥 关键：从你选中的那一期开始，往下取连续的行作为模板
             template = []
-            for r in range(2, len(ref_col_data)):
+            for r in range(target_row_idx, len(ref_col_data)):
                 if ref_col_data[r][1]: template.append(ref_col_data[r][1])
                 if len(template) >= max_len: break
                     
             if len(template) < min_len:
                 progress_bar.empty(); status_text.empty()
-                st.warning(f"基准列数据不足 {min_len} 个"); st.stop()
+                st.warning(f"该期往下连续数据不足 {min_len} 个"); st.stop()
                 
             gColl = {i: [] for i in range(min_len, max_len + 1)}
             status_text.text("正在扫描匹配项...")
@@ -1421,7 +1452,7 @@ def render_multi_analysis(df_data):
                                 
             progress_bar.progress(90)
             status_text.text("正在整理报告...")
-            ball_lines = [f"========== {selected_file_type} - {selected_attr} - {ball_str} =========="]
+            ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
             for L in range(min_len, max_len + 1):
                 if not gColl[L]: continue
                 ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
@@ -1442,47 +1473,50 @@ def render_multi_analysis(df_data):
             progress_bar.progress(100)
             status_text.text("计算完成！")
         except Exception as e:
-            st.error(f"计算报错: {e}")
+            st.error(f"计算报错: {e}")    
+    #=======修改区域============        
     st.divider()
-    col_title, col_btn = st.columns([8, 2])
-    with col_title: st.subheader("详细结果 (累积报告)")
-    with col_btn:
-        if st.button("清空所有结果", use_container_width=True):
-            st.session_state.multi_results_dict = {}
-            st.session_state.multi_result_text = ""
-            st.rerun()
+col_title, col_btn = st.columns([8, 2])
+with col_title: st.subheader("详细结果 (累积报告)")
+with col_btn:
+    if st.button("清空所有结果", use_container_width=True):
+        st.session_state.multi_results_dict = {}
+        st.session_state.multi_result_text = ""
+        st.rerun()
+
+if st.session_state.multi_result_text != "":
+    import streamlit.components.v1 as components
+    import html, base64
     
-    if st.session_state.multi_result_text != "":
-        import streamlit.components.v1 as components
-        import html, base64
-        
-        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
-        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
-        highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
-        
-        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
-        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
-        
-        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
-        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-        
-        components.html(f"""
-            <div id="report-container"></div>
-            <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">??? 打印当前报告 (排版不乱)</button>
-            </div>
-            <script>
-            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
-            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
-            </script>
-        """, height=620, scrolling=False)
+    # 🔥 终极修复：强制洗掉所有乱码换行符
+    clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
+    escaped_text = html.escape(clean_text).replace("\\n", "<br>")
     
-        st.write("") 
-        file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button(label="?? 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
-    else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
+    highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
+    
+    display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
+    print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
+    
+    b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
+    b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+    
+    components.html(f"""
+        <div id="report-container"></div>
+        <div style="margin-top: 15px; text-align: center;">
+            <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
+        </div>
+        <script>
+        function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
+        document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+        function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
+        </script>
+    """, height=620, scrolling=False)
+
+    st.write("") 
+    file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
+else:
+    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
 #=======多维分析终点============
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
