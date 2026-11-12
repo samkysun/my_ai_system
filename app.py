@@ -876,13 +876,26 @@ def call_deepseek_api(question, system_prompt):
     except Exception as e: return f"运行错误：{e}"
 
 def render_ai(df_data):
-    st.title("🤖 AI 严谨推演系统")
+    st.title("?? AI 严谨推演系统")
     
     if df_data is not None and not isinstance(df_data, str):
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
         try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
         except: unique_periods.sort(reverse=True)
-    else: unique_periods = ["暂无数据"]
+        
+        # ?? 核心新增：自动推算下一期并置顶
+        if unique_periods and unique_periods[0] != "暂无数据":
+            latest_period = unique_periods[0] # 此时拿到的是 2026119
+            try:
+                # 强转成数字后 +1
+                next_period = str(int(float(latest_period)) + 1)
+                # 如果算出来的下一期还没有在历史数据里，就把它插到最前面
+                if next_period not in unique_periods:
+                    unique_periods.insert(0, next_period)
+            except:
+                pass
+    else: 
+        unique_periods = ["暂无数据"]    
 
     if "reset_version" not in st.session_state: st.session_state.reset_version = 0
     v_prefix = f"v{st.session_state.reset_version}_chk_"
