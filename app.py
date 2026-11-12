@@ -17,7 +17,7 @@ EXCEL_FILE = "数据分析系统最终版本(智能全套).xlsm"
 SHEET_NAME = "总数据" 
 USER_FILE = "users.csv"
 # ==========================================
-# 🔥 核心引擎：28个属性纯代码计算器
+# 🔥 核心引擎：28个属性纯代码计算器 (绝对不遗漏版)
 # ==========================================
 NUM_WUXING = {1: "水", 2: "火", 3: "火", 4: "金", 5: "金", 6: "土", 7: "土", 8: "木", 9: "木", 10: "火", 11: "火", 12: "金", 13: "金", 14: "水", 15: "水", 16: "木", 17: "木", 18: "火", 19: "火", 20: "土", 21: "土", 22: "水", 23: "水", 24: "木", 25: "木", 26: "金", 27: "金", 28: "土", 29: "土", 30: "水", 31: "水", 32: "火", 33: "火", 34: "金", 35: "金", 36: "土", 37: "土", 38: "木", 39: "木", 40: "火", 41: "火", 42: "金", 43: "金", 44: "水", 45: "水", 46: "木", 47: "木", 48: "火", 49: "火"}
 NUM_ZODIAC = {1: "马", 2: "蛇", 3: "龙", 4: "兔", 5: "虎", 6: "牛", 7: "鼠", 8: "猪", 9: "狗", 10: "鸡", 11: "猴", 12: "羊", 13: "马", 14: "蛇", 15: "龙", 16: "兔", 17: "虎", 18: "牛", 19: "鼠", 20: "猪", 21: "狗", 22: "鸡", 23: "猴", 24: "羊", 25: "马", 26: "蛇", 27: "龙", 28: "兔", 29: "虎", 30: "牛", 31: "鼠", 32: "猪", 33: "狗", 34: "鸡", 35: "猴", 36: "羊", 37: "马", 38: "蛇", 39: "龙", 40: "兔", 41: "虎", 42: "牛", 43: "鼠", 44: "猪", 45: "狗", 46: "鸡", 47: "猴", 48: "羊", 49: "马"}
@@ -45,7 +45,6 @@ def calculate_all_attributes(num):
     n = int(num)
     z = NUM_ZODIAC.get(n, "")
     tail = n % 10
-    
     return [
         NUM_WUXING.get(n, ""), 
         z, 
@@ -72,10 +71,11 @@ def calculate_all_attributes(num):
         "男" if z in NAN_ZODIACS else "女", 
         ZODIAC_DIRECTION.get(z, ""), 
         f"3余{tail % 3}", 
-        TAIL_WUXIING.get(tail, "") if 'TAIL_WUXIING' in globals() else TAIL_WUXING.get(tail, ""), 
+        TAIL_WUXING.get(tail, ""), 
         ZODIAC_FU_LU_SHOU.get(z, ""), 
         ZODIAC_SIZE.get(z, "")
     ]
+# ==========================================
 st.set_page_config(page_title="智能数据分析系统", layout="wide")
 
 # 🔐 从 Streamlit Secrets 中安全读取密钥（彻底删除了写死的密钥）
@@ -523,17 +523,37 @@ def render_console(df_data):
                                 wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
                                 ws_dst = wb_dst[sheet]
                                 
+                                def get_clean_val(cell):
+                                    if cell is None: return ""
+                                    val = str(cell).strip()
+                                    if val.endswith(".0"): val = val[:-2]
+                                    return val
+    
+                                src_a = get_clean_val(ws_src["A3"].value)
+                                src_b = get_clean_val(ws_src["B3"].value)
+                                src_c = get_clean_val(ws_src["C3"].value)
+                                src_aa = get_clean_val(ws_src["AA3"].value)
+    
+                                dst_a = get_clean_val(ws_dst["A3"].value)
+                                dst_b = get_clean_val(ws_dst["B3"].value)
+                                dst_c = get_clean_val(ws_dst["C3"].value)
+                                dst_hf = get_clean_val(ws_dst["HF3"].value)
+    
+                                if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
+                                    return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
+    
                                 ws_dst.insert_rows(3)
                                 
-                                mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
+                                mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
                                 for sc, dc in mapping.items():
                                     val = ws_src[f"{sc}3"].value
                                     ws_dst[f"{dc}3"] = val if val is not None else ""
                                 
                                 ball_nums = []
                                 for n in range(7):
-                                    tens = ws_dst.cell(row=3, column=4 + n*2).value
-                                    units = ws_dst.cell(row=3, column=5 + n*2).value
+                                    tens = ws_dst.cell(row=3, column=4 + n*30).value
+                                    units = ws_dst.cell(row=3, column=5 + n*30).value
+                                    
                                     if tens is None and units is None: 
                                         ball_nums.append(None)
                                     else:
@@ -561,13 +581,16 @@ def render_console(df_data):
                             s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
                             
                             if s1 and s2:
-                                st.success("✅ 极速同步成功！最新一期的属性已完美归位至第三行。")
-                                st.info("👉 历史数据未受任何影响，请点上方【同步数据】刷新网页！")
+                                st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
+                                if m1 == "成功" or m2 == "成功":
+                                    st.info("👉 请点上方【同步数据】刷新网页！")
                             else:
                                 if not s1: st.error(f"❌ 升序失败: {m1}")
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
                             st.error(f"运行异常: {e}")
+
+
     
     st.divider()
     
