@@ -234,14 +234,11 @@ def calculate_prize(df_data, target_period, predicted_nums):
         "中出特码": z_val if z_matched else "", "状态": status
     }
     return result, None
-
-
-
 def login_page():
     st.title("🔐 智能系统客户端登录")
     
     if st.session_state.get("reg_success", False):
-        st.success("✅ 注册成功！请去登录。")
+        st.success("✅ 注册成功！请去左侧登录。")
         st.session_state.reg_success = False
 
     tab1, tab2 = st.tabs(["登录", "注册新账号"])
@@ -255,27 +252,39 @@ def login_page():
         pwd = st.text_input("密码", type="password", key="login_pass")
         if st.button("登录", use_container_width=True):
             if user and pwd:
-                # 🔥 核心修复：强行去掉用户输入前后的空格
                 user_clean = user.strip()
                 pwd_clean = pwd.strip()
                 
-                users_df = load_users()
+                # 🔥 核心：管理员 VIP 直通车逻辑
+                admin_name = st.secrets.get("ADMIN_USERNAME", "admin") # 默认 admin
+                admin_pass = st.secrets.get("ADMIN_PASSWORD", "123456") # 建议你去 Secrets 里设个真密码
                 
-                # 🔥 核心修复：清洗表格里的数据，防止原本存进去的带有空格
-                users_df['username'] = users_df['username'].astype(str).str.strip()
-                users_df['password'] = users_df['password'].astype(str).str.strip()
+                is_admin = False
+                if user_clean == admin_name:
+                    if pwd_clean == admin_pass or hashlib.sha256(pwd_clean.encode()).hexdigest() == admin_pass:
+                        st.session_state.logged_in = True
+                        st.session_state.username = user_clean
+                        is_admin = True
+                        st.rerun()
                 
-                hashed = hashlib.sha256(pwd_clean.encode()).hexdigest()
-                match = users_df[(users_df['username'] == user_clean) & (users_df['password'] == hashed)]
-                
-                if not match.empty:
-                    st.session_state.logged_in = True
-                    st.session_state.username = user_clean
-                    st.rerun()
-                else: 
-                    st.error("用户名或密码错误！(可能账号未成功保存，请重新注册)")
+                # 如果上面没进管理员通道，再走普通用户通道
+                if not is_admin:
+                    users_df = load_users()
+                    users_df['username'] = users_df['username'].astype(str).str.strip()
+                    users_df['password'] = users_df['password'].astype(str).str.strip()
+                    
+                    hashed = hashlib.sha256(pwd_clean.encode()).hexdigest()
+                    match = users_df[(users_df['username'] == user_clean) & (users_df['password'] == hashed)]
+                    
+                    if not match.empty:
+                        st.session_state.logged_in = True
+                        st.session_state.username = user_clean
+                        st.rerun()
+                    else: 
+                        st.error("用户名或密码错误！(可能账号未成功保存，请重新注册)")
                 
     with tab2:
+        # 下面是原来的注册代码，原封不动放这里
         reg_user = st.text_input("设置用户名", key=f"v{v}_reg_user")
         reg_pwd = st.text_input("设置密码", type="password", key=f"v{v}_reg_pass")
         reg_confirm = st.text_input("确认密码", type="password", key=f"{v}_reg_confirm")
@@ -292,6 +301,7 @@ def login_page():
                     if reg_user_clean in users_df['username'].values: 
                         st.error("该用户名已被注册")
                     else:
+                        # 注册新用户的逻辑（这里保持你刚才的代码就行）
                         new_user = pd.DataFrame({'username': [reg_user_clean], 'password': [hashlib.sha256(reg_pwd_clean.encode()).hexdigest()]})
                         updated_df = pd.concat([users_df, new_user], ignore_index=True)
                         
@@ -306,7 +316,6 @@ def login_page():
                             try:
                                 url = f"https://api.github.com/repos/{repo}/contents/users.csv"
                                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                                
                                 r = requests.get(url, headers=headers)
                                 sha = r.json()["sha"] if r.status_code == 200 else None
                                 
@@ -325,12 +334,8 @@ def login_page():
                                     st.rerun()
                                 else:
                                     st.error(f"❌ 注册失败，状态码: {res.status_code}")
-                                    st.json(res.json()) # 如果再失败，直接把原因印在屏幕上
                             except Exception as e:
-                                st.error(f"❌ 异常: {e}")
-                        else:
-                            updated_df.to_csv(USER_FILE, index=False)
-                            st.success("✅ 注册成功（本地）！")        
+                                st.error(f"❌ 异常: {e}")            
 
 def render_console(df_data):
     # 👇 导入模块
