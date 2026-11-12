@@ -105,10 +105,29 @@ if "predicted_nums_single" not in st.session_state: st.session_state.predicted_n
 if "predicted_nums_multi" not in st.session_state: st.session_state.predicted_nums_multi = None
 
 def load_users():
-    if not os.path.exists(USER_FILE):
-        pd.DataFrame(columns=['username', 'password']).to_csv(USER_FILE, index=False)
-    return pd.read_csv(USER_FILE)
-
+    import requests
+    import io
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    
+    # 如果没配置 Secrets，退回本地（用于你本地调试）
+    if not token or not repo:
+        if not os.path.exists(USER_FILE):
+            pd.DataFrame(columns=['username', 'password']).to_csv(USER_FILE, index=False)
+        return pd.read_csv(USER_FILE)
+        
+    try:
+        url = f"https://api.github.com/repos/{repo}/contents/users.csv"
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            download_url = r.json()["download_url"]
+            content = requests.get(download_url).content
+            return pd.read_csv(io.BytesIO(content))
+        else:
+            return pd.DataFrame(columns=['username', 'password'])
+    except:
+        return pd.DataFrame(columns=['username', 'password'])    
 def get_ball_color(num):
     red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46]
     blue = [3, 4, 9, 10, 14, 15, 20, 25, 26, 31, 36, 37, 41, 42, 47, 48]
@@ -215,9 +234,11 @@ def calculate_prize(df_data, target_period, predicted_nums):
         "中出特码": z_val if z_matched else "", "状态": status
     }
     return result, None
+
 def login_page():
     st.title("🔐 智能系统客户端登录")
     tab1, tab2 = st.tabs(["登录", "注册新账号"])
+    
     with tab1:
         user = st.text_input("用户名", key="login_user")
         pwd = st.text_input("密码", type="password", key="login_pass")
@@ -231,21 +252,63 @@ def login_page():
                     st.session_state.username = user
                     st.rerun()
                 else: st.error("用户名或密码错误！")
+                
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
         reg_pwd = st.text_input("设置密码", type="password", key="reg_pass")
         reg_confirm = st.text_input("确认密码", type="password", key="reg_confirm")
         if st.button("注册", use_container_width=True):
             if reg_user and reg_pwd:
-                if reg_pwd != reg_confirm: st.error("两次密码不一致")
+                if reg_pwd != reg_confirm: 
+                    st.error("两次密码不一致")
                 else:
                     users_df = load_users()
-                    if reg_user in users_df['username'].values: st.error("该用户名已被注册")
+                    if reg_user in users_df['username'].values: 
+                        st.error("该用户名已被注册")
                     else:
                         new_user = pd.DataFrame({'username': [reg_user], 'password': [hashlib.sha256(reg_pwd.encode()).hexdigest()]})
-                        pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
-                        st.success("注册成功！请去左侧登录。")
-
+                        updated_df = pd.concat([users_df, new_user], ignore_index=True)
+                        
+                        # ==========================================
+                        # 🔥 核心修改：将用户数据推送到 GitHub 云端
+                        # ==========================================
+                        token = st.secrets.get("GITHUB_TOKEN")
+                        repo = st.secrets.get("GITHUB_REPO")
+                        
+                        if token and repo:
+                            import requests
+                            import io
+                            import base64
+                            
+                            try:
+                                url = f"https://api.github.com/repos/{repo}/contents/users.csv"
+                                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                                
+                                # 1. 获取原文件的 sha (每次覆盖必须要有这个)
+                                r = requests.get(url, headers=headers)
+                                sha = r.json()["sha"] if r.status_code == 200 else None
+                                
+                                # 2. 将新数据转成 CSV 格式并编码
+                                out = io.StringIO()
+                                updated_df.to_csv(out, index=False)
+                                b64_content = base64.b64encode(out.getvalue().encode('utf-8')).decode('utf-8')
+                                
+                                # 3. 推送到 GitHub
+                                payload = {"message": f"新用户注册: {reg_user}", "content": b64_content, "branch": "main"}
+                                if sha: payload["sha"] = sha
+                                
+                                res = requests.put(url, headers=headers, json=payload)
+                                
+                                if res.status_code in [200, 201]:
+                                    st.success("✅ 注册成功！账号已永久保存至云端，请去左侧登录。")
+                                else:
+                                    st.error(f"❌ 注册失败，状态码: {res.status_code}，请检查网络或权限。")
+                            except Exception as e:
+                                st.error(f"❌ 云端保存异常: {e}")
+                        else:
+                            # 如果没配置 GitHub Secrets，就保存在本地（本地测试用）
+                            updated_df.to_csv(USER_FILE, index=False)
+                            st.success("✅ 注册成功（仅保存在本地）！请去左侧登录。")    
 
 def render_console(df_data):
     # 👇 导入模块
