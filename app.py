@@ -1250,33 +1250,21 @@ def load_excel_data(file_path, sheet_name):
 
 def render_multi_analysis(df_data):
     st.title("多维分析系统")
-    
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
-    # 绝对列号字典
     ATTR_MAP = {
-        "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11,
-        "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17,
-        "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23,
-        "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29,
-        "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
-        "生肖五行相生": 18, "生肖五行相克": 18,
-        "数字五行相生": 6, "数字五行相克": 6,
-        "尾五行相生": 31, "尾五行相克": 31,
-        "生肖与五行相生": 18, "生肖与五行相克": 18
+        "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33, "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18
     }
 
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
     with col1: selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
     with col2: selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
     with col3:
-        ball_options = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
-        ball_str = st.selectbox("基准球号", ball_options)
+        ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
     with col4: min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7)
     with col5: max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
@@ -1285,8 +1273,8 @@ def render_multi_analysis(df_data):
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    check_excel_col = ATTR_MAP[selected_attr] + (ball_num - 1) * 30
-    check_col_letter = get_column_letter(check_excel_col)
+    base_excel_col = ATTR_MAP[selected_attr]
+    check_col_letter = get_column_letter(base_excel_col + (ball_num - 1) * 30)
     st.info(f"💡 校验信息：属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
 
     if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
@@ -1302,267 +1290,156 @@ def render_multi_analysis(df_data):
         is_sheng_mode = "相生" in selected_attr
         is_ke_mode = "相克" in selected_attr
         is_normal_mode = not (is_sheng_mode or is_ke_mode)
+        if "数字" in selected_attr or "号" in selected_attr: wx_suffix = "号"
+        elif "尾" in selected_attr: wx_suffix = "尾"
+        elif "肖" in selected_attr: wx_suffix = "肖"
+        else: wx_suffix = ""
         
-        # 🔥 唯一改动：动态判断后缀是“号”、“肖”还是“尾”
-        if "数字" in selected_attr or "号" in selected_attr:
-            wx_suffix = "号"
-        elif "尾" in selected_attr:
-            wx_suffix = "尾"
-        elif "肖" in selected_attr:
-            wx_suffix = "肖"
-        else:
-            wx_suffix = ""
+        target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
+        sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
+            
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        if selected_file_type == "升序全套":
-            target_file = "升序全套.xlsx"  # 👈 恢复原版
-            sheet_name = "升序全套分析"
-        else:
-            target_file = "按序全套.xlsx"  # 👈 恢复原版
-            sheet_name = "按序全套分析"
+        try:
+            status_text.text("正在读取 Excel 数据...")
+            all_rows = load_excel_data(target_file, sheet_name)
+            if not all_rows:
+                st.error(f"读取 {target_file} 失败或文件为空。"); st.stop()
+            progress_bar.progress(20)
             
-        if not os.path.exists(target_file):
-            st.error(f"找不到文件：{target_file}")
-        else:
-            # 进度条功能原封不动
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+            ball_cols = []
+            for n in range(1, 8):
+                ball_cols.append(get_column_letter(base_excel_col + (n - 1) * 30))
             
-            try:
-                status_text.text("正在读取 Excel 数据...")
-                df = load_excel_data(target_file, sheet_name)
-                progress_bar.progress(20)
+            ref_col_letter = ball_cols[ball_num - 1]
+            ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
+            
+            def clean_str(v):
+                if v is None: return ""
+                try: return str(int(float(v)))
+                except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
                 
-                base_excel_col = ATTR_MAP[selected_attr]
-                ref_excel_col = base_excel_col + (ball_num - 1) * 30
-                ref_col_idx = ref_excel_col - 1 
+            def get_wx(s):
+                core = s.replace("肖", "").replace("号", "").replace("尾", "")
+                return {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}.get(core, core)
                 
-                def clean_str(v):
-                    if pd.isna(v): return ""
-                    return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
+            def check_match(a, b):
+                if is_normal_mode: return a == b
+                core_a, core_b = get_wx(a), get_wx(b)
+                child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
+                mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
+                ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
+                if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
+                elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
+                return False
+
+            def get_col_data(col_idx_0):
+                return [(r_idx, clean_str(all_rows[r_idx][col_idx_0]) if col_idx_0 < len(all_rows[r_idx]) else "") for r_idx in range(len(all_rows))]
+
+            status_text.text("正在提取基准列...")
+            ref_col_data = get_col_data(ref_col_idx_0)
+            template = []
+            for r in range(2, len(ref_col_data)):
+                if ref_col_data[r][1]: template.append(ref_col_data[r][1])
+                if len(template) >= max_len: break
                     
-                def get_wx(s):
-                    core = s.replace("肖", "").replace("号", "").replace("尾", "")
-                    zx2wx = {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}
-                    return zx2wx.get(core, core)
-                    
-                def check_match(a, b):
-                    if is_normal_mode: return a == b
-                    core_a, core_b = get_wx(a), get_wx(b)
-                    child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
-                    mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
-                    ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
-                    if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
-                    elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
-                    return False
+            if len(template) < min_len:
+                progress_bar.empty(); status_text.empty()
+                st.warning(f"基准列数据不足 {min_len} 个"); st.stop()
                 
-                status_text.text("正在提取基准列...")
-                ref_col_data = [clean_str(x) for x in df.iloc[:, ref_col_idx].tolist()]
+            gColl = {i: [] for i in range(min_len, max_len + 1)}
+            status_text.text("正在扫描匹配项...")
+            
+            for n in range(1, 8):
+                col_name = ball_cols[n - 1]
+                current_col_idx = column_index_from_string(col_name) - 1
+                disp_name = f"{n}球({col_name})"
+                is_self = (col_name == ref_col_letter)
                 
-                template = []
-                for r in range(2, len(ref_col_data)):
-                    if ref_col_data[r]:
-                        template.append(ref_col_data[r])
-                    if len(template) >= max_len: break
-                        
-                if len(template) < min_len:
-                    progress_bar.empty()
-                    status_text.empty()
-                    st.warning(f"基准列数据不足 {min_len} 个")
-                    st.stop()
-                    
-                gColl = {i: [] for i in range(min_len, max_len + 1)}
+                col_data = get_col_data(current_col_idx)
+                valid_data = [(r, col_data[r][1]) for r in range(2, len(col_data)) if col_data[r][1]]
+                vc = len(valid_data)
                 
-                status_text.text("正在扫描匹配项...")
-                for n in range(1, 8):
-                    current_excel_col = base_excel_col + (n - 1) * 30
-                    current_col_idx = current_excel_col - 1
-                    col_name = get_column_letter(current_excel_col)
-                    disp_name = f"{n}球({col_name})"
-                    is_self = (current_excel_col == ref_excel_col)
-                    
-                    col_data = [clean_str(x) for x in df.iloc[:, current_col_idx].tolist()]
-                    valid_data = [(r, col_data[r]) for r in range(2, len(col_data)) if col_data[r]]
+                if vc >= min_len:
+                    k = 0
+                    while k <= vc - min_len:
+                        max_l = 0
+                        for j in range(vc - k):
+                            if j >= len(template): break
+                            if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
+                            if not check_match(template[j], valid_data[k+j][1]): break
+                            max_l = j + 1
                             
-                    vc = len(valid_data)
-                    if vc >= min_len:
-                        k = 0
-                        while k <= vc - min_len:
-                            max_l = 0
-                            for j in range(vc - k):
-                                if j >= len(template): break
-                                if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                                if not check_match(template[j], valid_data[k+j][1]): break
-                                max_l = j + 1
+                        if max_l >= min_len:
+                            real_l = max_l; group_l = min(real_l, max_len)
+                            sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
+                            
+                            def get_ctx(r_idx):
+                                if r_idx < 0 or r_idx >= len(col_data): return "无"
+                                v = col_data[r_idx][1]
+                                if not v: return "空"
+                                if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
+                                if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
+                                return v
                                 
-                            if max_l >= min_len:
-                                real_l = max_l
-                                group_l = min(real_l, max_len)
-                                sr = valid_data[k][0]
-                                er = valid_data[k + real_l - 1][0]
-                                
-                                # 上下文自动补全
-                                def get_ctx(r_idx):
-                                    if r_idx < 0 or r_idx >= len(col_data): return "无"
-                                    v = col_data[r_idx]
-                                    if not v: return "空"
-                                    if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]:
-                                        return v + "肖"
-                                    if v in ["金", "木", "水", "火", "土"]:
-                                        return v + wx_suffix # 🔥 动态后缀
-                                    # 🔥 新增的智能后缀补齐逻辑：
-                                    if selected_attr == "尾数": return v if "尾" in v else v + "尾"
-                                    if selected_attr == "数字合": return v if "合" in v else v + "合"
-                                    if selected_attr == "门数": return v if "门" in v else v + "门"
-                                    if selected_attr == "段数": return v if "段" in v else v + "段"
-                                    if selected_attr == "颜色肖": return v if "肖" in v else v + "肖"
-                                    if selected_attr == "四宝": return v if "肖" in v else v + "肖"
-                                    if selected_attr == "波色": return v if "波" in v else v + "波"
-                                    if selected_attr == "单双头": return v if "头" in v else v + "头"
-                                    if selected_attr == "单双笔": return v if "笔" in v else v + "笔"    
-                                    return v
-                                    
-                                w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
-                                
-                                if is_normal_mode:
-                                    detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
-                                else:
-                                    core_w1 = get_wx(w1)
-                                    
-                                    # 🔥 动态生成生克字典
-                                    sheng_dict = {
-                                        "金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", 
-                                        "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"
-                                    }
-                                    ke_dict = {
-                                        "金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", 
-                                        "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"
-                                    }
-                                    
-                                    if is_sheng_mode:
-                                        rule_str = sheng_dict.get(core_w1, "")
-                                        full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
-                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                    else:
-                                        rule_str = ke_dict.get(core_w1, "")
-                                        full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
-                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
-                                    
-                                if is_self: detail_txt += " [自身参考列匹配]"
-
-                                # 1. 先把 w1 转成纯文本去掉多余空格
-                                w1_str = str(w1).strip()
-                                # 2. 只要不在这个黑名单里(0尾 不在里面，所以0尾会被保留
-                                if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
-                                    # 🔥 核心修复：先判断是不是 25 行以内
-                                    if er + 1 <= 25:
-                                        # 第一步：先拼上“近X期一致”
-                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
-                                        
-                                        # 第二步：因为这已经是25行以内了，再判断是不是 5-9 期
-                                        if 5 <= real_l <= 9:
-                                            st.session_state.play_alert = True
-                                            line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
-                                            
-                                    else:
-                                        # 超过25行的，绝不高亮，原样输出
-                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
-                                    
-                                    # 存入结果（注意这里千万别多出别的东西！）
-                                    gColl[group_l].append({"line": line_txt, "sr": sr})
-                                # 无论是否加入结果，k 都要前进，防止死循环
-                                k += real_l
+                            w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
+                            
+                            if is_normal_mode:
+                                detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                             else:
-                                k += 1
+                                core_w1 = get_wx(w1)
+                                if is_sheng_mode:
+                                    rule_str = {"金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"}.get(core_w1, "")
+                                    full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
+                                    sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                else:
+                                    rule_str = {"金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"}.get(core_w1, "")
+                                    full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
+                                    sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                 
-                progress_bar.progress(90)
-                status_text.text("正在整理报告...")
-                
-                ball_lines = []
-                ball_lines.append(f"========== {selected_file_type} - {selected_attr} - {ball_str} ==========")
-                
-                minSr = 999999
-                finalC = []
-                for L in range(min_len, max_len + 1):
-                    for item in gColl[L]:
-                        if item["sr"] < 500:
-                            if item["sr"] < minSr:
-                                minSr = item["sr"]
-                                finalC = [item]
-                            elif item["sr"] == minSr:
-                                finalC.append(item)
+                            if is_self: detail_txt += " [自身参考列匹配]"
+
+                            w1_str = str(w1).strip()
+                            if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
+                                if er + 1 <= 25:
+                                    line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
+                                    if 5 <= real_l <= 9:
+                                        st.session_state.play_alert = True
+                                        line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
+                                else:
+                                    line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
+                                gColl[group_l].append({"line": line_txt, "sr": sr})
+                            k += real_l
+                        else:
+                            k += 1
                                 
-                #if finalC:
-                    #ball_lines.append("起始行最近且<500行:")
-                    #for item in finalC:
-                        #ball_lines.append(item["line"])
-                        #ball_lines.append("")
+            progress_bar.progress(90)
+            status_text.text("正在整理报告...")
+            ball_lines = [f"========== {selected_file_type} - {selected_attr} - {ball_str} =========="]
+            for L in range(min_len, max_len + 1):
+                if not gColl[L]: continue
+                ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
+                for item in gColl[L]:
+                    ball_lines.append(item["line"]); ball_lines.append("")
+            
+            st.session_state.multi_results_dict[ball_num] = "\\n".join(ball_lines)
+            combined_text = []
+            for i in range(1, 8):
+                if i in st.session_state.multi_results_dict: combined_text.append(st.session_state.multi_results_dict[i])
+            st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
+            
+            if st.session_state.get("play_alert", False):
+                import streamlit.components.v1 as components
+                components.html("<script>var AudioContext = window.AudioContext || window.webkitAudioContext; var ctx = new AudioContext(); function playCoin() { if (ctx.state === 'suspended') ctx.resume(); var osc1 = ctx.createOscillator(); var gain1 = ctx.createGain(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime); gain1.gain.setValueAtTime(0.5, ctx.currentTime); gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3); osc1.connect(gain1); gain1.connect(ctx.destination); osc1.start(); osc1.stop(ctx.currentTime + 0.3); var osc2 = ctx.createOscillator(); var gain2 = ctx.createGain(); osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4); osc2.connect(gain2); gain2.connect(ctx.destination); osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4); } playCoin(); </script>", height=0, width=0)
+                st.session_state.play_alert = False
 
-                for L in range(min_len, max_len + 1):
-                    if not gColl[L]: continue
-                    ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
-                    for item in gColl[L]:
-                        ball_lines.append(item["line"])
-                        ball_lines.append("")
-                
-                ball_text = "\n".join(ball_lines)
-
-                st.session_state.multi_results_dict[ball_num] = ball_text
-                
-                combined_text = []
-                for i in range(1, 8):
-                    if i in st.session_state.multi_results_dict:
-                        combined_text.append(st.session_state.multi_results_dict[i])
-                        
-                st.session_state.multi_result_text = "\n\n\n".join(combined_text)
-                # ================= 新增声音提醒 =================
-                # 只要标记为 True，就说明检测到了 5-9 期一致的数据
-                if st.session_state.get("play_alert", False):
-                    import streamlit.components.v1 as components
-                    components.html(
-                        """
-                        <script>
-                        var AudioContext = window.AudioContext || window.webkitAudioContext;
-                        var ctx = new AudioContext();
-                        function playCoin() {
-                            if (ctx.state === 'suspended') ctx.resume();
-                            var osc1 = ctx.createOscillator();
-                            var gain1 = ctx.createGain();
-                            osc1.type = 'sine';
-                            osc1.frequency.setValueAtTime(987.77, ctx.currentTime);
-                            gain1.gain.setValueAtTime(0.5, ctx.currentTime);
-                            gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                            osc1.connect(gain1);
-                            gain1.connect(ctx.destination);
-                            osc1.start();
-                            osc1.stop(ctx.currentTime + 0.3);
-                
-                            var osc2 = ctx.createOscillator();
-                            var gain2 = ctx.createGain();
-                            osc2.type = 'sine';
-                            osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1);
-                            gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1);
-                            gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-                            osc2.connect(gain2);
-                            gain2.connect(ctx.destination);
-                            osc2.start(ctx.currentTime + 0.1);
-                            osc2.stop(ctx.currentTime + 0.4);
-                        }
-                        playCoin();
-                        </script>
-                        """,
-                        height=0, width=0
-                    )
-                    st.session_state.play_alert = False
-                # =================================================
-                progress_bar.progress(100)
-                status_text.text("计算完成！")
-                
-            except Exception as e:
-                st.error(f"计算报错: {e}")
-
+            progress_bar.progress(100)
+            status_text.text("计算完成！")
+        except Exception as e:
+            st.error(f"计算报错: {e}")
     st.divider()
-    
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
@@ -1570,126 +1447,39 @@ def render_multi_analysis(df_data):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
             st.rerun()
-
+    
     if st.session_state.multi_result_text != "":
         import streamlit.components.v1 as components
-        import html
-        import base64
+        import html, base64
         
-        # 1. 清理基础文本
-        clean_text = st.session_state.multi_result_text.replace('\\r', '')
+        clean_text = st.session_state.multi_result_text.replace('\\\\r', '')
+        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
+        highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
         
-        # 2. 转义（防乱码），并把换行变成 <br>
-        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
+        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
+        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
         
-        # 3. 把占位符替换成真正的高亮红字（网页展示用）
-        highlighted_display = escaped_text.replace(
-            "[[HIGHLIGHT]]", 
-            '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
-        ).replace("[[/HIGHLIGHT]]", '</span>')
-    
-        # 4. 构建网页显示的 HTML（带上灰底和滚动条）
-        display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
-            {highlighted_display}
-        </div>
-        """
-        
-        # 5. 构建打印用的 HTML（外面套一层 pre 保持排版）
-        print_html = f"""
-        <html>
-        <head><meta charset="utf-8">
-        <style>
-            body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
-            pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
-        </style>
-        </head>
-        <body>
-        <pre>{highlighted_display}</pre>
-        </body>
-        </html>
-        """
-        
-        # 6. 转码，准备注入前端
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-    
-        # 7. 检查是否需要播放声音（由计算步骤中的标记触发）
-        js_play_alert = ""
-        if st.session_state.get("play_alert", False):
-            js_play_alert = """
-                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                var ctx = new AudioContext();
-                function playCoin() {
-                    if (ctx.state === 'suspended') ctx.resume();
-                    var osc1 = ctx.createOscillator(), gain1 = ctx.createGain();
-                    osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime);
-                    gain1.gain.setValueAtTime(0.5, ctx.currentTime);
-                    gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                    osc1.connect(gain1); gain1.connect(ctx.destination);
-                    osc1.start(); osc1.stop(ctx.currentTime + 0.3);
-    
-                    var osc2 = ctx.createOscillator(), gain2 = ctx.createGain();
-                    osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1);
-                    gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-                    osc2.connect(gain2); gain2.connect(ctx.destination);
-                    osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4);
-                }
-                playCoin();
-            """
-            st.session_state.play_alert = False  # 播放完立刻重置
-    
-        # 8. 渲染前端组件
-        components.html(
-            f"""
+        
+        components.html(f"""
             <div id="report-container"></div>
-            
             <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s;" onmouseover="this.style.backgroundColor='#0369a1'" onmouseout="this.style.backgroundColor='#0284c7'">
-                    🖨️ 打印当前报告 (排版不乱)
-                </button>
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">??? 打印当前报告 (排版不乱)</button>
             </div>
-    
             <script>
-            function b64DecodeUnicode(str) {{
-                return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }}).join(''));
-            }}
-    
+            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
             document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-    
-            function printReport() {{
-                var win = window.open("");
-                win.document.write(b64DecodeUnicode("{b64_print}"));
-                win.document.close();
-                win.focus();
-                setTimeout(function() {{ win.print(); }}, 500);
-            }}
-    
-            // 注入声音逻辑
-            {js_play_alert}
+            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
             </script>
-            """,
-            height=620,
-            scrolling=False
-        )
+        """, height=620, scrolling=False)
     
         st.write("") 
-        
-        # 9. 下载按钮（保持原样）
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button(
-            label="📥 保存完整报告到本地 (TXT格式)", 
-            data=clean_text.encode('utf-8-sig'), 
-            file_name=file_name, 
-            mime="text/plain", 
-            use_container_width=True
-        )
+        st.download_button(label="?? 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
     else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
-
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
+#=======多维分析终点============
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
     st.title("🔗 深度联动分析系统")
