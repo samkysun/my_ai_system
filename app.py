@@ -246,26 +246,42 @@ def login_page():
                         pd.concat([users_df, new_user], ignore_index=True).to_csv(USER_FILE, index=False)
                         st.success("注册成功！请去左侧登录。")
 
+
 def render_console(df_data):
-    # 👇 加在这里
+    # 👇 导入模块
     import requests
     import openpyxl
     import io
     import base64
     
+    # 只保留一个标题
     st.title("智能数据分析总控台")
-    # ... 下面的代码保持不变 ...    
-    st.title("智能数据分析总控台")
+    
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
+        
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
     except: unique_periods.sort(reverse=True)
     
+    # 自动推算下一期并置顶
+    if unique_periods:
+        latest_period = unique_periods[0]
+        try:
+            next_period = str(int(float(latest_period)) + 1)
+            if next_period not in unique_periods:
+                unique_periods.insert(0, next_period)
+        except:
+            pass
+    
+    # 这里只创建一组两列，绝不会出现两个下拉框
     col1, col2 = st.columns(2)
-    with col1: selected_period = st.selectbox("选择期数：", unique_periods)
-    with col2: analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)
+    with col1: 
+        selected_period = st.selectbox("选择期数：", unique_periods)
+    with col2: 
+        analysis_mode = st.radio("模式切换：", ["单排分析", "多排分析"], horizontal=True)    
+    
     
     st.write("") 
     
