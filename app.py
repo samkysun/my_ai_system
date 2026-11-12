@@ -513,42 +513,51 @@ def render_console(df_data):
                                 return r.json() if r.status_code == 200 else None
                             
                             def sync_attrs(src_f, dst_f, sheet):
+                                # 1. 拉取最新数字
                                 s_info = get_info(src_f)
                                 if not s_info: return False, f"找不到 {src_f}"
                                 wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
                                 ws_src = wb_src["数据源"]
                                 
+                                # 2. 拉取全套表
                                 d_info = get_info(dst_f)
                                 if not d_info: return False, f"找不到 {dst_f}"
                                 wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
                                 ws_dst = wb_dst[sheet]
                                 
+                                # ========================================================
+                                # ?? 新增：防重复校验
+                                # ========================================================
                                 def get_clean_val(cell):
                                     if cell is None: return ""
                                     val = str(cell).strip()
                                     if val.endswith(".0"): val = val[:-2]
                                     return val
-    
+                            
                                 src_a = get_clean_val(ws_src["A3"].value)
                                 src_b = get_clean_val(ws_src["B3"].value)
                                 src_c = get_clean_val(ws_src["C3"].value)
                                 src_aa = get_clean_val(ws_src["AA3"].value)
-    
+                            
                                 dst_a = get_clean_val(ws_dst["A3"].value)
                                 dst_b = get_clean_val(ws_dst["B3"].value)
                                 dst_c = get_clean_val(ws_dst["C3"].value)
                                 dst_hf = get_clean_val(ws_dst["HF3"].value)
-    
+                            
                                 if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
                                     return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
-    
+                                # ========================================================
+                            
+                                # 3. 插入新的第 3 行
                                 ws_dst.insert_rows(3)
                                 
+                                # 4. 把最新的数字和期数填入第 3 行 (?? 加上 A, B, C 列)
                                 mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
                                 for sc, dc in mapping.items():
                                     val = ws_src[f"{sc}3"].value
                                     ws_dst[f"{dc}3"] = val if val is not None else ""
                                 
+                                # 5. 提取这 7 个球的数字 (?? 修复列偏移为 30)
                                 ball_nums = []
                                 for n in range(7):
                                     tens = ws_dst.cell(row=3, column=4 + n*30).value
@@ -561,6 +570,7 @@ def render_console(df_data):
                                         u = str(int(units)) if str(units).isdigit() else "0"
                                         ball_nums.append(int(t + u))
                                 
+                                # 6. 填入 1-7 球属性
                                 for n_idx, ball_num in enumerate(ball_nums):
                                     if ball_num:
                                         attrs = calculate_all_attributes(ball_num)
@@ -568,6 +578,7 @@ def render_console(df_data):
                                             target_col = 6 + j_idx + (n_idx * 30)
                                             ws_dst.cell(row=3, column=target_col, value=attr_val)
                                 
+                                # 7. 保存并推送
                                 out = io.BytesIO()
                                 wb_dst.save(out)
                                 res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
