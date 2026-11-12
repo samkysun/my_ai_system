@@ -1282,8 +1282,8 @@ def render_multi_analysis(df_data):
     with row1_col3: 
         selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
     with row1_col4:
-    ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
-    ball_num = int(ball_str.replace("第", "").split("球")[0])
+        ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
+        ball_num = int(ball_str.replace("第", "").split("球")[0])
 
     # 🔥 第二排：只放 2 个宽宽的数字框 + 按钮，给足空间，保证加减号出来
     row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
