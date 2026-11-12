@@ -1286,7 +1286,7 @@ def render_multi_analysis(df_data):
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
     with col5: 
         max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
-    with col5: max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12)
+    
     with col6:
         st.write("")
         st.write("")
