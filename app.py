@@ -1253,9 +1253,10 @@ def load_excel_data(file_path, sheet_name):
 
 
 def render_multi_analysis(df_data):
-    # 🔥 必须加上这个导入，否则会报错
+    def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
+    # 1. 标题和初始化（必须在最上面）
     st.title("多维分析系统")
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
@@ -1267,12 +1268,11 @@ def render_multi_analysis(df_data):
         "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18
     }
 
+    # 2. 参数设置区（必须在计算逻辑上方）
     st.markdown("### 分析参数设置")
-    # 🔥 增加了一列，现在有 7 列
     col0, col1, col2, col3, col4, col5, col6 = st.columns(7)
     
     with col0: 
-        # 🔥 这里是新增的期数下拉框
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
         try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
         except: unique_periods.sort(reverse=True)
@@ -1300,9 +1300,8 @@ def render_multi_analysis(df_data):
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
         st.rerun()
-
     st.divider()
-    
+    # 3. 计算逻辑区（在参数下方）
     if run_btn:
         is_sheng_mode = "相生" in selected_attr
         is_ke_mode = "相克" in selected_attr
@@ -1330,7 +1329,6 @@ def render_multi_analysis(df_data):
                 try: return str(int(float(v)))
                 except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
 
-            # 🔥 找到你选中的期数，在 Excel 里到底是第几行
             target_row_idx = -1
             for r_idx in range(len(all_rows)):
                 year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else ""
@@ -1373,7 +1371,6 @@ def render_multi_analysis(df_data):
             status_text.text("正在提取基准列...")
             ref_col_data = get_col_data(ref_col_idx_0)
             
-            # 🔥 关键：从你选中的那一期开始，往下取连续的行作为模板
             template = []
             for r in range(target_row_idx, len(ref_col_data)):
                 if ref_col_data[r][1]: template.append(ref_col_data[r][1])
@@ -1449,6 +1446,8 @@ def render_multi_analysis(df_data):
                             k += real_l
                         else:
                             k += 1
+    
+    
                                 
             progress_bar.progress(90)
             status_text.text("正在整理报告...")
@@ -1473,50 +1472,51 @@ def render_multi_analysis(df_data):
             progress_bar.progress(100)
             status_text.text("计算完成！")
         except Exception as e:
-            st.error(f"计算报错: {e}")    
-    #=======修改区域============        
+            st.error(f"计算报错: {e}")
+
+    # 4. 展示与打印区（绝对在最后面）
     st.divider()
-col_title, col_btn = st.columns([8, 2])
-with col_title: st.subheader("详细结果 (累积报告)")
-with col_btn:
-    if st.button("清空所有结果", use_container_width=True):
-        st.session_state.multi_results_dict = {}
-        st.session_state.multi_result_text = ""
-        st.rerun()
+    col_title, col_btn = st.columns([8, 2])
+    with col_title: st.subheader("详细结果 (累积报告)")
+    with col_btn:
+        if st.button("清空所有结果", use_container_width=True):
+            st.session_state.multi_results_dict = {}
+            st.session_state.multi_result_text = ""
+            st.rerun()
 
-if st.session_state.multi_result_text != "":
-    import streamlit.components.v1 as components
-    import html, base64
+    if st.session_state.multi_result_text != "":
+        import streamlit.components.v1 as components
+        import html, base64
+        
+        # 终极修复：强制洗掉所有乱码换行符
+        clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
+        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
+        
+        highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
+        
+        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
+        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
+        
+        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
+        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+        
+        components.html(f"""
+            <div id="report-container"></div>
+            <div style="margin-top: 15px; text-align: center;">
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
+            </div>
+            <script>
+            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
+            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
+            </script>
+        """, height=620, scrolling=False)
     
-    # 🔥 终极修复：强制洗掉所有乱码换行符
-    clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
-    escaped_text = html.escape(clean_text).replace("\\n", "<br>")
-    
-    highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
-    
-    display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
-    print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
-    
-    b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
-    b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-    
-    components.html(f"""
-        <div id="report-container"></div>
-        <div style="margin-top: 15px; text-align: center;">
-            <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
-        </div>
-        <script>
-        function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
-        document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-        function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
-        </script>
-    """, height=620, scrolling=False)
-
-    st.write("") 
-    file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-    st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
-else:
-    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
+        st.write("") 
+        file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
+    else:
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
 #=======多维分析终点============
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
