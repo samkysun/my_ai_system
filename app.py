@@ -16,7 +16,66 @@ import base64   # 👈 新增
 EXCEL_FILE = "数据分析系统最终版本(智能全套).xlsm"
 SHEET_NAME = "总数据" 
 USER_FILE = "users.csv"
+# ==========================================
+# 🔥 核心引擎：28个属性纯代码计算器
+# ==========================================
+NUM_WUXING = {1: "水", 2: "火", 3: "火", 4: "金", 5: "金", 6: "土", 7: "土", 8: "木", 9: "木", 10: "火", 11: "火", 12: "金", 13: "金", 14: "水", 15: "水", 16: "木", 17: "木", 18: "火", 19: "火", 20: "土", 21: "土", 22: "水", 23: "水", 24: "木", 25: "木", 26: "金", 27: "金", 28: "土", 29: "土", 30: "水", 31: "水", 32: "火", 33: "火", 34: "金", 35: "金", 36: "土", 37: "土", 38: "木", 39: "木", 40: "火", 41: "火", 42: "金", 43: "金", 44: "水", 45: "水", 46: "木", 47: "木", 48: "火", 49: "火"}
+NUM_ZODIAC = {1: "马", 2: "蛇", 3: "龙", 4: "兔", 5: "虎", 6: "牛", 7: "鼠", 8: "猪", 9: "狗", 10: "鸡", 11: "猴", 12: "羊", 13: "马", 14: "蛇", 15: "龙", 16: "兔", 17: "虎", 18: "牛", 19: "鼠", 20: "猪", 21: "狗", 22: "鸡", 23: "猴", 24: "羊", 25: "马", 26: "蛇", 27: "龙", 28: "兔", 29: "虎", 30: "牛", 31: "鼠", 32: "猪", 33: "狗", 34: "鸡", 35: "猴", 36: "羊", 37: "马", 38: "蛇", 39: "龙", 40: "兔", 41: "虎", 42: "牛", 43: "鼠", 44: "猪", 45: "狗", 46: "鸡", 47: "猴", 48: "羊", 49: "马"}
+NUM_HE = {1: "01合", 2: "02合", 3: "03合", 4: "04合", 5: "05合", 6: "06合", 7: "07合", 8: "08合", 9: "09合", 10: "01合", 11: "02合", 12: "03合", 13: "04合", 14: "05合", 15: "06合", 16: "07合", 17: "08合", 18: "09合", 19: "10合", 20: "02合", 21: "03合", 22: "05合", 23: "05合", 24: "06合", 25: "07合", 26: "08合", 27: "09合", 28: "10合", 29: "11合", 30: "03合", 31: "04合", 32: "05合", 33: "06合", 34: "07合", 35: "08合", 36: "09合", 37: "10合", 38: "11合", 39: "12合", 40: "04合", 41: "05合", 42: "06合", 43: "07合", 44: "08合", 45: "09合", 46: "10合", 47: "11合", 48: "12合", 49: "13合"}
+NUM_MEN = {1: "1门", 2: "1门", 3: "1门", 4: "1门", 5: "1门", 6: "1门", 7: "1门", 8: "1门", 9: "1门", 10: "2门", 11: "2门", 12: "2门", 13: "2门", 14: "2门", 15: "2门", 16: "2门", 17: "2门", 18: "2门", 19: "2门", 20: "3门", 21: "3门", 22: "3门", 23: "3门", 24: "3门", 25: "3门", 26: "3门", 27: "3门", 28: "3门", 29: "3门", 30: "4门", 31: "4门", 32: "4门", 33: "4门", 34: "4门", 35: "4门", 36: "4门", 37: "4门", 38: "4门", 39: "4门", 40: "5门", 41: "5门", 42: "5门", 43: "5门", 44: "5门", 45: "5门", 46: "5门", 47: "5门", 48: "5门", 49: "5门"}
+NUM_DUAN = {1: "1段", 2: "1段", 3: "1段", 4: "1段", 5: "1段", 6: "1段", 7: "1段", 8: "2段", 9: "2段", 10: "2段", 11: "2段", 12: "2段", 13: "2段", 14: "2段", 15: "3段", 16: "3段", 17: "3段", 18: "3段", 19: "3段", 20: "3段", 21: "3段", 22: "4段", 23: "4段", 24: "4段", 25: "4段", 26: "4段", 27: "4段", 28: "4段", 29: "5段", 30: "5段", 31: "5段", 32: "5段", 33: "5段", 34: "5段", 35: "5段", 36: "6段", 37: "6段", 38: "6段", 39: "6段", 40: "6段", 41: "6段", 42: "6段", 43: "7段", 44: "7段", 45: "7段", 46: "7段", 47: "7段", 48: "7段", 49: "7段"}
+NUM_SINGLE_DOUBLE = {1: "双单", 2: "双双", 3: "双单", 4: "双双", 5: "双单", 6: "双双", 7: "双单", 8: "双双", 9: "双单", 10: "单双", 11: "单单", 12: "单双", 13: "单单", 14: "单双", 15: "单单", 16: "单双", 17: "单单", 18: "单双", 19: "单单", 20: "双双", 21: "双单", 22: "双双", 23: "双单", 24: "双双", 25: "双单", 26: "双双", 27: "双单", 28: "双双", 29: "双单", 30: "单双", 31: "单单", 32: "单双", 33: "单单", 34: "单双", 35: "单单", 36: "单双", 37: "单单", 38: "单双", 39: "单单", 40: "双双", 41: "双单", 42: "双双", 43: "双单", 44: "双双", 45: "双单", 46: "双双", 47: "双单", 48: "双双", 49: "双单"}
+NUM_BOSE = {1: "红波", 2: "红波", 7: "红波", 8: "红波", 12: "红波", 13: "红波", 18: "红波", 19: "红波", 23: "红波", 24: "红波", 29: "红波", 30: "红波", 34: "红波", 35: "红波", 40: "红波", 45: "红波", 46: "红波", 3: "蓝波", 4: "蓝波", 9: "蓝波", 10: "蓝波", 14: "蓝波", 15: "蓝波", 20: "蓝波", 25: "蓝波", 26: "蓝波", 31: "蓝波", 36: "蓝波", 37: "蓝波", 41: "蓝波", 42: "蓝波", 47: "蓝波", 48: "蓝波", 5: "绿波", 6: "绿波", 11: "绿波", 16: "绿波", 17: "绿波", 21: "绿波", 22: "绿波", 27: "绿波", 28: "绿波", 32: "绿波", 33: "绿波", 38: "绿波", 39: "绿波", 43: "绿波", 44: "绿波", 49: "绿波"}
+ZODIAC_WUXING = {"鼠": "水", "牛": "土", "虎": "木", "兔": "木", "龙": "土", "蛇": "火", "马": "火", "羊": "土", "猴": "金", "鸡": "金", "狗": "土", "猪": "水"}
+ZODIAC_COLOR = {"鼠": "红色", "马": "红色", "鸡": "红色", "兔": "红色", "牛": "绿色", "羊": "绿色", "龙": "绿色", "狗": "绿色", "虎": "蓝色", "猴": "蓝色", "蛇": "蓝色", "猪": "蓝色"}
+ZODIAC_FOUR_TREASURES = {"鼠": "棋", "牛": "棋", "狗": "棋", "鸡": "琴", "兔": "琴", "蛇": "琴", "马": "书", "虎": "书", "龙": "书", "猴": "画", "羊": "画", "猪": "画"}
+ZODIAC_OBJECT_IMAGE = {"鼠": "恶人", "猴": "恶人", "牛": "家臣", "狗": "家臣", "马": "家臣", "猪": "家臣", "鸡": "美女", "兔": "美女", "蛇": "美女", "羊": "美女", "虎": "君王", "龙": "君王"}
+YANG_ZODIACS = ["牛", "虎", "兔", "羊", "猴", "鸡"]
+JIA_ZODIACS = ["牛", "马", "羊", "鸡", "狗", "猪"]
+TIAN_ZODIACS = ["牛", "兔", "龙", "马", "猴", "猪"]
+XIONG_ZODIACS = ["鼠", "牛", "虎", "猴", "狗", "猪"]
+NAN_ZODIACS = ["鼠", "牛", "虎", "龙", "马", "猴", "狗"]
+ZODIAC_DIRECTION = {"鼠": "北", "牛": "北", "猪": "北", "虎": "东", "兔": "东", "龙": "东", "马": "南", "蛇": "南", "羊": "南", "猴": "西", "鸡": "西", "狗": "西"}
+TAIL_WUXING = {0: "土", 5: "土", 2: "火", 7: "火", 1: "水", 6: "水", 3: "木", 8: "木", 4: "金", 9: "金"}
+ZODIAC_FU_LU_SHOU = {"鼠": "福肖", "马": "福肖", "虎": "福肖", "龙": "福肖", "牛": "禄肖", "兔": "禄肖", "猴": "禄肖", "猪": "禄肖", "狗": "寿肖", "鸡": "寿肖", "蛇": "寿肖", "羊": "寿肖"}
+ZODIAC_SIZE = {"鼠": "小肖", "鸡": "小肖", "兔": "小肖", "蛇": "小肖", "牛": "大肖", "马": "大肖", "虎": "大肖", "龙": "大肖", "狗": "中肖", "猴": "中肖", "羊": "中肖", "猪": "中肖"}
 
+def calculate_all_attributes(num):
+    if not num: return [""] * 28
+    n = int(num)
+    z = NUM_ZODIAC.get(n, "")
+    tail = n % 10
+    
+    return [
+        NUM_WUXING.get(n, ""), 
+        z, 
+        str(tail), 
+        NUM_HE.get(n, ""), 
+        NUM_MEN.get(n, ""), 
+        NUM_DUAN.get(n, ""), 
+        NUM_SINGLE_DOUBLE.get(n, ""), 
+        "单笔" if z in ["鼠", "龙", "蛇", "马", "鸡", "猪"] else "双笔",
+        "独字" if z in ["鼠", "牛", "虎", "兔", "马", "羊"] else "合字",
+        "单头" if (n // 10) in [1, 3] else "双头",
+        "单数" if n % 2 != 0 else "双数",
+        f"{NUM_BOSE.get(n, '')}{'单数' if n % 2 != 0 else '双数'}",
+        ZODIAC_WUXING.get(z, ""), 
+        ZODIAC_COLOR.get(z, ""), 
+        ZODIAC_FOUR_TREASURES.get(z, ""), 
+        ZODIAC_OBJECT_IMAGE.get(z, ""), 
+        NUM_BOSE.get(n, ""), 
+        "阳" if z in YANG_ZODIACS else "阴", 
+        "家" if z in JIA_ZODIACS else "野", 
+        "天" if z in TIAN_ZODIACS else "地", 
+        f"{'阳' if z in YANG_ZODIACS else '阴'}{'天' if z in TIAN_ZODIACS else '地'}", 
+        "凶" if z in XIONG_ZODIACS else "吉", 
+        "男" if z in NAN_ZODIACS else "女", 
+        ZODIAC_DIRECTION.get(z, ""), 
+        f"3余{tail % 3}", 
+        TAIL_WUXIING.get(tail, "") if 'TAIL_WUXIING' in globals() else TAIL_WUXING.get(tail, ""), 
+        ZODIAC_FU_LU_SHOU.get(z, ""), 
+        ZODIAC_SIZE.get(z, "")
+    ]
 st.set_page_config(page_title="智能数据分析系统", layout="wide")
 
 # 🔐 从 Streamlit Secrets 中安全读取密钥（彻底删除了写死的密钥）
@@ -369,102 +428,83 @@ def render_console(df_data):
     st.divider()
    
     
+    
     # ==========================================
-    # 🔥 管理员专属：云端数据流转控制台 (双按钮+大文件处理版)
+    # 🔥 管理员专属：云端数据流转控制台
     # ==========================================
     if st.session_state.username == admin_name:
         st.markdown("### ☁️ 云端数据流转 (管理员操作)")
         
-        # 将页面分为左右两列，用于并排显示两个按钮
         col_sync1, col_sync2 = st.columns(2)
         
         # ------------------------------------------
-        # 📦 左边按钮：同步到主总数据表 (纯数字)
+        # 📦 左边：同步到主总数据表 (纯数字)
         # ------------------------------------------
         with col_sync1:
-            if st.button("🚀 将【升序源文件】同步至【主总数据表】", use_container_width=True, type="primary"):
-                with st.spinner("正在从云端拉取文件并进行数据合并，请稍候..."):
-                    import requests
-                    import openpyxl
-                    import io
-                    import base64
-                    
+            if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
+                with st.spinner("正在合并总表..."):
+                    import requests, openpyxl, io, base64
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
-                    
                     if not token or not repo:
                         st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
                     else:
                         try:
                             headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                            
-                            def get_github_file_info(file_path):
-                                url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-                                r = requests.get(url, headers=headers)
+                            def get_info(fp):
+                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
                                 return r.json() if r.status_code == 200 else None
-                                
-                            # 拉取源文件
-                            src_info = get_github_file_info("升序源文件.xlsx")
-                            if not src_info: st.error("找不到云端升序源文件"); st.stop()
-                            src_content = requests.get(src_info["download_url"]).content
-                            df_src = pd.read_excel(io.BytesIO(src_content), sheet_name="数据源", header=None)
                             
-                            # 拉取主文件
-                            master_file = "数据分析系统最终版本(智能全套).xlsm"
-                            master_info = get_github_file_info(master_file)
-                            if not master_info: st.error(f"找不到云端主文件 {master_file}"); st.stop()
-                            master_content = requests.get(master_info["download_url"]).content
+                            src_info = get_info("升序源文件.xlsx")
+                            if not src_info: st.error("找不到升序源文件"); st.stop()
+                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name="数据源", header=None)
                             
-                            wb = openpyxl.load_workbook(io.BytesIO(master_content), keep_vba=True)
-                            if "总数据" not in wb.sheetnames: st.error("找不到总数据工作表"); st.stop()
-                            
-                            ws_master = wb["总数据"]
-                            if ws_master.max_row > 1: ws_master.delete_rows(2, ws_master.max_row)
+                            m_file = "数据分析系统最终版本(智能全套).xlsm"
+                            m_info = get_info(m_file)
+                            if not m_info: st.error("找不到主文件"); st.stop()
+                            wb = openpyxl.load_workbook(io.BytesIO(requests.get(m_info["download_url"]).content), keep_vba=True)
+                            ws = wb["总数据"]
+                            if ws.max_row > 1: ws.delete_rows(2, ws.max_row)
                                 
                             def clean_val(v):
                                 if pd.isna(v) or v is None: return ""
                                 try: return str(int(float(v)))
                                 except: return str(v).strip()
                                 
-                            row_idx_master = 2
+                            row_idx = 2
                             for idx, row in df_src.iterrows():
                                 if idx < 2: continue
                                 p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
                                 if not p1 and not p2 and not p3: continue
-                                year_val = clean_val(row[26]) if len(row) > 26 else "2026"
+                                y_val = clean_val(row[26]) if len(row) > 26 else "2026"
                                 
-                                ws_master.cell(row=row_idx_master, column=19, value=f"{year_val}{p1}{p2}{p3}")
+                                ws.cell(row=row_idx, column=19, value=f"{y_val}{p1}{p2}{p3}")
                                 for i in range(6):
-                                    t_str, u_str = clean_val(row[3 + i*2]), clean_val(row[4 + i*2])
-                                    num = int(t_str)*10 + int(u_str) if t_str.isdigit() and u_str.isdigit() else (int(t_str) if t_str.isdigit() else 0)
-                                    ws_master.cell(row=row_idx_master, column=20 + i, value=num)
-                                t_str, u_str = clean_val(row[15]), clean_val(row[16])
-                                z_num = int(t_str)*10 + int(u_str) if t_str.isdigit() and u_str.isdigit() else (int(t_str) if t_str.isdigit() else 0)
-                                ws_master.cell(row=row_idx_master, column=26, value=z_num)
-                                row_idx_master += 1
+                                    t, u = clean_val(row[3 + i*2]), clean_val(row[4 + i*2])
+                                    num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else (int(t) if t.isdigit() else 0)
+                                    ws.cell(row=row_idx, column=20 + i, value=num)
+                                t, u = clean_val(row[15]), clean_val(row[16])
+                                z_num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else (int(t) if t.isdigit() else 0)
+                                ws.cell(row=row_idx, column=26, value=z_num)
+                                row_idx += 1
                                 
-                            output = io.BytesIO()
-                            wb.save(output)
-                            b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
-                            
-                            url = f"https://api.github.com/repos/{repo}/contents/{master_file}"
-                            payload = {"message": "自动更新主总数据表", "content": b64_content, "sha": master_info["sha"], "branch": "main"}
-                            res = requests.put(url, headers=headers, json=payload)
+                            out = io.BytesIO()
+                            wb.save(out)
+                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{m_file}", headers=headers, json={"message": "自动更新总数据", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": m_info["sha"], "branch": "main"})
                             if res.status_code in [200, 201]:
-                                st.success("✅ 主总数据表已更新！纯数字全覆盖。")
+                                st.success("✅ 主总数据表已更新！")
                                 load_real_data.clear()
-                            else:
-                                st.error(f"❌ 推送失败: {res.text}")
-                        except Exception as e:
-                            st.error(f"同步异常: {e}")
-    
-        
-        # ------------------------------------------
-        # 📊 右边按钮：通知机器人去更新云端全套分析表
-        # ------------------------------------------
-        with col_sync2:
-            if st.button("🚀 通知机器人去更新带公式的全套表", use_container_width=True, type="secondary"):
-                import requests
+                            else: st.error(f"❌ 推送失败: {res.text}")
+                        except Exception as e: st.error(f"异常: {e}")
+
+    # ------------------------------------------
+    # 📊 右边：一键计算属性并同步全套表 (无公式引擎)
+    # ------------------------------------------
+    with col_sync2:
+        if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
+            with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
+                import requests, openpyxl, io, base64
+                
                 token = st.secrets.get("GITHUB_TOKEN")
                 repo = st.secrets.get("GITHUB_REPO")
                 
@@ -472,24 +512,78 @@ def render_console(df_data):
                     st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
                 else:
                     try:
-                        # 这里填你之前建好的 YAML 文件名
-                        workflow_file = "sync_full_set.yml" 
-                        url = f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches"
+                        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
                         
-                        headers = {
-                            "Accept": "application/vnd.github.v3+json",
-                            "Authorization": f"Bearer {token}"
-                        }
-                        data = {"ref": "main"} # 注意分支名
+                        def get_info(fp):
+                            r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
+                            return r.json() if r.status_code == 200 else None
                         
-                        res = requests.post(url, headers=headers, json=data)
+                        def sync_attrs(src_f, dst_f, sheet):
+                            # 1. 拉取最新数字
+                            s_info = get_info(src_f)
+                            if not s_info: return False, f"找不到 {src_f}"
+                            wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
+                            ws_src = wb_src["数据源"]
+                            
+                            # 2. 拉取全套表（无公式版）
+                            d_info = get_info(dst_f)
+                            if not d_info: return False, f"找不到 {dst_f}"
+                            wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
+                            ws_dst = wb_dst[sheet]
+                            
+                            # 3. 插入新的第 3 行（原有的数据会被安全推到第 4 行，历史数据全保留）
+                            ws_dst.insert_rows(3)
+                            
+                            # 4. 把最新的数字填入第 3 行
+                            mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
+                            for sc, dc in mapping.items():
+                                val = ws_src[f"{sc}3"].value
+                                ws_dst[f"{dc}3"] = val if val is not None else ""
+                            
+                            # 5. 提取这 7 个球的数字
+                            ball_nums = []
+                            for n in range(7):
+                                tens = ws_dst.cell(row=3, column=4 + n*2).value
+                                units = ws_dst.cell(row=3, column=5 + n*2).value
+                                if tens is None and units is None: 
+                                    ball_nums.append(None)
+                                else:
+                                    t = str(int(tens)) if str(tens).isdigit() else "0"
+                                    u = str(int(units)) if str(units).isdigit() else "0"
+                                    ball_nums.append(int(t + u))
+                            
+                            # 6. 🔥 直接调用我们写好的超级引擎，精准填入 1-7 球的所有属性
+                            for n_idx, ball_num in enumerate(ball_nums):
+                                if ball_num:
+                                    attrs = calculate_all_attributes(ball_num)
+                                    for j_idx, attr_val in enumerate(attrs):
+                                        # 属性列偏移计算：第1球从F列(6)开始，每后一个球偏移 30 列
+                                        target_col = 6 + j_idx + (n_idx * 30)
+                                        ws_dst.cell(row=3, column=target_col, value=attr_val)
+                            
+                            # 7. 保存并推送
+                            out = io.BytesIO()
+                            wb_dst.save(out)
+                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
+                                               headers=headers, 
+                                               json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
+                            
+                            if res.status_code in [200, 201]: return True, "成功"
+                            return False, res.text
+    
+                        # 执行双写
+                        s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
+                        s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
                         
-                        if res.status_code == 204:
-                            st.success("✅ 指令已发送！机器人正在后台重算公式，约需 1 分钟。")
+                        if s1 and s2:
+                            st.success("✅ 极速同步成功！最新一期的属性已完美归位至第三行。")
+                            st.info("👉 历史数据未受任何影响，请点上方【同步数据】刷新网页！")
                         else:
-                            st.error(f"指令发送失败: {res.status_code}")
+                            if not s1: st.error(f"❌ 升序失败: {m1}")
+                            if not s2: st.error(f"❌ 按序失败: {m2}")
                     except Exception as e:
-                        st.error(f"网络异常: {e}")
+                        st.error(f"运行异常: {e}")
+st.divider()
     
                         
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
