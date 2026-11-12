@@ -437,9 +437,6 @@ def render_console(df_data):
         
         col_sync1, col_sync2 = st.columns(2)
         
-        # ------------------------------------------
-        # 📦 左边：同步到主总数据表 (纯数字)
-        # ------------------------------------------
         with col_sync1:
             if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
                 with st.spinner("正在合并总表..."):
@@ -496,98 +493,87 @@ def render_console(df_data):
                                 load_real_data.clear()
                             else: st.error(f"❌ 推送失败: {res.text}")
                         except Exception as e: st.error(f"异常: {e}")
-
-    # ------------------------------------------
-    # 📊 右边：一键计算属性并同步全套表 (无公式引擎)
-    # ------------------------------------------
-    with col_sync2:
-        if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
-            with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
-                import requests, openpyxl, io, base64
-                
-                token = st.secrets.get("GITHUB_TOKEN")
-                repo = st.secrets.get("GITHUB_REPO")
-                
-                if not token or not repo:
-                    st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                else:
-                    try:
-                        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                        
-                        def get_info(fp):
-                            r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
-                            return r.json() if r.status_code == 200 else None
-                        
-                        def sync_attrs(src_f, dst_f, sheet):
-                            # 1. 拉取最新数字
-                            s_info = get_info(src_f)
-                            if not s_info: return False, f"找不到 {src_f}"
-                            wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
-                            ws_src = wb_src["数据源"]
-                            
-                            # 2. 拉取全套表（无公式版）
-                            d_info = get_info(dst_f)
-                            if not d_info: return False, f"找不到 {dst_f}"
-                            wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
-                            ws_dst = wb_dst[sheet]
-                            
-                            # 3. 插入新的第 3 行（原有的数据会被安全推到第 4 行，历史数据全保留）
-                            ws_dst.insert_rows(3)
-                            
-                            # 4. 把最新的数字填入第 3 行
-                            mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
-                            for sc, dc in mapping.items():
-                                val = ws_src[f"{sc}3"].value
-                                ws_dst[f"{dc}3"] = val if val is not None else ""
-                            
-                            # 5. 提取这 7 个球的数字
-                            ball_nums = []
-                            for n in range(7):
-                                tens = ws_dst.cell(row=3, column=4 + n*2).value
-                                units = ws_dst.cell(row=3, column=5 + n*2).value
-                                if tens is None and units is None: 
-                                    ball_nums.append(None)
-                                else:
-                                    t = str(int(tens)) if str(tens).isdigit() else "0"
-                                    u = str(int(units)) if str(units).isdigit() else "0"
-                                    ball_nums.append(int(t + u))
-                            
-                            # 6. 🔥 直接调用我们写好的超级引擎，精准填入 1-7 球的所有属性
-                            for n_idx, ball_num in enumerate(ball_nums):
-                                if ball_num:
-                                    attrs = calculate_all_attributes(ball_num)
-                                    for j_idx, attr_val in enumerate(attrs):
-                                        # 属性列偏移计算：第1球从F列(6)开始，每后一个球偏移 30 列
-                                        target_col = 6 + j_idx + (n_idx * 30)
-                                        ws_dst.cell(row=3, column=target_col, value=attr_val)
-                            
-                            # 7. 保存并推送
-                            out = io.BytesIO()
-                            wb_dst.save(out)
-                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
-                                               headers=headers, 
-                                               json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
-                            
-                            if res.status_code in [200, 201]: return True, "成功"
-                            return False, res.text
     
-                        # 执行双写
-                        s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
-                        s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
-                        
-                        if s1 and s2:
-                            st.success("✅ 极速同步成功！最新一期的属性已完美归位至第三行。")
-                            st.info("👉 历史数据未受任何影响，请点上方【同步数据】刷新网页！")
-                        else:
-                            if not s1: st.error(f"❌ 升序失败: {m1}")
-                            if not s2: st.error(f"❌ 按序失败: {m2}")
-                    except Exception as e:
-                        st.error(f"运行异常: {e}")
-st.divider()
+        with col_sync2:
+            if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
+                with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
+                    import requests, openpyxl, io, base64
+                    
+                    token = st.secrets.get("GITHUB_TOKEN")
+                    repo = st.secrets.get("GITHUB_REPO")
+                    
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                            
+                            def get_info(fp):
+                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
+                                return r.json() if r.status_code == 200 else None
+                            
+                            def sync_attrs(src_f, dst_f, sheet):
+                                s_info = get_info(src_f)
+                                if not s_info: return False, f"找不到 {src_f}"
+                                wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
+                                ws_src = wb_src["数据源"]
+                                
+                                d_info = get_info(dst_f)
+                                if not d_info: return False, f"找不到 {dst_f}"
+                                wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
+                                ws_dst = wb_dst[sheet]
+                                
+                                ws_dst.insert_rows(3)
+                                
+                                mapping = {'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
+                                for sc, dc in mapping.items():
+                                    val = ws_src[f"{sc}3"].value
+                                    ws_dst[f"{dc}3"] = val if val is not None else ""
+                                
+                                ball_nums = []
+                                for n in range(7):
+                                    tens = ws_dst.cell(row=3, column=4 + n*2).value
+                                    units = ws_dst.cell(row=3, column=5 + n*2).value
+                                    if tens is None and units is None: 
+                                        ball_nums.append(None)
+                                    else:
+                                        t = str(int(tens)) if str(tens).isdigit() else "0"
+                                        u = str(int(units)) if str(units).isdigit() else "0"
+                                        ball_nums.append(int(t + u))
+                                
+                                for n_idx, ball_num in enumerate(ball_nums):
+                                    if ball_num:
+                                        attrs = calculate_all_attributes(ball_num)
+                                        for j_idx, attr_val in enumerate(attrs):
+                                            target_col = 6 + j_idx + (n_idx * 30)
+                                            ws_dst.cell(row=3, column=target_col, value=attr_val)
+                                
+                                out = io.BytesIO()
+                                wb_dst.save(out)
+                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
+                                                   headers=headers, 
+                                                   json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
+                                
+                                if res.status_code in [200, 201]: return True, "成功"
+                                return False, res.text
     
-                        
+                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
+                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
+                            
+                            if s1 and s2:
+                                st.success("✅ 极速同步成功！最新一期的属性已完美归位至第三行。")
+                                st.info("👉 历史数据未受任何影响，请点上方【同步数据】刷新网页！")
+                            else:
+                                if not s1: st.error(f"❌ 升序失败: {m1}")
+                                if not s2: st.error(f"❌ 按序失败: {m2}")
+                        except Exception as e:
+                            st.error(f"运行异常: {e}")
+    
+    st.divider()
+    
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
+    # ... 后面的代码保持不变 ...
     try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
     except: is_descending = True
     
