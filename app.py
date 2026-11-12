@@ -1252,6 +1252,7 @@ def load_excel_data(file_path, sheet_name):
         return []
 
 def render_multi_analysis(df_data):
+    from openpyxl.utils import get_column_letter, column_index_from_string
     st.title("多维分析系统")
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
