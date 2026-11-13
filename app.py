@@ -1542,36 +1542,41 @@ def render_multi_analysis(df_data):
             st.session_state.multi_result_text = ""
             st.rerun()
     #============多维计算结果文字框的控制代码===================        
-    
     if st.session_state.multi_result_text != "":
-        # ?? 1. 先清洗文本，保证编辑框和展示框一样干净
-        clean_text = st.session_state.multi_result_text.replace('\\\\r', '').replace('\\\\\\\\n', '\\\\n').replace('\\\\\\\\\\\\\\\\n', '\\\\n')
-        
-        # ?? 2. 手动编辑面板（平时折叠，点开才显示）
-        with st.expander("?? 手动编辑/精简当前报告 (点击展开)", expanded=False):
-            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
-            if st.button("?? 保存修改并更新结果", type="secondary"):
-                st.session_state.multi_result_text = edited_text
-                st.rerun()
-    
+        import re
         import streamlit.components.v1 as components
         import html
         import base64
         
-        # 3. 正常处理展示的高亮和居中
-        escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")
+        # 🔥 1. 终极暴力清洗：把所有带斜杠的假换行，统统变成真换行
+        raw_text = st.session_state.multi_result_text
+        raw_text = raw_text.replace('\\\\r', '')
+        # 这句正则的意思是：不管有几个反斜杠，只要后面跟着 n，全部变成真换行
+        clean_text = re.sub(r'\\\\+n', '\\n', raw_text)
+        
+        # ✂️ 2. 编辑面板（用清洗后的干净文本）
+        with st.expander("✂️ 手动编辑/精简当前报告 (点击展开)", expanded=False):
+            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
+            if st.button("💾 保存修改并更新结果", type="secondary"):
+                st.session_state.multi_result_text = edited_text
+                st.rerun()
+    
+        # 3. 渲染下方的漂亮展示框
+        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         
         highlighted_display = escaped_text.replace(
             "[[HIGHLIGHT]]", 
             '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
         ).replace("[[/HIGHLIGHT]]", '</span>')
     
+        # 居中展示
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
         
+        # 打印页面居中
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
         body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
@@ -1587,7 +1592,7 @@ def render_multi_analysis(df_data):
             <div id="report-container"></div>
             <div style="margin-top: 15px; text-align: center;">
                 <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                    ??? 打印当前报告 (排版不乱)
+                    🖨️ 打印当前报告 (排版不乱)
                 </button>
             </div>
             <script>
@@ -1614,14 +1619,14 @@ def render_multi_analysis(df_data):
         
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
-            label="?? 保存完整报告到本地 (TXT格式)", 
+            label="📥 保存完整报告到本地 (TXT格式)", 
             data=clean_text.encode('utf-8-sig'), 
             file_name=file_name, 
             mime="text/plain", 
             use_container_width=True
         )
     else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
                                
 #=======多维分析终点============
 
