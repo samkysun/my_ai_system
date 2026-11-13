@@ -1302,14 +1302,19 @@ def render_multi_analysis(df_data):
         except: unique_periods.sort(reverse=True)
         selected_period = st.selectbox("基准期数", unique_periods)
     with row1_col2: 
-        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
+        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"]) 
     with row1_col3: 
         if "单属性" in analysis_mode:
+            # 单属性：单选
             selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1)
+            selected_attrs_list = [selected_attr]
         else:
-            selected_attr = None
-            st.write("") # 占位空行，保证高度不塌陷
-            st.caption("💡 已隐藏属性选择")
+            # 🔥 全属性：多选！你可以在这里删掉不想分析的属性
+            selected_attrs_list = st.multiselect(
+                "勾选要透视的属性", 
+                list(ATTR_MAP.keys()), 
+                default=list(ATTR_MAP.keys()) # 默认全选，不需要的可以按X删掉
+            )    
     with row1_col4:
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
@@ -1500,7 +1505,7 @@ def render_multi_analysis(df_data):
                             else: 
                                 k += 1
                 return results
-    
+            #==========多维分析单属性及双属性内部逻辑==========================    
             # 🔥 执行分析（根据模式分流）
             if "单属性" in analysis_mode:
                 attr_map_val = ATTR_MAP[selected_attr]
@@ -1515,26 +1520,31 @@ def render_multi_analysis(df_data):
                 st.session_state.multi_result_text = out_txt
                 
             else:
-                status_text.text("正在透视所有属性，请稍候...")
+                status_text.text("正在透视选中的属性，请稍候...")
                 all_attr_text = f"========== {selected_file_type} - {selected_period} - {ball_str} 全属性扫描 ==========\\n\\n"
                 
-                for attr_name, attr_col in ATTR_MAP.items():
-                    # 过滤掉重复的键名，避免重复计算
-                    if attr_name in ["生肖五行相生", "生肖五行相克", "数字五行相生", "数字五行相克", "尾五行相生", "尾五行相克", "生肖与五行相生", "生肖与五行相克"]: 
-                        continue
+                if not selected_attrs_list:
+                    st.warning("请在上方多选框中至少勾选一个属性！")
+                else:
+                    # 🔥 核心修改：只遍历你多选框里勾选的属性
+                    for attr_name in selected_attrs_list:
+                        attr_col = ATTR_MAP[attr_name]
+                        # 过滤掉重复的键名
+                        if attr_name in ["生肖五行相生", "生肖五行相克", "数字五行相生", "数字五行相克", "尾五行相生", "尾五行相克", "生肖与五行相生", "生肖与五行相克"]: 
+                            continue
+                            
+                        res = do_match(attr_name, attr_col, ball_num, min_len, max_len)
+                        if res:
+                            all_attr_text += f"【{attr_name}】匹配结果:\\n"
+                            for line in res: 
+                                all_attr_text += f"{line}\\n"
+                            all_attr_text += "\\n"
+                            
+                    if all_attr_text.endswith("全属性扫描 ==========\\n\\n"):
+                        all_attr_text += "当前基准球在历史记录中未发现任何符合条件的属性匹配。"
                         
-                    res = do_match(attr_name, attr_col, ball_num, min_len, max_len)
-                    if res:
-                        all_attr_text += f"【{attr_name}】匹配结果:\\n"
-                        for line in res: 
-                            all_attr_text += f"{line}\\n"
-                        all_attr_text += "\\n"
-                        
-                if all_attr_text.endswith("全属性扫描 ==========\\n\\n"):
-                    all_attr_text += "当前基准球在历史记录中未发现任何符合条件的属性匹配。"
-                    
-                st.session_state.multi_result_text = all_attr_text
-    
+                    st.session_state.multi_result_text = all_attr_text
+            
             progress_bar.progress(100)
             status_text.text("计算完成！")
             
