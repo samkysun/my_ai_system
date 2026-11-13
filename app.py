@@ -1237,25 +1237,26 @@ def render_ai(df_data):
         # 完整下载用的纯文本
         full_result_text = f"{table_header}\\n\\n{clean_ai_text}"
         
-        # 转义表头和正文，用于 HTML 渲染 (必须分开转义，否则标签会乱)
+        # 转义表头和正文
         escaped_header = html.escape(table_header)
+        # 强制把正文里的换行变成 <br> 以便网页显示
         escaped_body = html.escape(clean_ai_text).replace("\\n", "<br>").replace("\\\\n", "<br>")
         
-        # 🔥 3. 构建展示 HTML (表头加粗居中，正文居中)
+        # 🔥 3. 构建展示 HTML (表头居中加粗，正文左对齐，行距调大)
         display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
-            <div style="font-weight: bold; font-size: 18px; margin-bottom: 20px; color: #1e293b;">{escaped_header}</div>
-            <div style="color: #334155;">{escaped_body}</div>
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; max-height: 500px; overflow-y: auto;">
+            <div style="text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 20px; color: #1e293b;">{escaped_header}</div>
+            <div style="text-align: left; font-size: 15px; line-height: 2.2; color: #334155;">{escaped_body}</div>
         </div>
         """
         
-        # 🔥 4. 构建打印 HTML (隐藏页眉页脚，表头加粗居中)
+        # 🔥 4. 构建打印 HTML (隐藏页眉页脚，表头居中，正文左对齐，行距调大)
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
         @page {{ margin: 15mm; }}
-        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
-        .header {{ font-weight: bold; font-size: 16px; margin-bottom: 25px; }}
-        .body {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
+        body {{ font-family: Consolas, monospace; padding: 20px; }}
+        .header {{ text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 25px; }}
+        .body {{ text-align: left; line-height: 2.2; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }}
         </style></head><body>
         <div class="header">{escaped_header}</div>
         <div class="body">{escaped_body}</div>
