@@ -1088,7 +1088,8 @@ def call_deepseek_api(question, system_prompt):
     except Exception as e: return f"运行错误：{e}"
 
 def render_ai(df_data):
-    st.title("?? AI 严谨推演系统")
+    #=========AI页面标题===================
+    st.title("🧠 AI 严谨推演系统")
     
     if df_data is not None and not isinstance(df_data, str):
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
