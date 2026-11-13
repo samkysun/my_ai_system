@@ -1427,12 +1427,16 @@ def render_multi_analysis(df_data):
                                 
                                 # 🔥 核心修复：交叉模式的文本输出方向
                                 if is_cross_mode:
-                                    rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
-                                    v_suffix = "号" if is_zodiac_to_num else "肖" # 如果基准是生肖，那么对比的就是数字(号)
-                                    target_suffix = "肖" if is_zodiac_to_num else "号" # 字典里的生克对象就是另一边
-                                    rule_str = "".join([f"{x}{target_suffix}" for x in rules])
-                                    prefix = "生" if is_cross_sheng else "克"
-                                    return f"{v}{v_suffix} ({prefix}{rule_str})"
+                                    v_suffix = "号" if is_zodiac_to_num else "肖"
+                                    # 🔥 只有"上"才显示括号，其他不显示
+                                    if r_idx == sr - 1:
+                                        rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
+                                        target_suffix = "肖" if is_zodiac_to_num else "号"
+                                        rule_str = "".join([f"{x}{target_suffix}" for x in rules])
+                                        prefix = "生" if is_cross_sheng else "克"
+                                        return f"{v}{v_suffix} ({prefix}{rule_str})"
+                                    else:
+                                        return f"{v}{v_suffix}"
                                     
                                 if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
                                 if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
@@ -1442,8 +1446,10 @@ def render_multi_analysis(df_data):
                             
                             
                             if is_normal_mode or is_cross_mode:
+                                # 先拼出上、下、再下、再再下
                                 detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
-                                # 🔥 交叉模式下，在末尾追加杀号
+                                
+                                # 🔥 然后在整行的最后面，统一追加杀号
                                 if is_cross_mode and w1 not in ["空", "无"]:
                                     core_w1 = w1[0] # 提取"木号"里的"木"
                                     rules = cross_sheng.get(core_w1, []) if is_cross_sheng else cross_ke.get(core_w1, [])
