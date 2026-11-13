@@ -1302,6 +1302,32 @@ def render_multi_analysis(df_data):
     #=======多维分析页面文字按钮布局及多向叠加设置================
     #================================================
     # 🔥 第二排分成 4 列：[数字框1, 数字框2, 执行按钮, 刷新按钮]
+    st.markdown("### 分析参数设置")
+
+    # 🔥 1. 模式定义
+    analysis_mode = st.radio("分析模式：", ["单属性透视 (按球查属性)", "单球全属性透视 (按球查全部)"], horizontal=True)
+    
+    # 🔥 2. 第一排参数
+    row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+    with row1_col1:
+        unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
+        try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
+        except: unique_periods.sort(reverse=True)
+        selected_period = st.selectbox("基准期数", unique_periods)
+    with row1_col2: 
+        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
+    with row1_col3: 
+        # 根据模式动态显示或隐藏属性框
+        if "单属性" in analysis_mode:
+            selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1)
+        else:
+            selected_attr = None
+            st.info("已开启全属性扫描")
+    with row1_col4:
+        ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
+        ball_num = int(ball_str.replace("第", "").split("球")[0])
+    
+    # 🔥 3. 第二排按钮区
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
     with row2_col1: 
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
@@ -1314,10 +1340,9 @@ def render_multi_analysis(df_data):
     with row2_col4:
         st.write("")
         st.write("")
-        # 🔥 这个按钮用来强制刷新云端数据
         if st.button("刷新云端数据", use_container_width=True, type="secondary"):
-            load_excel_data.clear() # 强制清空缓存
-            st.toast("✅ 缓存已清空，下次点击将重新下载最新文件！")
+            load_excel_data.clear() 
+            st.toast("✅ 缓存已清空！")
             st.rerun()
     
     if selected_file_type != st.session_state.current_file:
