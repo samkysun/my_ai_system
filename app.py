@@ -1475,105 +1475,106 @@ def render_multi_analysis(df_data):
             status_text.text("正在整理报告...")
 #=================第三次粘贴位置=============            
             ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
-                        for L in range(min_len, max_len + 1):
-                            if not gColl[L]: continue
-                            ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
-                            for item in gColl[L]:
-                                ball_lines.append(item["line"]); ball_lines.append("")
-                        
-                        st.session_state.multi_results_dict[ball_num] = "\\n".join(ball_lines)
-                        combined_text = []
-                        for i in range(1, 8):
-                            if i in st.session_state.multi_results_dict: combined_text.append(st.session_state.multi_results_dict[i])
-                        st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
-                        
-                        if st.session_state.get("play_alert", False):
-                            import streamlit.components.v1 as components
-                            components.html("<script>var AudioContext = window.AudioContext || window.webkitAudioContext; var ctx = new AudioContext(); function playCoin() { if (ctx.state === 'suspended') ctx.resume(); var osc1 = ctx.createOscillator(); var gain1 = ctx.createGain(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime); gain1.gain.setValueAtTime(0.5, ctx.currentTime); gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3); osc1.connect(gain1); gain1.connect(ctx.destination); osc1.start(); osc1.stop(ctx.currentTime + 0.3); var osc2 = ctx.createOscillator(); var gain2 = ctx.createGain(); osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4); osc2.connect(gain2); gain2.connect(ctx.destination); osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4); } playCoin(); </script>", height=0, width=0)
-                            st.session_state.play_alert = False
+            for L in range(min_len, max_len + 1):
+                if not gColl[L]: continue
+                ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
+                for item in gColl[L]:
+                    ball_lines.append(item["line"]); ball_lines.append("")
             
-                        progress_bar.progress(100)
-                        status_text.text("计算完成！")
-                        
-                    except Exception as e:
-                        st.error(f"计算报错: {e}")
+            st.session_state.multi_results_dict[ball_num] = "\\n".join(ball_lines)
+            combined_text = []
+            for i in range(1, 8):
+                if i in st.session_state.multi_results_dict: combined_text.append(st.session_state.multi_results_dict[i])
+            st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
             
-                st.divider()
-                
-                col_title, col_btn = st.columns([8, 2])
-                with col_title: st.subheader("详细结果 (累积报告)")
-                with col_btn:
-                    if st.button("清空所有结果", use_container_width=True):
-                        st.session_state.multi_results_dict = {}
-                        st.session_state.multi_result_text = ""
-                        st.rerun()
+            if st.session_state.get("play_alert", False):
+                import streamlit.components.v1 as components
+                components.html("<script>var AudioContext = window.AudioContext || window.webkitAudioContext; var ctx = new AudioContext(); function playCoin() { if (ctx.state === 'suspended') ctx.resume(); var osc1 = ctx.createOscillator(); var gain1 = ctx.createGain(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime); gain1.gain.setValueAtTime(0.5, ctx.currentTime); gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3); osc1.connect(gain1); gain1.connect(ctx.destination); osc1.start(); osc1.stop(ctx.currentTime + 0.3); var osc2 = ctx.createOscillator(); var gain2 = ctx.createGain(); osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4); osc2.connect(gain2); gain2.connect(ctx.destination); osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4); } playCoin(); </script>", height=0, width=0)
+                st.session_state.play_alert = False
+
+            progress_bar.progress(100)
+            status_text.text("计算完成！")
             
-                if st.session_state.multi_result_text != "":
-                    import streamlit.components.v1 as components
-                    import html
-                    import base64
-                    
-                    clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
-                    escaped_text = html.escape(clean_text).replace("\\n", "<br>")
-                    
-                    highlighted_display = escaped_text.replace(
-                        "[[HIGHLIGHT]]", 
-                        '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
-                    ).replace("[[/HIGHLIGHT]]", '</span>')
-                
-                    display_html = f"""
-                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
-                        {highlighted_display}
-                    </div>
-                    """
-                    
-                    print_html = f"""
-                    <html><head><meta charset="utf-8"><style>
-                    body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
-                    pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
-                    </style></head><body><pre>{highlighted_display}</pre></body></html>
-                    """
-                    
-                    b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
-                    b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-                    
-                    components.html(
-                        f"""
-                        <div id="report-container"></div>
-                        <div style="margin-top: 15px; text-align: center;">
-                            <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
-                        </div>
-                        <script>
-                        function b64DecodeUnicode(str) {{
-                            return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
-                                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                            }}).join(''));
-                        }}
-                        document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-                        function printReport() {{
-                            var win = window.open("");
-                            win.document.write(b64DecodeUnicode("{b64_print}"));
-                            win.document.close();
-                            win.focus();
-                            setTimeout(function() {{ win.print(); }}, 500);
-                        }}
-                        </script>
-                        """,
-                        height=620,
-                        scrolling=False
-                    )
-                
-                    st.write("") 
-                    file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                    st.download_button(
-                        label="📥 保存完整报告到本地 (TXT格式)", 
-                        data=clean_text.encode('utf-8-sig'), 
-                        file_name=file_name, 
-                        mime="text/plain", 
-                        use_container_width=True
-                    )
-                else:
-                    st.info("请选择文件、属性及球号后点击【执行当前球分析】。")            
+        except Exception as e:
+            st.error(f"计算报错: {e}")
+
+    st.divider()
+    
+    col_title, col_btn = st.columns([8, 2])
+    with col_title: st.subheader("详细结果 (累积报告)")
+    with col_btn:
+        if st.button("清空所有结果", use_container_width=True):
+            st.session_state.multi_results_dict = {}
+            st.session_state.multi_result_text = ""
+            st.rerun()
+
+    if st.session_state.multi_result_text != "":
+        import streamlit.components.v1 as components
+        import html
+        import base64
+        
+        clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
+        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
+        
+        highlighted_display = escaped_text.replace(
+            "[[HIGHLIGHT]]", 
+            '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
+        ).replace("[[/HIGHLIGHT]]", '</span>')
+    
+        display_html = f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
+            {highlighted_display}
+        </div>
+        """
+        
+        print_html = f"""
+        <html><head><meta charset="utf-8"><style>
+        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
+        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
+        </style></head><body><pre>{highlighted_display}</pre></body></html>
+        """
+        
+        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
+        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+        
+        components.html(
+            f"""
+            <div id="report-container"></div>
+            <div style="margin-top: 15px; text-align: center;">
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
+            </div>
+            <script>
+            function b64DecodeUnicode(str) {{
+                return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }}).join(''));
+            }}
+            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+            function printReport() {{
+                var win = window.open("");
+                win.document.write(b64DecodeUnicode("{b64_print}"));
+                win.document.close();
+                win.focus();
+                setTimeout(function() {{ win.print(); }}, 500);
+            }}
+            </script>
+            """,
+            height=620,
+            scrolling=False
+        )
+    
+        st.write("") 
+        file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        st.download_button(
+            label="📥 保存完整报告到本地 (TXT格式)", 
+            data=clean_text.encode('utf-8-sig'), 
+            file_name=file_name, 
+            mime="text/plain", 
+            use_container_width=True
+        )
+    else:
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+                                    
 
        
 #=======多维分析终点============
