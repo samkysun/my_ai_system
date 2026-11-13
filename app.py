@@ -1299,8 +1299,8 @@ def render_multi_analysis(df_data):
     with row1_col4:
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
-    #=======多维分析页面文字按钮布局设置================    
-    row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
+    #=======多维分析页面文字按钮布局及多向叠加设置================
+    #================================================
     # 🔥 第二排分成 4 列：[数字框1, 数字框2, 执行按钮, 刷新按钮]
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
     with row2_col1: 
@@ -1310,45 +1310,26 @@ def render_multi_analysis(df_data):
     with row2_col3:
         st.write("")
         st.write("")
-        run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
+        run_btn = st.button("执行分析", use_container_width=True, type="primary")
     with row2_col4:
         st.write("")
         st.write("")
         # 🔥 这个按钮用来强制刷新云端数据
-        if st.button("🔄 刷新云端数据", use_container_width=True, type="secondary"):
+        if st.button("刷新云端数据", use_container_width=True, type="secondary"):
             load_excel_data.clear() # 强制清空缓存
             st.toast("✅ 缓存已清空，下次点击将重新下载最新文件！")
             st.rerun()
-
-    # 🔥 交叉模式专属判断（使用 startswith 彻底防错）
-    is_cross_mode = selected_attr in ["生肖五行与数字五行相生", "生肖五行与数字五行相克", "数字五行与生肖五行相生", "数字五行与生肖五行相克"]
-    is_zodiac_to_num = selected_attr.startswith("生肖")  # 以生肖开头，基准就是生肖，目标找数字
-    is_cross_sheng = "相生" in selected_attr
-    is_cross_ke = "相克" in selected_attr
-
-    base_excel_col = ATTR_MAP[selected_attr]
-    check_col_letter = get_column_letter(base_excel_col + (ball_num - 1) * 30)
-    st.info(f"💡 校验信息：以【{selected_period}】期为基准，属性【{selected_attr}】锁定在 {check_col_letter} 列")
-
-    if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
-        st.session_state.current_attr = selected_attr
+    
+    if selected_file_type != st.session_state.current_file:
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
         st.rerun()
-
-    st.divider()
     
+    st.divider()
+    #==========更改多维分析核算内部逻辑=============
     if run_btn:
-        is_sheng_mode = "相生" in selected_attr
-        is_ke_mode = "相克" in selected_attr
-        is_normal_mode = not (is_sheng_mode or is_ke_mode) and not is_cross_mode
-        
-        if "数字" in selected_attr or "号" in selected_attr: wx_suffix = "号"
-        elif "尾" in selected_attr: wx_suffix = "尾"
-        elif "肖" in selected_attr: wx_suffix = "肖"
-        else: wx_suffix = ""
-        
+        st.session_state.play_alert = False
         target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
         sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
             
@@ -1366,176 +1347,188 @@ def render_multi_analysis(df_data):
                 if v is None: return ""
                 try: return str(int(float(v)))
                 except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
-
+    
+            # 寻找基准期的行号
             target_row_idx = -1
             for r_idx in range(len(all_rows)):
                 year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else "2026"
                 p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
                 p2 = clean_str(all_rows[r_idx][1]) if len(all_rows[r_idx]) > 1 else ""
                 p3 = clean_str(all_rows[r_idx][2]) if len(all_rows[r_idx]) > 2 else ""
-                if f"{year_val}{p1}{p2}{p3}" == selected_period: target_row_idx = r_idx; break
+                if f"{year_val}{p1}{p2}{p3}" == selected_period: 
+                    target_row_idx = r_idx
+                    break
             
-            if target_row_idx == -1: st.error(f"找不到基准期数 {selected_period}！"); st.stop()
-            
-            ball_cols = [get_column_letter(base_excel_col + (n - 1) * 30) for n in range(1, 8)]
-            ref_col_letter = ball_cols[ball_num - 1]
-            ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
+            if target_row_idx == -1: 
+                st.error(f"找不到基准期数 {selected_period}！"); st.stop()
             
             cross_sheng = {"金": ["土", "水"], "木": ["水", "火"], "水": ["金", "木"], "火": ["木", "土"], "土": ["火", "金"]}
-            cross_ke = {"金": ["火", "木"], "木": ["金", "土"], "水": ["土", "火"], "火": ["水", "金"], "土": ["木", "水"]}
+            cross_ke = {"金": ["木", "火"], "木": ["土", "金"], "水": ["火", "土"], "火": ["金", "水"], "土": ["水", "木"]}
             
             def get_wx(s):
                 core = s.replace("肖", "").replace("号", "").replace("尾", "")
                 return {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}.get(core, core)
+    
+            # 🔥 通用匹配引擎
+            def do_match(attr_name, attr_base_col, ball_n, min_l, max_l):
+                is_cross_mode = attr_name in ["生肖五行与数字五行相生", "生肖五行与数字五行相克", "数字五行与生肖五行相生", "数字五行与生肖五行相克"]
+                is_zodiac_to_num = attr_name.startswith("生肖")
+                is_cross_sheng = "相生" in attr_name
+                is_cross_ke = "相克" in attr_name
+                is_sheng_mode = "相生" in attr_name
+                is_ke_mode = "相克" in attr_name
+                is_normal_mode = not (is_sheng_mode or is_ke_mode) and not is_cross_mode
+                wx_suffix = "号" if ("数字" in attr_name or "号" in attr_name) else ("尾" if "尾" in attr_name else ("肖" if "肖" in attr_name else ""))
                 
-            def check_match(a, b):
-                if is_cross_mode:
-                    if is_cross_sheng: return b in cross_sheng.get(a, [])
-                    elif is_cross_ke: return b in cross_ke.get(a, [])
-                if is_normal_mode: return a == b
-                core_a, core_b = get_wx(a), get_wx(b)
-                child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
-                mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
-                ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
-                if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
-                elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
-                return False
-
-            def get_col_data(col_idx_0):
-                return [(r_idx, clean_str(all_rows[r_idx][col_idx_0]) if col_idx_0 < len(all_rows[r_idx]) else "") for r_idx in range(len(all_rows))]
-
-            status_text.text("正在提取基准列...")
-            ref_col_data = get_col_data(ref_col_idx_0)
-            template = []
-            for r in range(target_row_idx, len(ref_col_data)):
-                if ref_col_data[r][1]: template.append(ref_col_data[r][1])
-                if len(template) >= max_len: break
+                ball_cols = [get_column_letter(attr_base_col + (x - 1) * 30) for x in range(1, 8)]
+                ref_col_letter = ball_cols[ball_n - 1]
+                ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
+                
+                def check_match(a, b):
+                    if is_cross_mode:
+                        if is_cross_sheng: return b in cross_sheng.get(a, [])
+                        elif is_cross_ke: return b in cross_ke.get(a, [])
+                    if is_normal_mode: return a == b
+                    core_a, core_b = get_wx(a), get_wx(b)
+                    child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
+                    mother = {"金": "土", "土": "火", "火": "木", "木": "水", "水": "金"}
+                    ke_dict = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
+                    if is_sheng_mode: return (child.get(core_a) == core_b) or (mother.get(core_a) == core_b)
+                    elif is_ke_mode: return (ke_dict.get(core_a) == core_b) or (ke_dict.get(core_b) == core_a)
+                    return False
                     
-            if len(template) < min_len:
-                progress_bar.empty(); status_text.empty(); st.warning(f"基准列数据不足 {min_len} 个"); st.stop()
-                
-            gColl = {i: [] for i in range(min_len, max_len + 1)}
-            status_text.text("正在扫描匹配项...")
-            
-            for n in range(1, 8):
-                # 🔥 核心修复：交叉模式下的目标列取法
-                if is_cross_mode:
-                    target_base_col = 6 if is_zodiac_to_num else 18
+                def get_col_data(col_idx_0):
+                    return [(r, clean_str(all_rows[r][col_idx_0]) if col_idx_0 < len(all_rows[r]) else "") for r in range(len(all_rows))]
+                    
+                ref_col_data = get_col_data(ref_col_idx_0)
+                template = []
+                for r in range(target_row_idx, len(ref_col_data)):
+                    if ref_col_data[r][1]: template.append(ref_col_data[r][1])
+                    if len(template) >= max_l: break
+                        
+                if len(template) < min_l: return []
+                    
+                results = []
+                for n in range(1, 8):
+                    target_base_col = (6 if is_zodiac_to_num else 18) if is_cross_mode else attr_base_col
                     col_name = get_column_letter(target_base_col + (n - 1) * 30)
-                else:
-                    col_name = ball_cols[n - 1]
+                    current_col_idx = column_index_from_string(col_name) - 1
+                    disp_name = f"{n}球({col_name})"
+                    is_self = (col_name == ref_col_letter)
                     
-                current_col_idx = column_index_from_string(col_name) - 1
-                disp_name = f"{n}球({col_name})"
-                is_self = (col_name == ref_col_letter)
-                
-                col_data = get_col_data(current_col_idx)
-                valid_data = [(r, col_data[r][1]) for r in range(2, len(col_data)) if col_data[r][1]]
-                vc = len(valid_data)
-                
-                if vc >= min_len:
-                    k = 0
-                    while k <= vc - min_len:
-                        max_l = 0
-                        for j in range(vc - k):
-                            if j >= len(template): break
-                            if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
-                            if not check_match(template[j], valid_data[k+j][1]): break
-                            max_l = j + 1
-                            
-                        if max_l >= min_len:
-                            real_l = max_l; group_l = min(real_l, max_len)
-                            sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
-                            
-                            def get_ctx(r_idx):
-                                if r_idx < 0 or r_idx >= len(col_data): return "无"
-                                v = col_data[r_idx][1]
-                                if not v: return "空"
+                    col_data = get_col_data(current_col_idx)
+                    valid_data = [(r, col_data[r][1]) for r in range(2, len(col_data)) if col_data[r][1]]
+                    vc = len(valid_data)
+                    
+                    if vc >= min_l:
+                        k = 0
+                        while k <= vc - min_l:
+                            max_l_hit = 0
+                            for j in range(vc - k):
+                                if j >= len(template): break
+                                if j > 0 and valid_data[k+j][0] != valid_data[k+j-1][0] + 1: break
+                                if not check_match(template[j], valid_data[k+j][1]): break
+                                max_l_hit = j + 1
                                 
-                                # 🔥 核心修复：交叉模式的文本输出方向
-                                if is_cross_mode:
-                                    v_suffix = "号" if is_zodiac_to_num else "肖"
-                                    # 🔥 只有"上"才显示括号，其他不显示
-                                    if r_idx == sr - 1:
-                                        rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
-                                        target_suffix = "肖" if is_zodiac_to_num else "号"
-                                        rule_str = "".join([f"{x}{target_suffix}" for x in rules])
-                                        prefix = "生" if is_cross_sheng else "克"
-                                        return f"{v}{v_suffix} ({prefix}{rule_str})"
-                                    else:
-                                        return f"{v}{v_suffix}"
+                            if max_l_hit >= min_l:
+                                real_l = max_l_hit
+                                sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
+                                
+                                def get_ctx(r_idx):
+                                    if r_idx < 0 or r_idx >= len(col_data): return "无"
+                                    v = col_data[r_idx][1]
+                                    if not v: return "空"
+                                    if is_cross_mode:
+                                        v_suffix = "号" if is_zodiac_to_num else "肖"
+                                        if r_idx == sr - 1:
+                                            rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
+                                            target_suffix = "肖" if is_zodiac_to_num else "号"
+                                            rule_str = "".join([f"{x}{target_suffix}" for x in rules])
+                                            prefix = "生" if is_cross_sheng else "克"
+                                            return f"{v}{v_suffix} ({prefix}{rule_str})"
+                                        else: return f"{v}{v_suffix}"
+                                    if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
+                                    if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
+                                    return v
                                     
-                                if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
-                                if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
-                                return v
+                                w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                                 
-                            w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
-                            
-                            
-                            if is_normal_mode or is_cross_mode:
-                                # 先拼出上、下、再下、再再下
-                                detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
-                                
-                                # 🔥 然后在整行的最后面，统一追加杀号
-                                if is_cross_mode and w1 not in ["空", "无"]:
-                                    core_w1 = w1[0] # 提取"木号"里的"木"
-                                    rules = cross_sheng.get(core_w1, []) if is_cross_sheng else cross_ke.get(core_w1, [])
-                                    target_suffix = "肖" if is_zodiac_to_num else "号"
-                                    kill_str = "".join([f"{x}{target_suffix}" for x in rules])
-                                    detail_txt += f" (杀{kill_str})"
-                            else:
-                                core_w1 = get_wx(w1)
-                                if is_sheng_mode:
-                                    rule_str = {"金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"}.get(core_w1, "")
-                                    full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
-                                    sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                if is_normal_mode or is_cross_mode:
+                                    detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
+                                    if is_cross_mode and w1 not in ["空", "无"]:
+                                        core_w1 = w1[0]
+                                        rules = cross_sheng.get(core_w1, []) if is_cross_sheng else cross_ke.get(core_w1, [])
+                                        target_suffix = "肖" if is_zodiac_to_num else "号"
+                                        kill_str = "".join([f"{x}{target_suffix}" for x in rules])
+                                        detail_txt += f" (杀{kill_str})"
                                 else:
-                                    rule_str = {"金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"}.get(core_w1, "")
-                                    full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
-                                    sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
-                                
-                            if is_self: detail_txt += " [自身参考列匹配]"
-                            w1_str = str(w1).strip()
-                            if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
-                                if er + 1 <= 25:
-                                    line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
-                                    if 5 <= real_l <= 9:
-                                        st.session_state.play_alert = True
-                                        line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
-                                else:
-                                    line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
-                                gColl[group_l].append({"line": line_txt, "sr": sr})
-                            k += real_l
-                        else:
-                            k += 1
-                                
-            progress_bar.progress(90)
-            status_text.text("正在整理报告...")            
-            ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
-            for L in range(min_len, max_len + 1):
-                if not gColl[L]: continue
-                ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
-                for item in gColl[L]:
-                    ball_lines.append(item["line"]); ball_lines.append("")
-            
-            st.session_state.multi_results_dict[ball_num] = "\\n".join(ball_lines)
-            combined_text = []
-            for i in range(1, 8):
-                if i in st.session_state.multi_results_dict: combined_text.append(st.session_state.multi_results_dict[i])
-            st.session_state.multi_result_text = "\\n\\n\\n".join(combined_text)
-            
-            if st.session_state.get("play_alert", False):
-                import streamlit.components.v1 as components
-                components.html("<script>var AudioContext = window.AudioContext || window.webkitAudioContext; var ctx = new AudioContext(); function playCoin() { if (ctx.state === 'suspended') ctx.resume(); var osc1 = ctx.createOscillator(); var gain1 = ctx.createGain(); osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime); gain1.gain.setValueAtTime(0.5, ctx.currentTime); gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3); osc1.connect(gain1); gain1.connect(ctx.destination); osc1.start(); osc1.stop(ctx.currentTime + 0.3); var osc2 = ctx.createOscillator(); var gain2 = ctx.createGain(); osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1); gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1); gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4); osc2.connect(gain2); gain2.connect(ctx.destination); osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4); } playCoin(); </script>", height=0, width=0)
-                st.session_state.play_alert = False
-
+                                    core_w1 = get_wx(w1)
+                                    if is_sheng_mode:
+                                        rule_str = {"金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"}.get(core_w1, "")
+                                        full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
+                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                    else:
+                                        rule_str = {"金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"}.get(core_w1, "")
+                                        full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
+                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
+                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                    
+                                if is_self: detail_txt += " [自身参考列匹配]"
+                                w1_str = str(w1).strip()
+                                if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
+                                    if er + 1 <= 25:
+                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
+                                        if 5 <= real_l <= 9:
+                                            st.session_state.play_alert = True
+                                            line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
+                                    else:
+                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
+                                    results.append(line_txt)
+                                k += real_l
+                            else: 
+                                k += 1
+                return results
+    
+            # 🔥 执行分析（根据模式分流）
+            if "单属性" in analysis_mode:
+                attr_map_val = ATTR_MAP[selected_attr]
+                res_lines = do_match(selected_attr, attr_map_val, ball_num, min_len, max_len)
+                
+                out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\\n"
+                if not res_lines: 
+                    out_txt += "未找到符合条件的匹配记录。"
+                else:
+                    for line in res_lines: 
+                        out_txt += f"{line}\\n"
+                st.session_state.multi_result_text = out_txt
+                
+            else:
+                status_text.text("正在透视所有属性，请稍候...")
+                all_attr_text = f"========== {selected_file_type} - {selected_period} - {ball_str} 全属性扫描 ==========\\n\\n"
+                
+                for attr_name, attr_col in ATTR_MAP.items():
+                    # 过滤掉重复的键名，避免重复计算
+                    if attr_name in ["生肖五行相生", "生肖五行相克", "数字五行相生", "数字五行相克", "尾五行相生", "尾五行相克", "生肖与五行相生", "生肖与五行相克"]: 
+                        continue
+                        
+                    res = do_match(attr_name, attr_col, ball_num, min_len, max_len)
+                    if res:
+                        all_attr_text += f"【{attr_name}】匹配结果:\\n"
+                        for line in res: 
+                            all_attr_text += f"{line}\\n"
+                        all_attr_text += "\\n"
+                        
+                if all_attr_text.endswith("全属性扫描 ==========\\n\\n"):
+                    all_attr_text += "当前基准球在历史记录中未发现任何符合条件的属性匹配。"
+                    
+                st.session_state.multi_result_text = all_attr_text
+    
             progress_bar.progress(100)
             status_text.text("计算完成！")
             
         except Exception as e:
-            st.error(f"计算报错: {e}")
-
+            st.error(f"计算报错: {e}")    
+    #========以上为多维分析内部逻辑代码区=================
     st.divider()
     
     col_title, col_btn = st.columns([8, 2])
