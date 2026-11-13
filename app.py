@@ -321,38 +321,51 @@ def login_page():
     with tab1:
         user = st.text_input("用户名", key="login_user")
         pwd = st.text_input("密码", type="password", key="login_pass")
+        
         if st.button("登录", use_container_width=True):
             if user and pwd:
                 user_clean = user.strip()
                 pwd_clean = pwd.strip()
                 
-                # 🔥 核心：管理员 VIP 直通车逻辑
-                admin_name = st.secrets.get("ADMIN_USERNAME", "samkysun") # 默认 admin
-                admin_pass = st.secrets.get("ADMIN_PASSWORD", "samky800905") # 建议你去 Secrets 里设个真密码
+                # 🔥 核心：从 Secrets 读取，移除了默认明文密码！
+                admin_name = st.secrets.get("ADMIN_USERNAME", "")
+                admin_pass = st.secrets.get("ADMIN_PASSWORD", "")
                 
-                is_admin = False
-                if user_clean == admin_name:
-                    if pwd_clean == admin_pass or hashlib.sha256(pwd_clean.encode()).hexdigest() == admin_pass:
-                        st.session_state.logged_in = True
-                        st.session_state.username = user_clean
-                        is_admin = True
-                        st.rerun()
-                
-                # 如果上面没进管理员通道，再走普通用户通道
-                if not is_admin:
-                    users_df = load_users()
-                    users_df['username'] = users_df['username'].astype(str).str.strip()
-                    users_df['password'] = users_df['password'].astype(str).str.strip()
+                # 🛡️ 安全护盾：如果 Secrets 没配，直接拦截，不给任何人留后门
+                if not admin_name or not admin_pass:
+                    st.error("⚠️ 系统安全配置缺失：请在后台 Secrets 中配置管理员账号。")
+                else:
+                    is_admin = False
+                    # 管理员 VIP 直通车
+                    if user_clean == admin_name:
+                        # 兼容明文密码或者 SHA256 哈希密码
+                        if pwd_clean == admin_pass or hashlib.sha256(pwd_clean.encode()).hexdigest() == admin_pass:
+                            st.session_state.logged_in = True
+                            st.session_state.username = user_clean
+                            st.rerun()
+                            st.stop() # 🔥 登录成功立刻切断后台代码执行，提速！
                     
-                    hashed = hashlib.sha256(pwd_clean.encode()).hexdigest()
-                    match = users_df[(users_df['username'] == user_clean) & (users_df['password'] == hashed)]
-                    
-                    if not match.empty:
-                        st.session_state.logged_in = True
-                        st.session_state.username = user_clean
-                        st.rerun()
-                    else: 
-                        st.error("用户名或密码错误！(可能账号未成功保存，请重新注册)")
+                    # 如果没进管理员通道，走普通用户通道
+                    if not is_admin:
+                        users_df = load_users()
+                        
+                        # 防止空数据导致的报错
+                        if not users_df.empty:
+                            users_df['username'] = users_df['username'].astype(str).str.strip()
+                            users_df['password'] = users_df['password'].astype(str).str.strip()
+                            
+                            hashed = hashlib.sha256(pwd_clean.encode()).hexdigest()
+                            match = users_df[(users_df['username'] == user_clean) & (users_df['password'] == hashed)]
+                            
+                            if not match.empty:
+                                st.session_state.logged_in = True
+                                st.session_state.username = user_clean
+                                st.rerun()
+                                st.stop() # 🔥 同样切断
+                            else: 
+                                st.error("用户名或密码错误！(如果刚注册，请稍等几秒再试)")
+                        else:
+                            st.error("系统未读取到普通用户数据，请检查网络或配置。")    
                 
     with tab2:
         # 下面是原来的注册代码，原封不动放这里
