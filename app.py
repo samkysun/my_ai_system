@@ -1304,14 +1304,24 @@ def render_multi_analysis(df_data):
         ball_num = int(ball_str.replace("第", "").split("球")[0])
     #=======多维分析页面文字按钮布局设置================    
     row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
+    # 🔥 第二排分成 4 列：[数字框1, 数字框2, 执行按钮, 刷新按钮]
+    row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
     with row2_col1: 
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
     with row2_col2: 
-        max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=12, step=1)
+        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
     with row2_col3:
         st.write("")
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
+    with row2_col4:
+        st.write("")
+        st.write("")
+        # 🔥 这个按钮用来强制刷新云端数据
+        if st.button("🔄 刷新云端数据", use_container_width=True, type="secondary"):
+            load_excel_data.clear() # 强制清空缓存
+            st.toast("✅ 缓存已清空，下次点击将重新下载最新文件！")
+            st.rerun()
 
     # 🔥 交叉模式专属判断（使用 startswith 彻底防错）
     is_cross_mode = selected_attr in ["生肖五行与数字五行相生", "生肖五行与数字五行相克", "数字五行与生肖五行相生", "数字五行与生肖五行相克"]
