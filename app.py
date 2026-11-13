@@ -808,10 +808,8 @@ def render_console(df_data):
     
     df_data['_temp_period'] = df_data.iloc[:, 18].apply(clean_period)
     matched_rows = df_data[df_data['_temp_period'] == selected_period]
-    # ... 后面的代码保持不变 ...
     try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
     except: is_descending = True
-    
     next_period_str, next_flat_nums, next_special_num, has_next_data = "", [], 0, False
     if not matched_rows.empty:
         base_idx = matched_rows.index[0]
@@ -823,8 +821,7 @@ def render_console(df_data):
                 next_flat_nums = [int(clean_period(next_row.iloc[i])) for i in range(19, 25) if pd.notna(next_row.iloc[i])]
                 next_special_num = int(clean_period(next_row.iloc[25])) if pd.notna(next_row.iloc[25]) else 0
                 if len(next_flat_nums) > 0: has_next_data = True
-            except: pass
-            
+            except: pass            
     if has_next_data:
         st.subheader(f"{next_period_str} 期开奖结果")
         balls_html = '<div class="ball-container">'
@@ -1514,8 +1511,7 @@ def render_multi_analysis(df_data):
                             k += 1
                                 
             progress_bar.progress(90)
-            status_text.text("正在整理报告...")
-#=================第三次粘贴位置=============            
+            status_text.text("正在整理报告...")            
             ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
             for L in range(min_len, max_len + 1):
                 if not gColl[L]: continue
@@ -1616,10 +1612,10 @@ def render_multi_analysis(df_data):
         )
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
-                                    
-
-       
+                               
 #=======多维分析终点============
+
+#=========深度联动（多套合一核算）=======
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
     st.title("🔗 深度联动分析系统")
