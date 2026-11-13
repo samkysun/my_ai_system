@@ -1285,26 +1285,13 @@ def render_multi_analysis(df_data):
         "生肖五行与数字五行相生": 18, "生肖五行与数字五行相克": 18, "数字五行与生肖五行相生": 6, "数字五行与生肖五行相克": 6
     }
 
-    st.markdown("### 分析参数设置")
-    row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-    with row1_col1:
-        unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
-        try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
-        except: unique_periods.sort(reverse=True)
-        selected_period = st.selectbox("基准期数", unique_periods)
-    with row1_col2: 
-        selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
-    with row1_col3: 
-        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1) 
-    with row1_col4:
-        ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
-        ball_num = int(ball_str.replace("第", "").split("球")[0])
+    
     #=======多维分析页面文字按钮布局及多向叠加设置================
     #================================================
     # 🔥 第二排分成 4 列：[数字框1, 数字框2, 执行按钮, 刷新按钮]
     st.markdown("### 分析参数设置")
 
-    # 🔥 1. 模式定义
+    # 🔥 1. 模式定义（双向透视开关）
     analysis_mode = st.radio("分析模式：", ["单属性透视 (按球查属性)", "单球全属性透视 (按球查全部)"], horizontal=True)
     
     # 🔥 2. 第一排参数
@@ -1317,7 +1304,6 @@ def render_multi_analysis(df_data):
     with row1_col2: 
         selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])
     with row1_col3: 
-        # 根据模式动态显示或隐藏属性框
         if "单属性" in analysis_mode:
             selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1)
         else:
