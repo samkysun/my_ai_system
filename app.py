@@ -1022,6 +1022,9 @@ def build_rule_database():
         col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
         col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
         
+        # 🔥 新增：读取方位列
+        col_dir = next((c for c in df.columns if "方位" in str(c)), "方位")
+        
         for _, row in df.iterrows():
             num_str = str(row[col_num]).strip()
             if num_str.replace('.', '', 1).isdigit():
@@ -1031,7 +1034,8 @@ def build_rule_database():
                     "号五行": str(row[col_element]), "尾五行": str(row[col_tail]), 
                     "波色": str(row[col_color]), "大小": str(row[col_size]), 
                     "物象": str(row[col_obj]), "人物": str(row[col_role]), 
-                    "合数": str(row[col_sum])
+                    "合数": str(row[col_sum]),
+                    "方位": str(row[col_dir])  # 🔥 新增：把方位存入字典
                 }
         return db
     except Exception as e: 
@@ -1039,12 +1043,25 @@ def build_rule_database():
         st.error(f"底层读取失败，真实原因：{e}")
         return None
 
+
 def build_full_table_text(db):
     result = "【1-49号完整属性表（绝对权威）】\\n"
     for i in range(1, 50):
         if str(i) in db:
             info = db[str(i)]
-            result += f"{i}号:{{{info['生肖']},{info['肖五行']},{info['号五行']},{info['尾五行']},{info['物象']},{info['人物']},{info['大小']},{info['波色']},{info['合数']}}}\\n"
+            
+            # 🔥 1. 自动计算单双组合
+            tens, units = i // 10, i % 10
+            if tens % 2 == 0 and units % 2 == 0: combo = "双双"
+            elif tens % 2 == 0 and units % 2 == 1: combo = "双单"
+            elif tens % 2 == 1 and units % 2 == 1: combo = "单单"
+            else: combo = "单双"
+            
+            # 🔥 2. 获取上一段代码里读出来的方位
+            direction = info.get('方位', '无')
+            
+            # 🔥 3. 将单双和方位拼接到发给 AI 的文本中
+            result += f"{i}号:{{生肖:{info['生肖']}, 肖五行:{info['肖五行']}, 号五行:{info['号五行']}, 尾五行:{info['尾五行']}, 物象:{info['物象']}, 人物:{info['人物']}, 大小:{info['大小']}, 波色:{info['波色']}, 合数:{info['合数']}, 方位:{direction}, 单双组合:{combo}}}\\n"
     return result
 
 #========给AI推演做过程描述指示============
