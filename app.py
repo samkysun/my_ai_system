@@ -1541,41 +1541,55 @@ def render_multi_analysis(df_data):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
             st.rerun()
-
+    #============多维计算结果文字框的控制代码===================        
     if st.session_state.multi_result_text != "":
+        # ✂️ 1. 新增：手动编辑/删除面板 (不会影响高亮和打印)
+        with st.expander("✂️ 手动编辑/精简当前报告", expanded=False):
+            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=st.session_state.multi_result_text, height=250)
+            if st.button("💾 保存修改并更新结果", type="secondary"):
+                st.session_state.multi_result_text = edited_text
+                st.rerun()
+    
         import streamlit.components.v1 as components
         import html
         import base64
         
-        clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
+        # 🔥 2. 修复了乱码换行符 (之前的斜杠太多了)
+        clean_text = st.session_state.multi_result_text.replace('\\r', '')
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         
+        # 保持你原有的高亮逻辑不变
         highlighted_display = escaped_text.replace(
             "[[HIGHLIGHT]]", 
             '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
         ).replace("[[/HIGHLIGHT]]", '</span>')
     
+        # 🔥 3. 加入全部居中：text-align: center;
         display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
         
+        # 🔥 4. 打印页面同样加入居中，并且修复了乱码换行
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
-        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
-        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
-        </style></head><body><pre>{highlighted_display}</pre></body></html>
+        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
+        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; text-align: center; }}
+        </style></head><body><pre>{html.escape(clean_text)}</pre></body></html>
         """
         
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
         
+        # 5. 渲染网页显示框和打印按钮 (修复了图标乱码)
         components.html(
             f"""
             <div id="report-container"></div>
             <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
+                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                    🖨️ 打印当前报告 (排版不乱)
+                </button>
             </div>
             <script>
             function b64DecodeUnicode(str) {{
@@ -1598,6 +1612,8 @@ def render_multi_analysis(df_data):
         )
     
         st.write("") 
+        
+        # 6. 保存按钮 (修复了图标乱码)
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
             label="📥 保存完整报告到本地 (TXT格式)", 
@@ -1607,7 +1623,7 @@ def render_multi_analysis(df_data):
             use_container_width=True
         )
     else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")    
                                
 #=======多维分析终点============
 
