@@ -1302,12 +1302,12 @@ def render_multi_analysis(df_data):
     with row1_col4:
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
-
+    #=======多维分析页面文字按钮布局设置================    
     row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
     with row2_col1: 
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
     with row2_col2: 
-        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
+        max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=12, step=1)
     with row2_col3:
         st.write("")
         st.write("")
