@@ -1217,8 +1217,9 @@ import os
 from datetime import datetime
 from openpyxl.utils import get_column_letter
 
-# 🔥 核心优化：使用缓存读取，极大提升速度
-@st.cache_data(show_spinner=False, ttl=1800)
+
+# ?? 缓存1小时 (3600秒)，且缓存解析好的纯列表
+@st.cache_data(show_spinner=False, ttl=3600)
 def load_excel_data(file_path, sheet_name):
     import requests
     import io
@@ -1227,11 +1228,14 @@ def load_excel_data(file_path, sheet_name):
     token = st.secrets.get("GITHUB_TOKEN")
     repo = st.secrets.get("GITHUB_REPO")
     
+    def parse_workbook(wb):
+        ws = wb[sheet_name]
+        return list(ws.iter_rows(values_only=True))
+        
     if not token or not repo:
         try:
             wb = openpyxl.load_workbook(file_path, data_only=True)
-            ws = wb[sheet_name]
-            return list(ws.iter_rows(values_only=True))
+            return parse_workbook(wb)
         except Exception:
             return []
         
@@ -1243,11 +1247,13 @@ def load_excel_data(file_path, sheet_name):
             download_url = r.json()["download_url"]
             content = requests.get(download_url).content
             wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-            ws = wb[sheet_name]
-            return list(ws.iter_rows(values_only=True))
+            return parse_workbook(wb)
         else:
             st.error(f"读取云端文件失败，状态码: {r.status_code}")
             return []
+    except Exception as e:
+        st.error(f"云端读取异常: {e}")
+        return []
     except Exception as e:
         st.error(f"云端读取异常: {e}")
         return []
