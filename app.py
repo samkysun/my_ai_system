@@ -1603,7 +1603,9 @@ def render_multi_analysis(df_data):
                     out_txt += f"{line}\\n"
             
             # 如果是全属性透视模式，就把结果累积起来；如果是单属性，直接覆盖
+        
             if "全属性" in analysis_mode:
+                # 🔥 确保每次点执行前，如果上一次点了清空，这里绝对不能报错
                 if "full_scan_results" not in st.session_state:
                     st.session_state.full_scan_results = []
                 
@@ -1628,9 +1630,12 @@ def render_multi_analysis(df_data):
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
-        if st.button("🗑️清空所有结果", use_container_width=True):
+        if st.button("清空所有结果", use_container_width=True):
+            # 🔥 连根拔起：把你隐藏的累积仓库也清空！
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
+            if "full_scan_results" in st.session_state:
+                st.session_state.full_scan_results = []
             st.rerun()
     #============多维计算结果文字框的控制代码=================== 
     #============这段是编辑修改内容的文字框干整显示代码==========
