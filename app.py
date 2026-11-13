@@ -1225,30 +1225,47 @@ def render_ai(df_data):
         import html
         import base64
         
-        # 🔥 1. 动态拼接表头 (使用你上面已定义的 qishu, order_type, qiu 变量)
-        table_header = f"#============={qishu}期{order_type}{qiu}核算结果======================"
-        full_result_text = f"{table_header}\\n\\n{st.session_state.ai_api_result}"
+        # 🔥 1. 终极清洗（只在这里洗，不动原数据）
+        clean_ai_text = st.session_state.ai_api_result
+        clean_ai_text = clean_ai_text.replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
+        clean_ai_text = clean_ai_text.replace("【严格筛选结果】", "").replace("【后补筛选结果】", "").replace("(如果有的话)", "")
+        clean_ai_text = clean_ai_text.strip() 
         
-        # 🔥 2. 构建网页展示 HTML (居中，保留纯文本格式)
-        escaped_text = html.escape(full_result_text).replace("\\n", "<br>")
+        # 🔥 2. 动态拼接表头
+        table_header = f"#============={qishu}期{order_type}{qiu}核算结果======================"
+        
+        # 完整下载用的纯文本
+        full_result_text = f"{table_header}\\n\\n{clean_ai_text}"
+        
+        # 转义表头和正文，用于 HTML 渲染 (必须分开转义，否则标签会乱)
+        escaped_header = html.escape(table_header)
+        escaped_body = html.escape(clean_ai_text).replace("\\n", "<br>").replace("\\\\n", "<br>")
+        
+        # 🔥 3. 构建展示 HTML (表头加粗居中，正文居中)
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
-            {escaped_text}
+            <div style="font-weight: bold; font-size: 18px; margin-bottom: 20px; color: #1e293b;">{escaped_header}</div>
+            <div style="color: #334155;">{escaped_body}</div>
         </div>
         """
         
-        # 🔥 3. 构建打印 HTML (居中)
+        # 🔥 4. 构建打印 HTML (隐藏页眉页脚，表头加粗居中)
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
+        @page {{ margin: 15mm; }}
         body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
-        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; text-align: center; }}
-        </style></head><body><pre>{html.escape(full_result_text)}</pre></body></html>
+        .header {{ font-weight: bold; font-size: 16px; margin-bottom: 25px; }}
+        .body {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
+        </style></head><body>
+        <div class="header">{escaped_header}</div>
+        <div class="body">{escaped_body}</div>
+        </body></html>
         """
         
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
         
-        # 🔥 4. 渲染打印按钮与展示框
+        # 🔥 5. 渲染打印按钮与展示框
         components.html(
             f"""
             <div id="report-container"></div>
@@ -1279,7 +1296,7 @@ def render_ai(df_data):
         
         st.write("")
         
-        # 🔥 5. 保存到本地按钮
+        # 🔥 6. 保存按钮
         st.download_button(
             label="📥 保存完整推演报告到本地 (TXT格式)", 
             data=full_result_text.encode('utf-8-sig'), 
@@ -1289,6 +1306,7 @@ def render_ai(df_data):
         )
     else:
         st.info("👈 请先在上方设置参数，然后点击【开始推演】。")
+    
 # ==========================================
 # 页面 6：多维分析系统 (功能原封不动，仅修复后缀版)
 # ==========================================
