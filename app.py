@@ -104,7 +104,8 @@ if "calc_data_multi" not in st.session_state: st.session_state.calc_data_multi =
 if "calc_result_preview" not in st.session_state: st.session_state.calc_result_preview = None
 if "predicted_nums_single" not in st.session_state: st.session_state.predicted_nums_single = None
 if "predicted_nums_multi" not in st.session_state: st.session_state.predicted_nums_multi = None
-
+    
+@st.cache_data(show_spinner=False, ttl=3600) # 👈 加上这一行
 def load_users():
     import requests
     import io
@@ -326,8 +327,8 @@ def login_page():
                 pwd_clean = pwd.strip()
                 
                 # 🔥 核心：管理员 VIP 直通车逻辑
-                admin_name = st.secrets.get("ADMIN_USERNAME", "admin") # 默认 admin
-                admin_pass = st.secrets.get("ADMIN_PASSWORD", "123456") # 建议你去 Secrets 里设个真密码
+                admin_name = st.secrets.get("ADMIN_USERNAME", "samkysun") # 默认 admin
+                admin_pass = st.secrets.get("ADMIN_PASSWORD", "samky800905") # 建议你去 Secrets 里设个真密码
                 
                 is_admin = False
                 if user_clean == admin_name:
