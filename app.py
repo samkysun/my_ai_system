@@ -463,8 +463,8 @@ def render_console(df_data):
     # 1. 按钮布局 (增加了抓取按钮，去除了 Emoji)
     # ==========================================
     b1, b2, b3, b4, b5, b6 = st.columns(6)
-    start_btn = b1.button("批量联动分析", use_container_width=True, type="primary")
-    result_btn = b2.button("中奖结果", use_container_width=True)
+    start_btn = b1.button("⚡批量联动分析", use_container_width=True, type="primary")
+    result_btn = b2.button("🏆中奖结果", use_container_width=True)
     clear_btn = b3.button("🗑️清空数据", use_container_width=True)
     sync_btn = b4.button("🔄同步数据", use_container_width=True)
     trend_btn = b5.button("📈走势图", use_container_width=True)
