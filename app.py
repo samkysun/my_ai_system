@@ -1556,12 +1556,16 @@ def render_multi_analysis(df_data):
         
         # ✂️ 2. 编辑面板（用清洗后的干净文本）
         with st.expander("✂️ 手动编辑/精简当前报告 (点击展开)", expanded=False):
-            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
+            # 🔥 专门为编辑框建立独立清洗变量，绝不影响下面的展示框
+            import re
+            edit_clean_text = re.sub(r'\\\\+n', '\\n', st.session_state.multi_result_text).replace('\\r', '')
+            
+            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=edit_clean_text, height=250)
             if st.button("💾 保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
                 st.rerun()
     
-        # 3. 渲染下方的漂亮展示框
+        # ==========3. 渲染下方的漂亮展示框（保持不进行修改）===========
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         
         highlighted_display = escaped_text.replace(
