@@ -1440,8 +1440,16 @@ def render_multi_analysis(df_data):
                                 
                             w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                             
+                            
                             if is_normal_mode or is_cross_mode:
                                 detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
+                                # 🔥 交叉模式下，在末尾追加杀号
+                                if is_cross_mode and w1 not in ["空", "无"]:
+                                    core_w1 = w1[0] # 提取"木号"里的"木"
+                                    rules = cross_sheng.get(core_w1, []) if is_cross_sheng else cross_ke.get(core_w1, [])
+                                    target_suffix = "肖" if is_zodiac_to_num else "号"
+                                    kill_str = "".join([f"{x}{target_suffix}" for x in rules])
+                                    detail_txt += f" (杀{kill_str})"
                             else:
                                 core_w1 = get_wx(w1)
                                 if is_sheng_mode:
