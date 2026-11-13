@@ -1543,27 +1543,27 @@ def render_multi_analysis(df_data):
             st.rerun()
     #============多维计算结果文字框的控制代码===================        
     if st.session_state.multi_result_text != "":
-        import re
         import streamlit.components.v1 as components
         import html
         import base64
         
-        # 🔥 1. 终极暴力清洗：把所有带斜杠的假换行，统统变成真换行
+        # ?? 终极清洗：用 chr(92) 代表反斜杠，用 chr(10) 代表真回车，彻底避开转义坑！
         raw_text = st.session_state.multi_result_text
-        raw_text = raw_text.replace('\\\\r', '')
-        # 这句正则的意思是：不管有几个反斜杠，只要后面跟着 n，全部变成真换行
-        clean_text = re.sub(r'\\\\+n', '\\n', raw_text)
         
-        # ✂️ 2. 编辑面板（用清洗后的干净文本）
-        with st.expander("✂️ 手动编辑/精简当前报告 (点击展开)", expanded=False):
-            # 🔥 专门为编辑框建立独立清洗变量，绝不影响下面的展示框
-            import re
-            edit_clean_text = re.sub(r'\\\\+n', '\\n', st.session_state.multi_result_text).replace('\\r', '')
-            
-            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=edit_clean_text, height=250)
-            if st.button("💾 保存修改并更新结果", type="secondary"):
+        # 把字面上的 \\\\n 替换成真正的换行
+        clean_text = raw_text.replace(chr(92) + 'n', chr(10))
+        # 把字面上的 \\\\r 删掉
+        clean_text = clean_text.replace(chr(92) + 'r', '')
+        
+        # ?? 2. 编辑面板（使用洗得干干净净的 clean_text）
+        with st.expander("?? 手动编辑/精简当前报告 (点击展开)", expanded=False):
+            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
+            if st.button("?? 保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
                 st.rerun()
+
+    # 下面保持你原来的代码不动...
+    escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")    
     
         # ==========3. 渲染下方的漂亮展示框（保持不进行修改）===========
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
