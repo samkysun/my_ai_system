@@ -1251,6 +1251,7 @@ def load_excel_data(file_path, sheet_name):
     except Exception as e:
         st.error(f"云端读取异常: {e}")
         return []
+#=============多维分析调制启始位置==============================        
 def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
@@ -1260,11 +1261,11 @@ def render_multi_analysis(df_data):
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
-    # 🔥 核心：只在列表里增加 4 个交叉选项，原有全部保留
+    # 🔥 修正了选项名称，与你的要求完全一致
     ATTR_MAP = {
         "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
         "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18,
-        "生肖与数字相生": 18, "生肖与数字相克": 18, "数字与生肖相生": 6, "数字与生肖相克": 6
+        "生肖五行与数字五行相生": 18, "生肖五行与数字五行相克": 18, "数字五行与生肖五行相生": 6, "数字五行与生肖五行相克": 6
     }
 
     st.markdown("### 分析参数设置")
@@ -1292,9 +1293,9 @@ def render_multi_analysis(df_data):
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
-    # 🔥 交叉模式专属判断（绝对隔离）
-    is_cross_mode = selected_attr in ["生肖与数字相生", "生肖与数字相克", "数字与生肖相生", "数字与生肖相克"]
-    is_zodiac_to_num = "生肖与数字" in selected_attr
+    # 🔥 交叉模式专属判断（使用 startswith 彻底防错）
+    is_cross_mode = selected_attr in ["生肖五行与数字五行相生", "生肖五行与数字五行相克", "数字五行与生肖五行相生", "数字五行与生肖五行相克"]
+    is_zodiac_to_num = selected_attr.startswith("生肖")  # 以生肖开头，基准就是生肖，目标找数字
     is_cross_sheng = "相生" in selected_attr
     is_cross_ke = "相克" in selected_attr
 
@@ -1314,7 +1315,6 @@ def render_multi_analysis(df_data):
     if run_btn:
         is_sheng_mode = "相生" in selected_attr
         is_ke_mode = "相克" in selected_attr
-        # 普通模式：只要不是交叉，就是普通模式
         is_normal_mode = not (is_sheng_mode or is_ke_mode) and not is_cross_mode
         
         if "数字" in selected_attr or "号" in selected_attr: wx_suffix = "号"
@@ -1354,7 +1354,6 @@ def render_multi_analysis(df_data):
             ref_col_letter = ball_cols[ball_num - 1]
             ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
             
-            # 交叉五行专属字典
             cross_sheng = {"金": ["土", "水"], "木": ["水", "火"], "水": ["金", "木"], "火": ["木", "土"], "土": ["火", "金"]}
             cross_ke = {"金": ["火", "木"], "木": ["金", "土"], "水": ["土", "火"], "火": ["水", "金"], "土": ["木", "水"]}
             
@@ -1392,7 +1391,7 @@ def render_multi_analysis(df_data):
             status_text.text("正在扫描匹配项...")
             
             for n in range(1, 8):
-                # 🔥 核心隔离：交叉模式下，目标列的寻找逻辑完全不同
+                # 🔥 核心修复：交叉模式下的目标列取法
                 if is_cross_mode:
                     target_base_col = 6 if is_zodiac_to_num else 18
                     col_name = get_column_letter(target_base_col + (n - 1) * 30)
@@ -1426,11 +1425,11 @@ def render_multi_analysis(df_data):
                                 v = col_data[r_idx][1]
                                 if not v: return "空"
                                 
-                                # 🔥 交叉模式专属输出格式
+                                # 🔥 核心修复：交叉模式的文本输出方向
                                 if is_cross_mode:
                                     rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
-                                    v_suffix = "肖" if is_zodiac_to_num else "号" # 基准后缀
-                                    target_suffix = "号" if is_zodiac_to_num else "肖" # 目标后缀
+                                    v_suffix = "号" if is_zodiac_to_num else "肖" # 如果基准是生肖，那么对比的就是数字(号)
+                                    target_suffix = "肖" if is_zodiac_to_num else "号" # 字典里的生克对象就是另一边
                                     rule_str = "".join([f"{x}{target_suffix}" for x in rules])
                                     prefix = "生" if is_cross_sheng else "克"
                                     return f"{v}{v_suffix} ({prefix}{rule_str})"
@@ -1441,7 +1440,6 @@ def render_multi_analysis(df_data):
                                 
                             w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                             
-                            # 原汁原味保留原有逻辑
                             if is_normal_mode or is_cross_mode:
                                 detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                             else:
