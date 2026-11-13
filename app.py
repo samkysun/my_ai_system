@@ -1232,10 +1232,23 @@ def render_ai(df_data):
             others = ["金号", "木号", "水号", "火号", "土号", "金尾", "木尾", "水尾", "火尾", "土尾", "大肖", "中肖", "小肖", "书肖", "琴肖", "棋肖", "画肖", "福肖", "禄肖", "寿肖"]
             for idx, key in enumerate(others):
                 with cols[idx % 3]: st.checkbox(key, key=f"{v_prefix}{key}")
+       #========给AI页面增加复选框区域及内容=====================
         with st.expander("物象专属"):
-            cols = st.columns(3)
+            cols = st.columns(4)
             for idx, key in enumerate(["家臣", "美女", "君王", "恶人"]):
-                with cols[idx % 3]: st.checkbox(key, key=f"{v_prefix}{key}")
+                with cols[idx % 4]: st.checkbox(key, key=f"{v_prefix}{key}")
+        
+        # 🔥 新增：方位专属折叠框
+        with st.expander("方位专属"):
+            cols = st.columns(4)
+            for idx, key in enumerate(["东", "南", "西", "北"]):
+                with cols[idx % 4]: st.checkbox(key, key=f"{v_prefix}{key}")
+        
+        # 🔥 新增：单双组合折叠框
+        with st.expander("单双组合"):
+            cols = st.columns(4)
+            for idx, key in enumerate(["双双", "双单", "单单", "单双"]):
+                with cols[idx % 4]: st.checkbox(key, key=f"{v_prefix}{key}")
 #================AI推演页面保存内容及打印功能=====================================
     st.divider()
     st.markdown("### 📝 AI 完整推演结果")
