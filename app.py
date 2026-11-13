@@ -1560,10 +1560,7 @@ def render_multi_analysis(df_data):
             edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
             if st.button("?? 保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
-                st.rerun()
-
-    # 下面保持你原来的代码不动...
-    escaped_text = html.escape(clean_text).replace("\\\\n", "<br>")    
+                st.rerun() 
     
         # ==========3. 渲染下方的漂亮展示框（保持不进行修改）===========
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
