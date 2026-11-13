@@ -465,10 +465,10 @@ def render_console(df_data):
     b1, b2, b3, b4, b5, b6 = st.columns(6)
     start_btn = b1.button("批量联动分析", use_container_width=True, type="primary")
     result_btn = b2.button("中奖结果", use_container_width=True)
-    clear_btn = b3.button("清空数据", use_container_width=True)
-    sync_btn = b4.button("同步数据", use_container_width=True)
-    trend_btn = b5.button("走势图", use_container_width=True)
-    fetch_btn = b6.button("抓取香港数据", use_container_width=True)
+    clear_btn = b3.button("🗑️清空数据", use_container_width=True)
+    sync_btn = b4.button("🔄同步数据", use_container_width=True)
+    trend_btn = b5.button("📈走势图", use_container_width=True)
+    fetch_btn = b6.button("🤏抓取香港数据", use_container_width=True)
 
     # ==========================================
     # ?? 管理员专属：云端数据录入与同步
@@ -1537,11 +1537,12 @@ def render_multi_analysis(df_data):
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
-        if st.button("清空所有结果", use_container_width=True):
+        if st.button("🗑️清空所有结果", use_container_width=True):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
             st.rerun()
-    #============多维计算结果文字框的控制代码===================        
+    #============多维计算结果文字框的控制代码=================== 
+    #============这段是编辑修改内容的文字框干整显示代码==========
     if st.session_state.multi_result_text != "":
         import streamlit.components.v1 as components
         import html
@@ -1556,9 +1557,9 @@ def render_multi_analysis(df_data):
         clean_text = clean_text.replace(chr(92) + 'r', '')
         
         # ?? 2. 编辑面板（使用洗得干干净净的 clean_text）
-        with st.expander("?? 手动编辑/精简当前报告 (点击展开)", expanded=False):
+        with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
             edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
-            if st.button("?? 保存修改并更新结果", type="secondary"):
+            if st.button("💾保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
                 st.rerun() 
     
