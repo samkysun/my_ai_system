@@ -1251,26 +1251,23 @@ def load_excel_data(file_path, sheet_name):
     except Exception as e:
         st.error(f"云端读取异常: {e}")
         return []
-
-
 def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
-    # 1. 标题和初始化（必须在最上面）
     st.title("多维分析系统")
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
 
+    # 🔥 核心：只在列表里增加 4 个交叉选项，原有全部保留
     ATTR_MAP = {
         "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
-        "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖五行相生": 18, "生肖五行相克": 18
+        "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31, "生肖与五行相生": 18, "生肖与五行相克": 18,
+        "生肖与数字相生": 18, "生肖与数字相克": 18, "数字与生肖相生": 6, "数字与生肖相克": 6
     }
 
-    # 2. 参数设置区（必须在计算逻辑上方）
     st.markdown("### 分析参数设置")
-    # 🔥 第一排：只放 4 个宽框（期数、文件、属性、球号）
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
     with row1_col1:
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
@@ -1285,7 +1282,6 @@ def render_multi_analysis(df_data):
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
 
-    # 🔥 第二排：只放 2 个宽宽的数字框 + 按钮，给足空间，保证加减号出来
     row2_col1, row2_col2, row2_col3 = st.columns([1, 1, 1])
     with row2_col1: 
         min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
@@ -1296,9 +1292,15 @@ def render_multi_analysis(df_data):
         st.write("")
         run_btn = st.button("执行当前球分析", use_container_width=True, type="primary")
 
+    # 🔥 交叉模式专属判断（绝对隔离）
+    is_cross_mode = selected_attr in ["生肖与数字相生", "生肖与数字相克", "数字与生肖相生", "数字与生肖相克"]
+    is_zodiac_to_num = "生肖与数字" in selected_attr
+    is_cross_sheng = "相生" in selected_attr
+    is_cross_ke = "相克" in selected_attr
+
     base_excel_col = ATTR_MAP[selected_attr]
     check_col_letter = get_column_letter(base_excel_col + (ball_num - 1) * 30)
-    st.info(f"💡 校验信息：以【{selected_period}】期为基准，属性【{selected_attr}】的【{ball_str}】锁定在 {check_col_letter} 列")
+    st.info(f"💡 校验信息：以【{selected_period}】期为基准，属性【{selected_attr}】锁定在 {check_col_letter} 列")
 
     if selected_attr != st.session_state.current_attr or selected_file_type != st.session_state.current_file:
         st.session_state.current_attr = selected_attr
@@ -1306,12 +1308,15 @@ def render_multi_analysis(df_data):
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
         st.rerun()
+
     st.divider()
-    # 3. 计算逻辑区（在参数下方）
+    
     if run_btn:
         is_sheng_mode = "相生" in selected_attr
         is_ke_mode = "相克" in selected_attr
-        is_normal_mode = not (is_sheng_mode or is_ke_mode)
+        # 普通模式：只要不是交叉，就是普通模式
+        is_normal_mode = not (is_sheng_mode or is_ke_mode) and not is_cross_mode
+        
         if "数字" in selected_attr or "号" in selected_attr: wx_suffix = "号"
         elif "尾" in selected_attr: wx_suffix = "尾"
         elif "肖" in selected_attr: wx_suffix = "肖"
@@ -1337,31 +1342,30 @@ def render_multi_analysis(df_data):
 
             target_row_idx = -1
             for r_idx in range(len(all_rows)):
-                year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else ""
-                if not year_val: year_val = "2026"
+                year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else "2026"
                 p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
                 p2 = clean_str(all_rows[r_idx][1]) if len(all_rows[r_idx]) > 1 else ""
                 p3 = clean_str(all_rows[r_idx][2]) if len(all_rows[r_idx]) > 2 else ""
-                p_str = f"{year_val}{p1}{p2}{p3}"
-                if p_str == selected_period:
-                    target_row_idx = r_idx
-                    break
+                if f"{year_val}{p1}{p2}{p3}" == selected_period: target_row_idx = r_idx; break
             
-            if target_row_idx == -1:
-                st.error(f"在历史数据中找不到基准期数 {selected_period}！"); st.stop()
+            if target_row_idx == -1: st.error(f"找不到基准期数 {selected_period}！"); st.stop()
             
-            ball_cols = []
-            for n in range(1, 8):
-                ball_cols.append(get_column_letter(base_excel_col + (n - 1) * 30))
-            
+            ball_cols = [get_column_letter(base_excel_col + (n - 1) * 30) for n in range(1, 8)]
             ref_col_letter = ball_cols[ball_num - 1]
             ref_col_idx_0 = column_index_from_string(ref_col_letter) - 1
+            
+            # 交叉五行专属字典
+            cross_sheng = {"金": ["土", "水"], "木": ["水", "火"], "水": ["金", "木"], "火": ["木", "土"], "土": ["火", "金"]}
+            cross_ke = {"金": ["火", "木"], "木": ["金", "土"], "水": ["土", "火"], "火": ["水", "金"], "土": ["木", "水"]}
             
             def get_wx(s):
                 core = s.replace("肖", "").replace("号", "").replace("尾", "")
                 return {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}.get(core, core)
                 
             def check_match(a, b):
+                if is_cross_mode:
+                    if is_cross_sheng: return b in cross_sheng.get(a, [])
+                    elif is_cross_ke: return b in cross_ke.get(a, [])
                 if is_normal_mode: return a == b
                 core_a, core_b = get_wx(a), get_wx(b)
                 child = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
@@ -1376,21 +1380,25 @@ def render_multi_analysis(df_data):
 
             status_text.text("正在提取基准列...")
             ref_col_data = get_col_data(ref_col_idx_0)
-            
             template = []
             for r in range(target_row_idx, len(ref_col_data)):
                 if ref_col_data[r][1]: template.append(ref_col_data[r][1])
                 if len(template) >= max_len: break
                     
             if len(template) < min_len:
-                progress_bar.empty(); status_text.empty()
-                st.warning(f"该期往下连续数据不足 {min_len} 个"); st.stop()
+                progress_bar.empty(); status_text.empty(); st.warning(f"基准列数据不足 {min_len} 个"); st.stop()
                 
             gColl = {i: [] for i in range(min_len, max_len + 1)}
             status_text.text("正在扫描匹配项...")
             
             for n in range(1, 8):
-                col_name = ball_cols[n - 1]
+                # 🔥 核心隔离：交叉模式下，目标列的寻找逻辑完全不同
+                if is_cross_mode:
+                    target_base_col = 6 if is_zodiac_to_num else 18
+                    col_name = get_column_letter(target_base_col + (n - 1) * 30)
+                else:
+                    col_name = ball_cols[n - 1]
+                    
                 current_col_idx = column_index_from_string(col_name) - 1
                 disp_name = f"{n}球({col_name})"
                 is_self = (col_name == ref_col_letter)
@@ -1417,13 +1425,24 @@ def render_multi_analysis(df_data):
                                 if r_idx < 0 or r_idx >= len(col_data): return "无"
                                 v = col_data[r_idx][1]
                                 if not v: return "空"
+                                
+                                # 🔥 交叉模式专属输出格式
+                                if is_cross_mode:
+                                    rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
+                                    v_suffix = "肖" if is_zodiac_to_num else "号" # 基准后缀
+                                    target_suffix = "号" if is_zodiac_to_num else "肖" # 目标后缀
+                                    rule_str = "".join([f"{x}{target_suffix}" for x in rules])
+                                    prefix = "生" if is_cross_sheng else "克"
+                                    return f"{v}{v_suffix} ({prefix}{rule_str})"
+                                    
                                 if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
                                 if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
                                 return v
                                 
                             w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
                             
-                            if is_normal_mode:
+                            # 原汁原味保留原有逻辑
+                            if is_normal_mode or is_cross_mode:
                                 detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
                             else:
                                 core_w1 = get_wx(w1)
@@ -1438,7 +1457,6 @@ def render_multi_analysis(df_data):
                                 detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
                                 
                             if is_self: detail_txt += " [自身参考列匹配]"
-
                             w1_str = str(w1).strip()
                             if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
                                 if er + 1 <= 25:
@@ -1452,12 +1470,11 @@ def render_multi_analysis(df_data):
                             k += real_l
                         else:
                             k += 1
-    
-    
                                 
             progress_bar.progress(90)
             status_text.text("正在整理报告...")
-            ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
+#=================第三次粘贴位置=============            
+ball_lines = [f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} =========="]
             for L in range(min_len, max_len + 1):
                 if not gColl[L]: continue
                 ball_lines.append(f"--- 连续{L}行匹配（共{len(gColl[L])}处）---")
@@ -1477,11 +1494,12 @@ def render_multi_analysis(df_data):
 
             progress_bar.progress(100)
             status_text.text("计算完成！")
+            
         except Exception as e:
             st.error(f"计算报错: {e}")
 
-    # 4. 展示与打印区（绝对在最后面）
     st.divider()
+    
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
@@ -1492,37 +1510,72 @@ def render_multi_analysis(df_data):
 
     if st.session_state.multi_result_text != "":
         import streamlit.components.v1 as components
-        import html, base64
+        import html
+        import base64
         
-        # 终极修复：强制洗掉所有乱码换行符
         clean_text = st.session_state.multi_result_text.replace('\\r', '').replace('\\\\n', '\\n').replace('\\\\\\\\n', '\\n')
         escaped_text = html.escape(clean_text).replace("\\n", "<br>")
         
-        highlighted_display = escaped_text.replace("[[HIGHLIGHT]]", '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">').replace("[[/HIGHLIGHT]]", '</span>')
+        highlighted_display = escaped_text.replace(
+            "[[HIGHLIGHT]]", 
+            '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
+        ).replace("[[/HIGHLIGHT]]", '</span>')
+    
+        display_html = f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
+            {highlighted_display}
+        </div>
+        """
         
-        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{highlighted_display}</div>'
-        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{highlighted_display}</pre></body></html>'
+        print_html = f"""
+        <html><head><meta charset="utf-8"><style>
+        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }}
+        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}
+        </style></head><body><pre>{highlighted_display}</pre></body></html>
+        """
         
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
         
-        components.html(f"""
+        components.html(
+            f"""
             <div id="report-container"></div>
             <div style="margin-top: 15px; text-align: center;">
                 <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告 (排版不乱)</button>
             </div>
             <script>
-            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
+            function b64DecodeUnicode(str) {{
+                return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }}).join(''));
+            }}
             document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
+            function printReport() {{
+                var win = window.open("");
+                win.document.write(b64DecodeUnicode("{b64_print}"));
+                win.document.close();
+                win.focus();
+                setTimeout(function() {{ win.print(); }}, 500);
+            }}
             </script>
-        """, height=620, scrolling=False)
+            """,
+            height=620,
+            scrolling=False
+        )
     
         st.write("") 
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
+        st.download_button(
+            label="📥 保存完整报告到本地 (TXT格式)", 
+            data=clean_text.encode('utf-8-sig'), 
+            file_name=file_name, 
+            mime="text/plain", 
+            use_container_width=True
+        )
     else:
-        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
+        st.info("请选择文件、属性及球号后点击【执行当前球分析】。")            
+
+       
 #=======多维分析终点============
 def render_deep_linkage(df_data):
     # 🌟 页面大标题
