@@ -1903,6 +1903,7 @@ def render_deep_linkage(df_data):
                         
                     target_idx = sorted_periods.index(selected_period)
                     base_attrs = grouped_data[selected_period]
+                    st.warning(f"抓取到的数据是：{base_attrs}")
                     target_combos = list(itertools.combinations(base_attrs, 3))
                     
                     if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
