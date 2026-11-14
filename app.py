@@ -938,9 +938,9 @@ def render_console(df_data):
                 else: st.success("预祝您中奖！"); st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     st.divider()
-    # ==========================================
+    # ============主控台触发号码对照===============
     # 辅助对比函数（仅在折叠框内使用，绝不干扰主界面）
-    # ==========================================
+    # ===========================================
     def render_compare_panel(df_trigger, is_multi=False):
         if df_trigger is None or df_trigger.empty: return
             
@@ -1003,13 +1003,16 @@ def render_console(df_data):
         import streamlit.components.v1 as components
         components.html(html_table, height=420, scrolling=True)
         
+        # 🔥 核心修复：加上唯一的 key，防止单排和多排按钮冲突
+        btn_key = f"download_{'multi' if is_multi else 'single'}_{selected_period}"
         st.download_button(
             label=f"📥 下载对比记录 (CSV)",
             data=df_unique[['触发期数', '6码', '中奖个数', '中奖号码']].to_csv(index=False).encode('utf-8-sig'),
-            file_name=f"{selected_period}_对比.csv",
+            file_name=f"{selected_period}_{'多排' if is_multi else '单排'}对比.csv",
             mime="text/csv",
-            use_container_width=True
-        )
+            use_container_width=True,
+            key=btn_key
+        )    
     
     # ==========================================
     # 单排与多排结果展示（绝对原版主表，一字不藏）
