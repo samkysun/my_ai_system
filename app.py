@@ -707,7 +707,7 @@ def render_console(df_data):
                             def get_info(fp):
                                 r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
                                 return r.json() if r.status_code == 200 else None
-                            
+                           #=====同步升序全套，按序全套到新库======     
                             def sync_attrs(src_f, dst_f, sheet):
                                 # 1. 拉取最新数字
                                 s_info = get_info(src_f)
@@ -721,9 +721,7 @@ def render_console(df_data):
                                 wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
                                 ws_dst = wb_dst[sheet]
                                 
-                                # ========================================================
-                                # ?? 新增：防重复校验
-                                # ========================================================
+                                # 防重复校验
                                 def get_clean_val(cell):
                                     if cell is None: return ""
                                     val = str(cell).strip()
@@ -742,23 +740,21 @@ def render_console(df_data):
                             
                                 if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
                                     return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
-                                # ========================================================
                             
                                 # 3. 插入新的第 3 行
                                 ws_dst.insert_rows(3)
                                 
-                                # 4. 把最新的数字和期数填入第 3 行 (?? 加上 A, B, C 列)
+                                # 4. 把最新的数字和期数填入第 3 行
                                 mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
                                 for sc, dc in mapping.items():
                                     val = ws_src[f"{sc}3"].value
                                     ws_dst[f"{dc}3"] = val if val is not None else ""
                                 
-                                # 5. 提取这 7 个球的数字 (?? 修复列偏移为 30)
+                                # 5. 提取这 7 个球的数字
                                 ball_nums = []
                                 for n in range(7):
                                     tens = ws_dst.cell(row=3, column=4 + n*30).value
                                     units = ws_dst.cell(row=3, column=5 + n*30).value
-                                    
                                     if tens is None and units is None: 
                                         ball_nums.append(None)
                                     else:
@@ -774,15 +770,13 @@ def render_console(df_data):
                                             target_col = 6 + j_idx + (n_idx * 30)
                                             ws_dst.cell(row=3, column=target_col, value=attr_val)
                                 
-                                # 7. 保存并推送
+                                # 7. 保存并推送到 GitHub
                                 out = io.BytesIO()
                                 wb_dst.save(out)
                                 res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
                                                    headers=headers, 
                                                    json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
                                 
-                                
-                               
                                 if res.status_code in [200, 201]: 
                                     # 🔥 核心新增：老库（Excel）同步成功后，瞬间将最新数据静默写入 Supabase 新库
                                     try:
@@ -801,7 +795,7 @@ def render_console(df_data):
                                             year_val = str(ws_dst.cell(row=3, column=27).value or "2026")
                                             period_str = f"{year_val}{p1}{p2}{p3}"
                                             
-                                            # 👇 👇 👇 看这里，缩进必须和上面的变量赋值完全对齐！
+                                            # 弹窗提示一下正在写入
                                             st.info(f"正在同步写入数据库: 表={table_name}, 期数={period_str}")
                                             
                                             client.table(table_name).upsert({
@@ -813,7 +807,8 @@ def render_console(df_data):
                                         st.error(f"❌ 数据库写入失败！原因：{db_err}")
                                     
                                     return True, "成功"
-                                return False, res.text    
+                                return False, res.text     
+                                #====同步到新数据库截止=====    
                 
                                 
                                 
