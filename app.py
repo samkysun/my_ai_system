@@ -1676,10 +1676,14 @@ def render_multi_analysis(df_data):
                     return [(r, clean_str(all_rows[r][col_idx_0]) if col_idx_0 < len(all_rows[r]) else "") for r in range(len(all_rows))]
                     
                 ref_col_data = get_col_data(ref_col_idx_0)
+                #============多维分析计算结果的格式===============
                 template = []
+                template_rows_info = [] # ?? 新增：用来存行号和内容
                 for r in range(target_row_idx, len(ref_col_data)):
-                    if ref_col_data[r][1]: template.append(ref_col_data[r][1])
-                    if len(template) >= max_l: break
+                    if ref_col_data[r][1]: 
+                        template.append(ref_col_data[r][1])
+                        template_rows_info.append((r + 1, ref_col_data[r][1])) # ?? 存下来
+                    if len(template) >= max_len: break
                         
                 if len(template) < min_l: return []
                     
@@ -1726,43 +1730,65 @@ def render_multi_analysis(df_data):
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
                                     return v
                                     
-                                w1, w2, w3, w4 = get_ctx(sr-1), get_ctx(er+1), get_ctx(er+2), get_ctx(er+3)
+                                #==========去除多维分析结果的部分描述格式===========
+                                # 🔥 只取上和下，去掉再下和再再下               
+                                w1, w2 = get_ctx(sr-1), get_ctx(er+1)
                                 
-                                if is_normal_mode or is_cross_mode:
-                                    detail_txt = f"上:{w1} 下:{w2} 再下:{w3} 再再下:{w4}"
-                                    if is_cross_mode and w1 not in ["空", "无"]:
-                                        core_w1 = w1[0]
-                                        rules = cross_sheng.get(core_w1, []) if is_cross_sheng else cross_ke.get(core_w1, [])
-                                        target_suffix = "肖" if is_zodiac_to_num else "号"
-                                        kill_str = "".join([f"{x}{target_suffix}" for x in rules])
-                                        detail_txt += f" (杀{kill_str})"
-                                else:
-                                    core_w1 = get_wx(w1)
-                                    if is_sheng_mode:
-                                        rule_str = {"金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"}.get(core_w1, "")
-                                        full_w1 = f"{w1} (生{rule_str})" if rule_str else w1
-                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                    else:
-                                        rule_str = {"金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"}.get(core_w1, "")
-                                        full_w1 = f"{w1} (克{rule_str})" if rule_str else w1
-                                        sha_str = f"本期杀{rule_str}。" if rule_str else ""
-                                    detail_txt = f"上:{full_w1} 下:{w2} 再下:{w3} 再再下:{w4}。{sha_str}"
+                                # ?? 提取匹配的具体内容
+                                actual_match_str = "".join([x[1] for x in valid_data[k : k + real_l]])
+                                
+                                display_w1 = w1
+                                kill_str = ""
+                                
+                                # ?? 统一处理所有的生克及交叉模式（让杀号统一在末尾）
+                                if is_cross_mode or is_sheng_mode or is_ke_mode:
+                                    core_w1 = get_wx(w1) if not is_cross_mode else w1[0]
+                                    
+                                    # 交叉模式：目标后缀看是找肖还是找号；普通模式：直接使用原后缀
+                                    t_suffix = ("肖" if is_zodiac_to_num else "号") if is_cross_mode else wx_suffix
+                                    
+                                    if is_cross_sheng or is_sheng_mode:
+                                        if is_cross_mode:
+                                            rule_str = "".join([f"{x}{t_suffix}" for x in cross_sheng.get(core_w1, [])])
+                                        else:
+                                            rule_str = {"金": f"水{wx_suffix}土{wx_suffix}", "木": f"水{wx_suffix}火{wx_suffix}", "水": f"金{wx_suffix}木{wx_suffix}", "火": f"土{wx_suffix}木{wx_suffix}", "土": f"金{wx_suffix}火{wx_suffix}"}.get(core_w1, "")
+                                        
+                                        if rule_str:
+                                            display_w1 = f"{w1} (生{rule_str})"
+                                            kill_str = f" (杀{rule_str})"
+                                            
+                                    elif is_cross_ke or is_ke_mode:
+                                        if is_cross_mode:
+                                            rule_str = "".join([f"{x}{t_suffix}" for x in cross_ke.get(core_w1, [])])
+                                        else:
+                                            rule_str = {"金": f"火{wx_suffix}木{wx_suffix}", "木": f"土{wx_suffix}金{wx_suffix}", "水": f"火{wx_suffix}土{wx_suffix}", "火": f"水{wx_suffix}金{wx_suffix}", "土": f"木{wx_suffix}水{wx_suffix}"}.get(core_w1, "")
+                                            
+                                        if rule_str:
+                                            display_w1 = f"{w1} (克{rule_str})"
+                                            kill_str = f" (杀{rule_str})"
+                                
+                                # ?? 终极拼接：上 (生克) (匹配真实数据) 下 (杀)
+                                detail_txt = f"上:{display_w1} (匹配:{actual_match_str}) 下:{w2}{kill_str}"
                                     
                                 if is_self: detail_txt += " [自身参考列匹配]"
+                                
                                 w1_str = str(w1).strip()
                                 if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
+                                    # ?? 把 "行xxx" 前面的字样改成了 "触发行："
                                     if er + 1 <= 25:
-                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
+                                        line_txt = f"触发行：{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
                                         if 5 <= real_l <= 9:
                                             st.session_state.play_alert = True
                                             line_txt = f"[[HIGHLIGHT]]{line_txt}[[/HIGHLIGHT]]"
                                     else:
-                                        line_txt = f"{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
+                                        line_txt = f"触发行：{disp_name} 行{sr+1}-{er+1}({real_l}行): {detail_txt}"
+                                    
                                     results.append(line_txt)
                                 k += real_l
                             else: 
                                 k += 1
                 return results
+                                
             #==========多维分析单属性及双属性内部逻辑==========================    
             
             # 🔥 执行分析（根据模式分流）
@@ -1771,17 +1797,17 @@ def render_multi_analysis(df_data):
             # 不管什么模式，我们只算你下拉框选中的这一个属性
             res_lines = do_match(selected_attr, attr_map_val, ball_num, min_len, max_len)
             
-            out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\\n"
+            out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
             if not res_lines: 
                 out_txt += "未找到符合条件的匹配记录。"
             else:
                 for line in res_lines: 
-                    out_txt += f"{line}\\n"
+                    out_txt += f"{line}\n"
             
             # 如果是全属性透视模式，就把结果累积起来；如果是单属性，直接覆盖
         
             if "全属性" in analysis_mode:
-                # 🔥 确保每次点执行前，如果上一次点了清空，这里绝对不能报错
+                # ?? 确保每次点执行前，如果上一次点了清空，这里绝对不能报错
                 if "full_scan_results" not in st.session_state:
                     st.session_state.full_scan_results = []
                 
@@ -1789,7 +1815,7 @@ def render_multi_analysis(df_data):
                 st.session_state.full_scan_results.append(out_txt)
                 
                 # 把所有的历史结果拼接到一起（这就实现了多个属性区分开来一同写入）
-                st.session_state.multi_result_text = "\\n\\n".join(st.session_state.full_scan_results)
+                st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
             else:
                 # 单属性模式：直接覆盖，清空历史列表
                 st.session_state.full_scan_results = [out_txt]
