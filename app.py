@@ -77,7 +77,7 @@ def calculate_all_attributes(num):
         ZODIAC_SIZE.get(z, "")
     ]
 # ==========================================
-st.set_page_config(page_title="智能数据分析系统", layout="wide")
+st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
 
 # 🔐 从 Streamlit Secrets 中安全读取密钥（彻底删除了写死的密钥）
 DEEPSEEK_API_KEY = st.secrets["DEEPSEEK_API_KEY"]
@@ -1120,11 +1120,11 @@ def render_trend_chart(df_data):
         st.dataframe(matrix_special, use_container_width=True, height=600)
 
 def render_stats(df_data):
-    st.title("?? 历史同现深度分析")
+    st.title("📊历史同现深度分析")
     if df_data is None or isinstance(df_data, str): return
     target_num = st.number_input("目标号码 (1-49):", min_value=1, max_value=49, value=30)
     top_n = st.selectbox("提取前几名:", [3, 5, 8, 10])
-    if st.button("?? 开始扫描", use_container_width=True):
+    if st.button("📠开始扫描", use_container_width=True):
         with st.spinner("正在比对..."):
             try:
                 nums_df = df_data.iloc[:, 19:25].apply(pd.to_numeric, errors='coerce')
@@ -1542,7 +1542,7 @@ def load_excel_data(file_path, sheet_name):
 def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
-    st.title("多维分析系统")
+    st.title("📐多维分析系统")
     if "current_attr" not in st.session_state: st.session_state.current_attr = "生肖"
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
