@@ -825,8 +825,15 @@ def render_console(df_data):
     if has_next_data:
         st.subheader(f"{next_period_str} 期开奖结果")
         balls_html = '<div class="ball-container">'
-        for num in next_flat_nums: balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-        if next_special_num > 0: balls_html += f'<div class="ball {get_ball_color(next_special_num)} ball-special">★ {next_special_num:02d}</div>'
+        for num in next_flat_nums: 
+            balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
+        
+        if next_special_num > 0: 
+            # 🔥 加上大加号
+            balls_html += f'<div style="font-size: 32px; font-weight: bold; color: #64748b; display: flex; align-items: center; margin: 0 5px;">+</div>'
+            # 🔥 关键修改：去掉了 ball-special 样式，让特码完全遵循 get_ball_color 的波色
+            balls_html += f'<div class="ball {get_ball_color(next_special_num)}">{next_special_num:02d}</div>'
+            
         balls_html += '</div>'
         st.markdown(balls_html, unsafe_allow_html=True)
     else:
