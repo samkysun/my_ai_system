@@ -1498,8 +1498,9 @@ import os
 from datetime import datetime
 from openpyxl.utils import get_column_letter
 
-
-# ?? 缓存1小时 (3600秒)，且缓存解析好的纯列表
+# ==========================================
+# ==== 1. 云端文件极速读取核心 (带1小时缓存)
+# ==========================================
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_excel_data(file_path, sheet_name):
     import requests
@@ -1535,10 +1536,11 @@ def load_excel_data(file_path, sheet_name):
     except Exception as e:
         st.error(f"云端读取异常: {e}")
         return []
-    except Exception as e:
-        st.error(f"云端读取异常: {e}")
-        return []
-#=============多维分析调制启始位置==============================        
+
+
+# ==========================================
+# ==== 2. 多维分析页面主入口
+# ==========================================
 def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
     
@@ -1547,24 +1549,23 @@ def render_multi_analysis(df_data):
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
+    if "full_scan_results" not in st.session_state: st.session_state.full_scan_results = []
 
-    # 🔥 修正了选项名称，与你的要求完全一致
+    # ==========================================
+    # ==== 3. 属性列映射字典
+    # ==========================================
     ATTR_MAP = {
         "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11, "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16, "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21, "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26, "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31, "福禄寿": 32, "大小肖": 33,
         "生肖五行相生": 18, "生肖五行相克": 18, "数字五行相生": 6, "数字五行相克": 6, "尾五行相生": 31, "尾五行相克": 31,
         "生肖五行与数字五行相生": 18, "生肖五行与数字五行相克": 18, "数字五行与生肖五行相生": 6, "数字五行与生肖五行相克": 6
     }
 
-    
-    #=======多维分析页面文字按钮布局及多向叠加设置================
-    #================================================
-    # 🔥 第二排分成 4 列：[数字框1, 数字框2, 执行按钮, 刷新按钮]
+    # ==========================================
+    # ==== 4. 界面参数设置区
+    # ==========================================
     st.markdown("### 分析参数设置")
-
-    # 🔥 1. 模式定义（双向透视开关）
     analysis_mode = st.radio("分析模式：", ["单属性透视 (按球查属性)", "单球全属性透视 (按球查全部)"], horizontal=True)
     
-    # 🔥 2. 第一排参数
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
     with row1_col1:
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
@@ -1574,25 +1575,19 @@ def render_multi_analysis(df_data):
     with row1_col2: 
         selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])  
     with row1_col3: 
-        # 恢复纯正的下拉框，不管什么模式，都正常显示
         selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1)    
     with row1_col4:
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
     
-    # 🔥 3. 第二排按钮区
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
-    with row2_col1: 
-        min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
-    with row2_col2: 
-        max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
+    with row2_col1: min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
+    with row2_col2: max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
     with row2_col3:
-        st.write("")
-        st.write("")
+        st.write(""); st.write("")
         run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
     with row2_col4:
-        st.write("")
-        st.write("")
+        st.write(""); st.write("")
         if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
             load_excel_data.clear() 
             st.toast("✅ 缓存已清空！")
@@ -1602,10 +1597,13 @@ def render_multi_analysis(df_data):
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
-        st.rerun()
+        # 🔥 绝杀：此处绝对不能加 st.rerun()，否则会导致文件切换时无限死循环卡死
     
     st.divider()
-    #==========更改多维分析核算内部逻辑=============
+
+    # ==========================================
+    # ==== 5. 核心计算引擎 (生克/匹配/高亮)
+    # ==========================================
     if run_btn:
         st.session_state.play_alert = False
         target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
@@ -1624,7 +1622,7 @@ def render_multi_analysis(df_data):
             def clean_str(v):
                 if v is None: return ""
                 try: return str(int(float(v)))
-                except: return str(v).replace("\\r", "").replace("\\n", "").replace(" ", "").strip()
+                except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
     
             # 寻找基准期的行号
             target_row_idx = -1
@@ -1640,6 +1638,7 @@ def render_multi_analysis(df_data):
             if target_row_idx == -1: 
                 st.error(f"找不到基准期数 {selected_period}！"); st.stop()
             
+            # 五行生克字典
             cross_sheng = {"金": ["土", "水"], "木": ["水", "火"], "水": ["金", "木"], "火": ["木", "土"], "土": ["火", "金"]}
             cross_ke = {"金": ["木", "火"], "木": ["土", "金"], "水": ["火", "土"], "火": ["金", "水"], "土": ["水", "木"]}
             
@@ -1647,7 +1646,7 @@ def render_multi_analysis(df_data):
                 core = s.replace("肖", "").replace("号", "").replace("尾", "")
                 return {"鼠":"水","牛":"土","虎":"木","兔":"木","龙":"土","蛇":"火","马":"火","羊":"土","猴":"金","鸡":"金","狗":"土","猪":"水"}.get(core, core)
     
-            # 🔥 通用匹配引擎
+            # 通用匹配引擎
             def do_match(attr_name, attr_base_col, ball_n, min_l, max_l):
                 is_cross_mode = attr_name in ["生肖五行与数字五行相生", "生肖五行与数字五行相克", "数字五行与生肖五行相生", "数字五行与生肖五行相克"]
                 is_zodiac_to_num = attr_name.startswith("生肖")
@@ -1679,13 +1678,13 @@ def render_multi_analysis(df_data):
                     return [(r, clean_str(all_rows[r][col_idx_0]) if col_idx_0 < len(all_rows[r]) else "") for r in range(len(all_rows))]
                     
                 ref_col_data = get_col_data(ref_col_idx_0)
-                #============多维分析计算结果的格式===============
+                
                 template = []
-                template_rows_info = [] # ?? 新增：用来存行号和内容
+                template_rows_info = []
                 for r in range(target_row_idx, len(ref_col_data)):
                     if ref_col_data[r][1]: 
                         template.append(ref_col_data[r][1])
-                        template_rows_info.append((r + 1, ref_col_data[r][1])) # ?? 存下来
+                        template_rows_info.append((r + 1, ref_col_data[r][1]))
                     if len(template) >= max_len: break
                         
                 if len(template) < min_l: return []
@@ -1715,7 +1714,7 @@ def render_multi_analysis(df_data):
                             if max_l_hit >= min_l:
                                 real_l = max_l_hit
                                 sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
-                                #===========预防多维计算结果重复写入的逻辑============
+                                
                                 def get_ctx(r_idx):
                                     if r_idx < 0 or r_idx >= len(col_data): return "无"
                                     v = col_data[r_idx][1]
@@ -1727,19 +1726,13 @@ def render_multi_analysis(df_data):
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
                                     return v    
                                     
-                                #==========去除多维分析结果的部分描述格式===========
-                                # 🔥 只取上和下
+                                # ==== 5.1 组装匹配结果与杀号 (统一放末尾) ====
                                 w1, w2 = get_ctx(sr-1), get_ctx(er+1)
-                                
-                                # 🔥 提取匹配的具体内容
                                 actual_match_str = "".join([x[1] for x in valid_data[k : k + real_l]])
-                                
                                 display_w1 = w1
                                 kill_str = ""
                                 
-                                # 统一处理所有的生克及交叉模式
                                 if is_cross_mode or is_sheng_mode or is_ke_mode:
-                                    # 提取纯五行（去除“号”、“肖”等后缀）
                                     if is_cross_mode:
                                         core_w1 = w1.replace("号", "").replace("肖", "")[0]
                                     else:
@@ -1767,14 +1760,13 @@ def render_multi_analysis(df_data):
                                             display_w1 = f"{w1} (克{rule_str})"
                                             kill_str = f" (杀{rule_str})"
                                 
-                                # 🔥 终极拼接：上 (生克) (匹配真实数据) 下 (杀)
                                 detail_txt = f"上:{display_w1} (匹配:{actual_match_str}) 下:{w2}{kill_str}"
                                     
                                 if is_self: detail_txt += " [自身参考列匹配]"
                                 
                                 w1_str = str(w1).strip()
                                 if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
-                                    # ?? 把 "行xxx" 前面的字样改成了 "触发行："
+                                    # ==== 5.2 高亮逻辑 (5-9期且25行内) ====
                                     if er + 1 <= 25:
                                         line_txt = f"触发行：{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
                                         if 5 <= real_l <= 9:
@@ -1789,16 +1781,13 @@ def render_multi_analysis(df_data):
                                 k += 1
                 return results
                                 
-            #==========多维分析单属性及双属性内部逻辑==========================    
-            
-            # 🔥 执行分析（根据模式分流）
+            # ==========================================
+            # ==== 6. 执行分析并组装报告文本
+            # ==========================================
             attr_map_val = ATTR_MAP[selected_attr]
-            
-            # 不管什么模式，我们只算你下拉框选中的这一个属性
-            # 不管什么模式，我们只算你下拉框选中的这一个属性
             res_lines = do_match(selected_attr, attr_map_val, ball_num, min_len, max_len)
             
-            # ?? 新增：获取基准列的字母和具体内容，用于生成基准行排列
+            # 提取基准行排列
             base_col_num = attr_map_val + (ball_num - 1) * 30
             base_col_letter = get_column_letter(base_col_num)
             base_col_idx = column_index_from_string(base_col_letter) - 1
@@ -1810,9 +1799,7 @@ def render_multi_analysis(df_data):
                     base_rows.append(f"{base_col_letter}{r+1}:{val}")
                 if len(base_rows) >= max_len: break
             
-            # ?? 拼接报告头部
             out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
-            # ?? 插入基准行排列
             out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
             
             if not res_lines: 
@@ -1821,73 +1808,94 @@ def render_multi_analysis(df_data):
                 for line in res_lines: 
                     out_txt += f"{line}\n"
             
-            # 如果是全属性透视模式，就把结果累积起来；如果是单属性，直接覆盖
+            # 累积或覆盖逻辑
             if "全属性" in analysis_mode:
-                if "full_scan_results" not in st.session_state:
-                    st.session_state.full_scan_results = []
-                
                 st.session_state.full_scan_results.append(out_txt)
                 st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
             else:
                 st.session_state.full_scan_results = [out_txt]
                 st.session_state.multi_result_text = out_txt
             
+            # ==== 6.1 触发声音提示 (找回丢失的掉金币声音) ====
+            if st.session_state.get("play_alert", False):
+                import streamlit.components.v1 as components
+                components.html(
+                    """
+                    <script>
+                    var AudioContext = window.AudioContext || window.webkitAudioContext;
+                    var ctx = new AudioContext();
+                    function playCoin() {
+                        if (ctx.state === 'suspended') ctx.resume();
+                        var osc1 = ctx.createOscillator(), gain1 = ctx.createGain();
+                        osc1.type = 'sine'; osc1.frequency.setValueAtTime(987.77, ctx.currentTime);
+                        gain1.gain.setValueAtTime(0.5, ctx.currentTime);
+                        gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                        osc1.connect(gain1); gain1.connect(ctx.destination);
+                        osc1.start(); osc1.stop(ctx.currentTime + 0.3);
+        
+                        var osc2 = ctx.createOscillator(), gain2 = ctx.createGain();
+                        osc2.type = 'sine'; osc2.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.1);
+                        gain2.gain.setValueAtTime(0.5, ctx.currentTime + 0.1);
+                        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                        osc2.connect(gain2); gain2.connect(ctx.destination);
+                        osc2.start(ctx.currentTime + 0.1); osc2.stop(ctx.currentTime + 0.4);
+                    }
+                    playCoin();
+                    </script>
+                    """,
+                    height=0, width=0
+                )
+                st.session_state.play_alert = False
+            
             progress_bar.progress(100)
             status_text.text("计算完成！")
             
         except Exception as e:
-            st.error(f"计算报错: {e}")    
-    #========以上为多维分析内部逻辑代码区=================
+            st.error(f"计算报错: {e}")
+
+    # ==========================================
+    # ==== 7. 页面底部展示与高亮渲染区
+    # ==========================================
     st.divider()
-    
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
         if st.button("🗑️清空所有结果", use_container_width=True):
-            # 🔥 连根拔起：把你隐藏的累积仓库也清空！
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
-            if "full_scan_results" in st.session_state:
-                st.session_state.full_scan_results = []
+            st.session_state.full_scan_results = []
             st.rerun()
-    #============多维计算结果文字框的控制代码=================== 
-    #============这段是编辑修改内容的文字框干整显示代码==========
+
     if st.session_state.multi_result_text != "":
         import streamlit.components.v1 as components
         import html
         import base64
         
-        # ?? 终极清洗：用 chr(92) 代表反斜杠，用 chr(10) 代表真回车，彻底避开转义坑！
+        # ==== 7.1 终极清洗换行符 ====
         raw_text = st.session_state.multi_result_text
+        clean_text = raw_text.replace(chr(92) + 'n', chr(10)).replace(chr(92) + 'r', '')
         
-        # 把字面上的 \\\\n 替换成真正的换行
-        clean_text = raw_text.replace(chr(92) + 'n', chr(10))
-        # 把字面上的 \\\\r 删掉
-        clean_text = clean_text.replace(chr(92) + 'r', '')
-        
-        # ?? 2. 编辑面板（使用洗得干干净净的 clean_text）
+        # ==== 7.2 手动编辑面板 ====
         with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
             edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
             if st.button("💾保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
                 st.rerun() 
     
-        # ==========3. 渲染下方的漂亮展示框（保持不进行修改）===========
-        escaped_text = html.escape(clean_text).replace("\\n", "<br>")
+        # ==== 7.3 高亮替换与 HTML 渲染 ====
+        escaped_text = html.escape(clean_text).replace("\n", "<br>")
         
         highlighted_display = escaped_text.replace(
             "[[HIGHLIGHT]]", 
             '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
         ).replace("[[/HIGHLIGHT]]", '</span>')
     
-        # 居中展示
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
         
-        # 打印页面居中
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
         body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
@@ -1898,6 +1906,7 @@ def render_multi_analysis(df_data):
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
         
+        # ==== 7.4 打印按钮与居中展示 ====
         components.html(
             f"""
             <div id="report-container"></div>
@@ -1928,6 +1937,7 @@ def render_multi_analysis(df_data):
     
         st.write("") 
         
+        # ==== 7.5 下载按钮 ====
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(
             label="📥 保存完整报告到本地 (TXT格式)", 
@@ -1938,8 +1948,8 @@ def render_multi_analysis(df_data):
         )
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")        
-                               
-#=======多维分析终点============
+
+#======= 多维分析终点 ============
 
 #=========深度联动（多套合一核算）=======
 def render_deep_linkage(df_data):
