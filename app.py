@@ -1589,11 +1589,11 @@ def render_multi_analysis(df_data):
     with row2_col3:
         st.write("")
         st.write("")
-        run_btn = st.button("执行分析", use_container_width=True, type="primary")
+        run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
     with row2_col4:
         st.write("")
         st.write("")
-        if st.button("刷新云端数据", use_container_width=True, type="secondary"):
+        if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
             load_excel_data.clear() 
             st.toast("✅ 缓存已清空！")
             st.rerun()
@@ -1843,7 +1843,7 @@ def render_multi_analysis(df_data):
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
-        if st.button("清空所有结果", use_container_width=True):
+        if st.button("🗑️清空所有结果", use_container_width=True):
             # 🔥 连根拔起：把你隐藏的累积仓库也清空！
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
