@@ -1142,46 +1142,69 @@ def render_stats(df_data):
                     st.bar_chart(res_df.set_index("同频号码")["同现次数"])
             except Exception as e: st.error(f"出错：{e}")
 #==============AI推演页面代码=========================
-# 🔥 加个缓存，1小时内只读一次，读取极快
-@st.cache_data(show_spinner=False, ttl=3600)
-def build_rule_database():
-    try:
-        # 🔥 核心修改点：直接读取你独立出来的 AI规则 工作簿
-        file_name = "AI规则.xlsx" 
-        
-        # 工作表名字保持为 "规则"
-        df = pd.read_excel(file_name, sheet_name="规则")
-        db = {}
-        col_num = next((c for c in df.columns if "号码" in str(c)), "号码")
-        col_zodiac = next((c for c in df.columns if "生肖" in str(c)), "生肖")
-        col_wuxing = next((c for c in df.columns if "肖五行" in str(c)), "肖五行")
-        col_element = next((c for c in df.columns if "号五行" in str(c)), "号五行")
-        col_tail = next((c for c in df.columns if "尾五行" in str(c)), "尾五行")
-        col_color = next((c for c in df.columns if "波色" in str(c)), "波色")
-        col_size = next((c for c in df.columns if "大小" in str(c)), "大小")
-        col_obj = next((c for c in df.columns if "物象" in str(c)), "物象")
-        col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
-        col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
-        
-        # 🔥 读取方位列
-        col_dir = next((c for c in df.columns if "方位" in str(c)), "方位")
-        
-        for _, row in df.iterrows():
-            num_str = str(row[col_num]).strip()
-            if num_str.replace('.', '', 1).isdigit():
-                n = str(int(float(num_str)))
-                db[n] = {
-                    "生肖": str(row[col_zodiac]), "肖五行": str(row[col_wuxing]), 
-                    "号五行": str(row[col_element]), "尾五行": str(row[col_tail]), 
-                    "波色": str(row[col_color]), "大小": str(row[col_size]), 
-                    "物象": str(row[col_obj]), "人物": str(row[col_role]), 
-                    "合数": str(row[col_sum]),
-                    "方位": str(row[col_dir])
-                }
-        return db
-    except Exception as e: 
-        st.error(f"底层读取失败，真实原因：{e}")
+# ==========================================
+# ==== 功能：读取 1-49 号规则 (云端 Supabase 版) ====
+# ==== 说明：告别本地 Excel 读取，直接毫秒级查库 ====
+# ==========================================
+from supabase import create_client
+
+@st.cache_resource
+def get_supabase_client():
+    """缓存数据库连接对象，所有用户共享同一个连接池，绝不卡顿"""
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+    if not url or not key:
+        st.error("⚠️ 请在 Secrets 中配置 SUPABASE_URL 和 SUPABASE_KEY")
         return None
+    return create_client(url, key)
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def build_rule_database():
+    """从云端数据库拉取规则，并转换成与原代码完全一致的字典格式"""
+    try:
+        client = get_supabase_client()
+        if not client:
+            return None
+        
+        # 查询云端 rules 表中的所有数据
+        response = client.table("rules").select("*").execute()
+        
+        if not response.data:
+            st.error("⚠️ 云端 rules 表中没有数据，请检查 Supabase。")
+            return None
+        
+        # 将云端数据转换为字典，确保后面的推演逻辑无缝对接
+        db = {}
+        for row in response.data:
+            num_raw = row.get("号码")
+            if num_raw is None:
+                continue
+            try:
+                n = str(int(float(num_raw)))
+            except (ValueError, TypeError):
+                continue
+            
+            db[n] = {
+                "生肖": str(row.get("生肖", "")),
+                "肖五行": str(row.get("肖五行", "")),
+                "号五行": str(row.get("号五行", "")),
+                "尾五行": str(row.get("尾五行", "")),
+                "波色": str(row.get("波色", "")),
+                "大小": str(row.get("大小", "")),
+                "物象": str(row.get("物象", "")),
+                "人物": str(row.get("人物", "")),
+                "合数": str(row.get("合数", "")),
+                "方位": str(row.get("方位", "")),
+            }
+        
+        return db if db else None
+        
+    except Exception as e:
+        st.error(f"❌ 云端数据库读取失败：{e}")
+        return None
+# ==========================================
+# ==== 功能：读取规则 (云端版) 结束 ====
+# ==========================================
 
 
 def build_full_table_text(db):
