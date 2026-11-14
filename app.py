@@ -429,7 +429,7 @@ def render_console(df_data):
     import base64
     
     # 只保留一个标题
-    st.title("智能数据分析总控台")
+    st.title("💻智能数据分析总控台")
     
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
