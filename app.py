@@ -624,8 +624,9 @@ def render_console(df_data):
                                     if not s2: st.error(f"? 按序文件同步失败: {m2}")
     
     st.divider()
+  
     # ==========================================
-    # 🚚 临时按钮：一键搬运历史数据到新库 (最终版)
+    # 🚚 临时按钮：一键搬运历史数据到新库 (纯数字防弹版)
     # ==========================================
     if st.session_state.username == st.secrets.get("ADMIN_USERNAME", "admin"):
         if st.button("🚚 一键搬家：把历史数据全导进数据库", use_container_width=True, type="secondary"):
@@ -655,19 +656,22 @@ def render_console(df_data):
                         return str(v).strip()
 
                     for row_idx in range(3, ws.max_row + 1):
-                        # 🔥 严格使用 HF列(214) + A列(1) + B列(2) + C列(3)
-                        year_val = clean_val(ws.cell(row=row_idx, column=213).value) or "2026"
+                        # 🔥 极其重要：年份在 HF 列，openpyxl 里的第 214 列！
+                        year_val = clean_val(ws.cell(row=row_idx, column=214).value) or "2026"
                         p1 = clean_val(ws.cell(row=row_idx, column=1).value)
                         p2 = clean_val(ws.cell(row=row_idx, column=2).value)
                         p3 = clean_val(ws.cell(row=row_idx, column=3).value)
                         
                         if not p1 and not p2 and not p3: continue
                         
-                        # 原汁原味拼接，不加任何补零操作
                         period_str = f"{year_val}{p1}{p2}{p3}"
                         
+                        # 🚨 终极安检门：只要含有汉字、字母、空格等非数字字符，直接无情抛弃！
+                        if not period_str.isdigit():
+                            continue
+                        
                         row_dict = {}
-                        for col_idx in range(1, 214):
+                        for col_idx in range(1, 215):
                             cell_val = ws.cell(row=row_idx, column=col_idx).value
                             row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
                             
@@ -675,12 +679,12 @@ def render_console(df_data):
                     
                     all_data = list(unique_data_dict.values())
                     
-                    # 按数字大小降序
+                    # 强制按数字大小降序
                     try: all_data.sort(key=lambda x: int(x["期数"]), reverse=True)
                     except: pass
                     
                     total = len(all_data)
-                    if total == 0: return f"{file_name} 没有有效数据"
+                    if total == 0: return f"{file_name} 没有有效数字期数"
                     
                     progress_bar = st.progress(0)
                     for i in range(0, total, 200):
@@ -688,7 +692,7 @@ def render_console(df_data):
                         client.table(table_name).upsert(chunk, on_conflict="期数").execute()
                         progress_bar.progress(min((i + 200) / total, 1.0))
                     
-                    return f"{file_name} 成功导入 {total} 条记录"
+                    return f"{file_name} 成功过滤并导入 {total} 条真实期数"
                 
                 try:
                     msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
@@ -1758,13 +1762,22 @@ def render_multi_analysis(df_data):
                 except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
     
             # 寻找基准期的行号
+            # 寻找基准期的行号 (严格认准纯数字)
             target_row_idx = -1
             for r_idx in range(len(all_rows)):
+                # 🔥 年份在 HF 列（在 Python 零基索引里是 213，但如果是 openpyxl 读取转列表，可能是 213 或 214，这里优先用最终正确位置）
                 year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else "2026"
                 p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
                 p2 = clean_str(all_rows[r_idx][1]) if len(all_rows[r_idx]) > 1 else ""
                 p3 = clean_str(all_rows[r_idx][2]) if len(all_rows[r_idx]) > 2 else ""
-                if f"{year_val}{p1}{p2}{p3}" == selected_period: 
+                
+                check_str = f"{year_val}{p1}{p2}{p3}"
+                
+                # 只要包含非数字，直接跳过
+                if not check_str.isdigit():
+                    continue
+                    
+                if check_str == selected_period: 
                     target_row_idx = r_idx
                     break
             
