@@ -938,137 +938,137 @@ def render_console(df_data):
                 else: st.success("预祝您中奖！"); st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     st.divider()
-# ==========================================
-# 🎯 单排/多排结果与下期开奖高亮对比系统
-# ==========================================
-df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
-matched_curr = df_data[df_data['_temp_p'] == selected_period]
-
-next_period_str, next_win_nums, has_next_data = "", [], False
-if not matched_curr.empty:
-    base_idx = matched_curr.index[0]
-    try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
-    except: is_descending = True
+    # ==========================================
+    # 🎯 单排/多排结果与下期开奖高亮对比系统
+    # ==========================================
+    df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
+    matched_curr = df_data[df_data['_temp_p'] == selected_period]
     
-    next_idx = base_idx - 1 if is_descending else base_idx + 1
-    if 0 <= next_idx < len(df_data):
-        next_row = df_data.iloc[next_idx]
-        next_period_str = clean_period(next_row.iloc[18])
-        next_win_nums = [clean_period(next_row.iloc[i]) for i in range(19, 25) if pd.notna(next_row.iloc[i])]
-        if len(next_win_nums) > 0: has_next_data = True
-
-def render_compare_table(df_trigger, is_multi=False):
-    if df_trigger is None or df_trigger.empty:
-        st.info("暂无数据。")
-        return
+    next_period_str, next_win_nums, has_next_data = "", [], False
+    if not matched_curr.empty:
+        base_idx = matched_curr.index[0]
+        try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
+        except: is_descending = True
         
-    st.write(f"**对比目标：下一期【{next_period_str}】开奖号码:**")
-    if has_next_data:
-        balls_html = '<div style="display:flex; gap:10px; margin-bottom: 10px;">'
-        for n in next_win_nums:
-            balls_html += f'<div class="ball {get_ball_color(int(n))}" style="width:40px; height:40px; font-size:18px;">{n}</div>'
-        balls_html += '</div>'
-        st.markdown(balls_html, unsafe_allow_html=True)
-    else:
-        st.warning("下一期暂未开奖，无法比对。")
-        return
-
-    # 🔥 1. 数据清洗与去重
-    # 只取前6个号码，并重新组合
-    df_trigger['6码'] = df_trigger['触发行号码'].apply(lambda x: ','.join(str(x).split(',')[:6]))
-    # 按6码去重，保留第一条
-    df_unique = df_trigger.drop_duplicates(subset=['6码']).copy()
+        next_idx = base_idx - 1 if is_descending else base_idx + 1
+        if 0 <= next_idx < len(df_data):
+            next_row = df_data.iloc[next_idx]
+            next_period_str = clean_period(next_row.iloc[18])
+            next_win_nums = [clean_period(next_row.iloc[i]) for i in range(19, 25) if pd.notna(next_row.iloc[i])]
+            if len(next_win_nums) > 0: has_next_data = True
     
-    # 🔥 2. 计算中奖
-    def get_matches(nums_str):
-        nums = nums_str.split(',')
-        return [n for n in nums if n in next_win_nums]
-        
-    df_unique['中奖号码'] = df_unique['6码'].apply(get_matches)
-    df_unique['中奖个数'] = df_unique['中奖号码'].apply(len)
+    def render_compare_table(df_trigger, is_multi=False):
+        if df_trigger is None or df_trigger.empty:
+            st.info("暂无数据。")
+            return
+            
+        st.write(f"**对比目标：下一期【{next_period_str}】开奖号码:**")
+        if has_next_data:
+            balls_html = '<div style="display:flex; gap:10px; margin-bottom: 10px;">'
+            for n in next_win_nums:
+                balls_html += f'<div class="ball {get_ball_color(int(n))}" style="width:40px; height:40px; font-size:18px;">{n}</div>'
+            balls_html += '</div>'
+            st.markdown(balls_html, unsafe_allow_html=True)
+        else:
+            st.warning("下一期暂未开奖，无法比对。")
+            return
     
-    # 统计总中出数
-    total_hits = df_unique['中奖个数'].sum()
-    st.success(f"✅ 去重后共 {len(df_unique)} 组触发号码，总计中出 **{total_hits}** 个号码！")
-
-    # 🔥 3. 生成高亮 HTML 表格
-    html_table = """
-    <style>
-        .custom-table { width: 100%; border-collapse: collapse; font-family: Consolas, monospace; font-size: 14px; text-align: center; }
-        .custom-table th { background-color: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; }
-        .custom-table td { padding: 8px; border: 1px solid #cbd5e1; }
-        .hit-ball { color: #dc2626; font-weight: bold; background-color: #fef08a; padding: 2px 4px; border-radius: 4px; }
-    </style>
-    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
-        <table class="custom-table">
-            <thead>
-                <tr>
-                    <th>触发期数</th>
-                    <th>触发6码</th>
-                    <th>中出个数</th>
-                    <th>中奖号码</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
+        # 🔥 1. 数据清洗与去重
+        # 只取前6个号码，并重新组合
+        df_trigger['6码'] = df_trigger['触发行号码'].apply(lambda x: ','.join(str(x).split(',')[:6]))
+        # 按6码去重，保留第一条
+        df_unique = df_trigger.drop_duplicates(subset=['6码']).copy()
+        
+        # 🔥 2. 计算中奖
+        def get_matches(nums_str):
+            nums = nums_str.split(',')
+            return [n for n in nums if n in next_win_nums]
+            
+        df_unique['中奖号码'] = df_unique['6码'].apply(get_matches)
+        df_unique['中奖个数'] = df_unique['中奖号码'].apply(len)
+        
+        # 统计总中出数
+        total_hits = df_unique['中奖个数'].sum()
+        st.success(f"✅ 去重后共 {len(df_unique)} 组触发号码，总计中出 **{total_hits}** 个号码！")
     
-    for _, row in df_unique.iterrows():
-        nums_list = row['6码'].split(',')
-        display_nums_html = []
-        for n in nums_list:
-            if n in next_win_nums:
-                display_nums_html.append(f'<span class="hit-ball">{n}</span>')
-            else:
-                display_nums_html.append(n)
-        
-        nums_display_str = ' , '.join(display_nums_html)
-        hit_count = row['中奖个数']
-        hit_nums_str = ', '.join(row['中奖号码']) if hit_count > 0 else "-"
-        
-        row_color = "background-color: #fef2f2;" if hit_count > 0 else ""
-        
-        html_table += f"""
-            <tr style="{row_color}">
-                <td>{row['触发期数']}</td>
-            <td>{nums_display_str}</td>
-            <td><b>{hit_count}</b></td>
-            <td>{hit_nums_str}</td>
-        </tr>
+        # 🔥 3. 生成高亮 HTML 表格
+        html_table = """
+        <style>
+            .custom-table { width: 100%; border-collapse: collapse; font-family: Consolas, monospace; font-size: 14px; text-align: center; }
+            .custom-table th { background-color: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; }
+            .custom-table td { padding: 8px; border: 1px solid #cbd5e1; }
+            .hit-ball { color: #dc2626; font-weight: bold; background-color: #fef08a; padding: 2px 4px; border-radius: 4px; }
+        </style>
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>触发期数</th>
+                        <th>触发6码</th>
+                        <th>中出个数</th>
+                        <th>中奖号码</th>
+                    </tr>
+                </thead>
+                <tbody>
         """
         
-    html_table += "</tbody></table></div>"
+        for _, row in df_unique.iterrows():
+            nums_list = row['6码'].split(',')
+            display_nums_html = []
+            for n in nums_list:
+                if n in next_win_nums:
+                    display_nums_html.append(f'<span class="hit-ball">{n}</span>')
+                else:
+                    display_nums_html.append(n)
+            
+            nums_display_str = ' , '.join(display_nums_html)
+            hit_count = row['中奖个数']
+            hit_nums_str = ', '.join(row['中奖号码']) if hit_count > 0 else "-"
+            
+            row_color = "background-color: #fef2f2;" if hit_count > 0 else ""
+            
+            html_table += f"""
+                <tr style="{row_color}">
+                    <td>{row['触发期数']}</td>
+                <td>{nums_display_str}</td>
+                <td><b>{hit_count}</b></td>
+                <td>{hit_nums_str}</td>
+            </tr>
+            """
+            
+        html_table += "</tbody></table></div>"
+        
+        # 渲染 HTML
+        import streamlit.components.v1 as components
+        components.html(html_table, height=420, scrolling=True)
+        
+        # 下载按钮
+        st.download_button(
+            label=f"📥 下载{'多排' if is_multi else '单排'}对比记录 (CSV)",
+            data=df_unique[['触发期数', '6码', '中奖个数', '中奖号码']].to_csv(index=False).encode('utf-8-sig'),
+            file_name=f"{selected_period}_{'多排' if is_multi else '单排'}触发对比.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
     
-    # 渲染 HTML
-    import streamlit.components.v1 as components
-    components.html(html_table, height=420, scrolling=True)
+    # ==========================================
+    # 界面展示区
+    # ==========================================
+    col_lb1, col_lb2 = st.columns(2)
     
-    # 下载按钮
-    st.download_button(
-        label=f"📥 下载{'多排' if is_multi else '单排'}对比记录 (CSV)",
-        data=df_unique[['触发期数', '6码', '中奖个数', '中奖号码']].to_csv(index=False).encode('utf-8-sig'),
-        file_name=f"{selected_period}_{'多排' if is_multi else '单排'}触发对比.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-# ==========================================
-# 界面展示区
-# ==========================================
-col_lb1, col_lb2 = st.columns(2)
-
-with col_lb1:
-    st.subheader("单排结果分析")
-    if st.session_state.calc_data_single is not None:
-        df_t1, df_c1 = st.session_state.calc_data_single
-        render_compare_table(df_t1, is_multi=False)
-    else: st.info("暂无单排数据。")
-    
-with col_lb2:
-    st.subheader("多排结果分析")
-    if st.session_state.calc_data_multi is not None:
-        df_t2, df_c2 = st.session_state.calc_data_multi
-        render_compare_table(df_t2, is_multi=True)
-    else: st.info("暂无多排数据。")
+    with col_lb1:
+        st.subheader("单排结果分析")
+        if st.session_state.calc_data_single is not None:
+            df_t1, df_c1 = st.session_state.calc_data_single
+            render_compare_table(df_t1, is_multi=False)
+        else: st.info("暂无单排数据。")
+        
+    with col_lb2:
+        st.subheader("多排结果分析")
+        if st.session_state.calc_data_multi is not None:
+            df_t2, df_c2 = st.session_state.calc_data_multi
+            render_compare_table(df_t2, is_multi=True)
+        else: st.info("暂无多排数据。")
     
 #==============走势图功能代码===========
 def render_trend_chart(df_data):
