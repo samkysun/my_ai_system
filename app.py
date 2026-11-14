@@ -938,9 +938,9 @@ def render_console(df_data):
                 else: st.success("预祝您中奖！"); st.session_state.calc_result_preview = pd.DataFrame([res_data])
 
     st.divider()
-    # ============主控台触发号码对照===============
-    # 辅助对比函数（仅在折叠框内使用，绝不干扰主界面）
-    # ===========================================
+    # ========================主控台触发号码对照=======================
+    # 辅助对比函数（仅在折叠框内使用，中奖3个或者以上留下，其它删除）
+    # ===============================================================
     def render_compare_panel(df_trigger, is_multi=False):
         if df_trigger is None or df_trigger.empty: return
             
@@ -974,28 +974,51 @@ def render_console(df_data):
         df_unique['中奖号码'] = df_unique['6码'].apply(get_matches)
         df_unique['中奖个数'] = df_unique['中奖号码'].apply(len)
         
-        total_hits = df_unique['中奖个数'].sum()
-        st.success(f"目标下一期【{next_period_str}】开奖号码：{', '.join(next_win_nums)} | 去重后总计中出 **{total_hits}** 个！")
+        # 🔥 过滤出中奖 >= 3 的记录，并按中奖个数降序排
+        df_filtered = df_unique[df_unique['中奖个数'] >= 3].copy()
+        df_filtered = df_filtered.sort_values(by='中奖个数', ascending=False)
         
+        if df_filtered.empty:
+            st.info(f"目标下一期【{next_period_str}】开奖号码：{', '.join(next_win_nums)}。\\n\\n当前期数没有中出 3 个及以上号码的触发记录。")
+            return
+    
+        # 🔥 核心强化：把总体命中的号码汇总起来提示
+        total_hits = df_unique['中奖个数'].sum()
+        # 提取所有命中记录里的唯一号码集合
+        all_hit_nums = set()
+        for hits in df_filtered['中奖号码']:
+            for h in hits: all_hit_nums.add(h)
+        
+        hits_str = ", ".join(sorted(list(all_hit_nums)))
+        st.success(f"🎯 **目标下一期【{next_period_str}】开奖：** {', '.join(next_win_nums)}\\n\\n"
+                   f"✅ 去重后总命中 {total_hits} 个号码。其中 **中3个及以上** 的有 {len(df_filtered)} 组！\\n\\n"
+                   f"💡 **这些高价值记录中，命中的号码包含：** 【 {hits_str} 】")
+        
+        # 生成高亮 HTML 表格
         html_table = """
         <style>
             .custom-table { width: 100%; border-collapse: collapse; font-family: Consolas, monospace; font-size: 14px; text-align: center; }
             .custom-table th { background-color: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; }
             .custom-table td { padding: 8px; border: 1px solid #cbd5e1; }
-            .hit-ball { color: #dc2626; font-weight: bold; background-color: #fef08a; padding: 2px 4px; border-radius: 4px; }
+            .hit-ball { color: #dc2626; font-weight: bold; background-color: #fef08a; padding: 2px 6px; border-radius: 4px; font-size: 15px; }
+            .hit-num-col { color: #dc2626; font-weight: bold; }
         </style>
         <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
             <table class="custom-table">
-                <thead><tr><th>触发期数</th><th>触发6码</th><th>中出个数</th><th>中奖号码</th></tr></thead><tbody>
+                <thead><tr><th>触发期数</th><th>触发6码 (黄底为命中)</th><th>中出个数</th><th>命中的具体号码</th></tr></thead><tbody>
         """
         
-        for _, row in df_unique.iterrows():
+        for _, row in df_filtered.iterrows():
             nums_list = row['6码'].split(',')
+            # 触发6码里，命中的高亮
             display_nums_html = [f'<span class="hit-ball">{n}</span>' if n in next_win_nums else n for n in nums_list]
             nums_display_str = ' , '.join(display_nums_html)
             hit_count = row['中奖个数']
-            hit_nums_str = ', '.join(row['中奖号码']) if hit_count > 0 else "-"
-            row_color = "background-color: #fef2f2;" if hit_count > 0 else ""
+            
+            # 🔥 中奖号码单独列，加粗标红
+            hit_nums_str = f'<span class="hit-num-col">{", ".join(row["中奖号码"])}</span>'
+            row_color = "background-color: #fef2f2;"
+            
             html_table += f"<tr style='{row_color}'><td>{row['触发期数']}</td><td>{nums_display_str}</td><td><b>{hit_count}</b></td><td>{hit_nums_str}</td></tr>"
             
         html_table += "</tbody></table></div>"
@@ -1003,12 +1026,11 @@ def render_console(df_data):
         import streamlit.components.v1 as components
         components.html(html_table, height=420, scrolling=True)
         
-        # 🔥 核心修复：加上唯一的 key，防止单排和多排按钮冲突
         btn_key = f"download_{'multi' if is_multi else 'single'}_{selected_period}"
         st.download_button(
-            label=f"📥 下载对比记录 (CSV)",
-            data=df_unique[['触发期数', '6码', '中奖个数', '中奖号码']].to_csv(index=False).encode('utf-8-sig'),
-            file_name=f"{selected_period}_{'多排' if is_multi else '单排'}对比.csv",
+            label=f"📥 下载【中3个及以上】高价值记录 (CSV)",
+            data=df_filtered[['触发期数', '6码', '中奖个数', '中奖号码']].to_csv(index=False).encode('utf-8-sig'),
+            file_name=f"{selected_period}_{'多排' if is_multi else '单排'}_中3个以上.csv",
             mime="text/csv",
             use_container_width=True,
             key=btn_key
