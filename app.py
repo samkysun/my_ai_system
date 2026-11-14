@@ -939,7 +939,7 @@ def render_console(df_data):
 
     st.divider()
     # ========================主控台触发号码对照=======================
-    # 辅助对比函数（仅在折叠框内使用，中奖3个或者以上留下，其它删除）
+    # 辅助对比函数（仅在折叠框内使用，以及排版，中奖3个或者以上留下，其它删除）
     # ===============================================================
     def render_compare_panel(df_trigger, is_multi=False):
         if df_trigger is None or df_trigger.empty: return
@@ -982,17 +982,23 @@ def render_console(df_data):
             st.info(f"目标下一期【{next_period_str}】开奖号码：{', '.join(next_win_nums)}。\\n\\n当前期数没有中出 3 个及以上号码的触发记录。")
             return
     
-        # 🔥 核心强化：把总体命中的号码汇总起来提示
+        # 🔥 核心强化：准确统计组数和命中号码
+        total_groups = len(df_unique)
         total_hits = df_unique['中奖个数'].sum()
-        # 提取所有命中记录里的唯一号码集合
+        
         all_hit_nums = set()
         for hits in df_filtered['中奖号码']:
             for h in hits: all_hit_nums.add(h)
         
         hits_str = ", ".join(sorted(list(all_hit_nums)))
-        st.success(f"🎯 **目标下一期【{next_period_str}】开奖：** {', '.join(next_win_nums)}\\n\\n"
-                   f"✅ 去重后总命中 {total_hits} 个号码。其中 **中3个及以上** 的有 {len(df_filtered)} 组！\\n\\n"
-                   f"💡 **这些高价值记录中，命中的号码包含：** 【 {hits_str} 】")
+        
+        # 使用 st.markdown 保证换行生效，去掉奇怪的 \\n
+        st.success(
+            f"🎯 **目标下一期【{next_period_str}】开奖：** {', '.join(next_win_nums)}  \\n"
+            f"✅ 去重后共产生 **{total_groups} 组** 独立触发记录，累计中出 {total_hits} 次。  \\n"
+            f"🔥 其中 **中3个及以上** 的高价值记录有 **{len(df_filtered)} 组**！  \\n"
+            f"💡 这些高价值记录中，命中的号码包含： **【 {hits_str} 】**"
+        )
         
         # 生成高亮 HTML 表格
         html_table = """
@@ -1010,12 +1016,10 @@ def render_console(df_data):
         
         for _, row in df_filtered.iterrows():
             nums_list = row['6码'].split(',')
-            # 触发6码里，命中的高亮
             display_nums_html = [f'<span class="hit-ball">{n}</span>' if n in next_win_nums else n for n in nums_list]
             nums_display_str = ' , '.join(display_nums_html)
             hit_count = row['中奖个数']
             
-            # 🔥 中奖号码单独列，加粗标红
             hit_nums_str = f'<span class="hit-num-col">{", ".join(row["中奖号码"])}</span>'
             row_color = "background-color: #fef2f2;"
             
