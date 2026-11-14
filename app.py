@@ -1712,39 +1712,36 @@ def render_multi_analysis(df_data):
                             if max_l_hit >= min_l:
                                 real_l = max_l_hit
                                 sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
-                                
+                                #===========预防多维计算结果重复写入的逻辑============
                                 def get_ctx(r_idx):
                                     if r_idx < 0 or r_idx >= len(col_data): return "无"
                                     v = col_data[r_idx][1]
                                     if not v: return "空"
                                     if is_cross_mode:
                                         v_suffix = "号" if is_zodiac_to_num else "肖"
-                                        if r_idx == sr - 1:
-                                            rules = cross_sheng.get(v, []) if is_cross_sheng else cross_ke.get(v, [])
-                                            target_suffix = "肖" if is_zodiac_to_num else "号"
-                                            rule_str = "".join([f"{x}{target_suffix}" for x in rules])
-                                            prefix = "生" if is_cross_sheng else "克"
-                                            return f"{v}{v_suffix} ({prefix}{rule_str})"
-                                        else: return f"{v}{v_suffix}"
+                                        return f"{v}{v_suffix}"
                                     if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
-                                    return v
+                                    return v    
                                     
                                 #==========去除多维分析结果的部分描述格式===========
-                                # 🔥 只取上和下，去掉再下和再再下               
+                                # 🔥 只取上和下
                                 w1, w2 = get_ctx(sr-1), get_ctx(er+1)
                                 
-                                # ?? 提取匹配的具体内容
+                                # 🔥 提取匹配的具体内容
                                 actual_match_str = "".join([x[1] for x in valid_data[k : k + real_l]])
                                 
                                 display_w1 = w1
                                 kill_str = ""
                                 
-                                # ?? 统一处理所有的生克及交叉模式（让杀号统一在末尾）
+                                # 统一处理所有的生克及交叉模式
                                 if is_cross_mode or is_sheng_mode or is_ke_mode:
-                                    core_w1 = get_wx(w1) if not is_cross_mode else w1[0]
+                                    # 提取纯五行（去除“号”、“肖”等后缀）
+                                    if is_cross_mode:
+                                        core_w1 = w1.replace("号", "").replace("肖", "")[0]
+                                    else:
+                                        core_w1 = get_wx(w1)
                                     
-                                    # 交叉模式：目标后缀看是找肖还是找号；普通模式：直接使用原后缀
                                     t_suffix = ("肖" if is_zodiac_to_num else "号") if is_cross_mode else wx_suffix
                                     
                                     if is_cross_sheng or is_sheng_mode:
@@ -1767,7 +1764,7 @@ def render_multi_analysis(df_data):
                                             display_w1 = f"{w1} (克{rule_str})"
                                             kill_str = f" (杀{rule_str})"
                                 
-                                # ?? 终极拼接：上 (生克) (匹配真实数据) 下 (杀)
+                                # 🔥 终极拼接：上 (生克) (匹配真实数据) 下 (杀)
                                 detail_txt = f"上:{display_w1} (匹配:{actual_match_str}) 下:{w2}{kill_str}"
                                     
                                 if is_self: detail_txt += " [自身参考列匹配]"
