@@ -625,8 +625,59 @@ def render_console(df_data):
     
     st.divider()
    
-    
-    
+    # ==========================================
+    # 🚚 临时：一键搬运历史数据到新库
+    # ==========================================
+    if st.session_state.username == admin_name:
+        if st.button("🚚 一键搬家：把历史数据全导进数据库", use_container_width=True, type="secondary"):
+            with st.spinner("正在从云端拉取全套表并转入数据库，请稍候..."):
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                
+                def fetch_and_upload(file_name, table_name):
+                    url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
+                    r = requests.get(url, headers=headers)
+                    if r.status_code != 200: 
+                        return f"找不到 {file_name}"
+                    
+                    download_url = r.json()["download_url"]
+                    content = requests.get(download_url).content
+                    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+                    
+                    sheet_name = "升序全套分析" if "升序" in file_name else "按序全套分析"
+                    ws = wb[sheet_name]
+                    
+                    client = get_supabase_client()
+                    all_data = []
+                    
+                    for row_idx in range(3, ws.max_row + 1):
+                        p1 = str(ws.cell(row=row_idx, column=1).value or "")
+                        p2 = str(ws.cell(row=row_idx, column=2).value or "")
+                        p3 = str(ws.cell(row=row_idx, column=3).value or "")
+                        year_val = str(ws.cell(row=row_idx, column=27).value or "2026") 
+                        
+                        if not p1 and not p2 and not p3: continue
+                        
+                        period_str = f"{year_val}{p1}{p2}{p3}"
+                        
+                        row_dict = {}
+                        for col_idx in range(1, 215):
+                            cell_val = ws.cell(row=row_idx, column=col_idx).value
+                            row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
+                            
+                        all_data.append({"期数": period_str, "data": row_dict})
+                    
+                    for i in range(0, len(all_data), 100):
+                        client.table(table_name).upsert(all_data[i:i+100]).execute()
+                    
+                    return f"{file_name} 成功导入 {len(all_data)} 条记录"
+                
+                msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
+                msg2 = fetch_and_upload("按序全套.xlsx", "full_desc")
+                st.success(f"✅ 搬家完成！{msg1} | {msg2}")
+
+    #======测试终点=========
     # ==========================================
     # 🔥 管理员专属：云端数据流转控制台
     # ==========================================
