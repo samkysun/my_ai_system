@@ -625,11 +625,11 @@ def render_console(df_data):
     
     st.divider()
     # ==========================================
-    # 🚚 临时按钮：一键搬运历史数据到新库 (终极精准降序版)
+    # 🚚 临时按钮：一键搬运历史数据到新库 (最终版)
     # ==========================================
     if st.session_state.username == st.secrets.get("ADMIN_USERNAME", "admin"):
         if st.button("🚚 一键搬家：把历史数据全导进数据库", use_container_width=True, type="secondary"):
-            with st.spinner("正在拉取、去重并分批导入数据库，请稍候..."):
+            with st.spinner("正在拉取并全速导入数据库，请稍候..."):
                 token = st.secrets.get("GITHUB_TOKEN")
                 repo = st.secrets.get("GITHUB_REPO")
                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
@@ -637,8 +637,7 @@ def render_console(df_data):
                 def fetch_and_upload(file_name, table_name):
                     url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
                     r = requests.get(url, headers=headers)
-                    if r.status_code != 200: 
-                        return f"找不到 {file_name}"
+                    if r.status_code != 200: return f"找不到 {file_name}"
                     
                     download_url = r.json()["download_url"]
                     content = requests.get(download_url).content
@@ -656,24 +655,19 @@ def render_console(df_data):
                         return str(v).strip()
 
                     for row_idx in range(3, ws.max_row + 1):
-                        # 🔥 A, B, C 三列专门处理：如果是空的补 0，如果是 5 则变成 05
+                        # 🔥 严格使用 HF列(214) + A列(1) + B列(2) + C列(3)
+                        year_val = clean_val(ws.cell(row=row_idx, column=213).value) or "2026"
                         p1 = clean_val(ws.cell(row=row_idx, column=1).value)
                         p2 = clean_val(ws.cell(row=row_idx, column=2).value)
                         p3 = clean_val(ws.cell(row=row_idx, column=3).value)
                         
-                        # 如果三列全是空，跳过
                         if not p1 and not p2 and not p3: continue
                         
-                        # 补齐格式，防止丢失
-                        if len(p1) == 1: p1 = p1.zfill(2)
-                        if len(p2) == 1: p2 = p2.zfill(2)
-                        if len(p3) == 1: p3 = p3.zfill(2)
-                        
-                        year_val = clean_val(ws.cell(row=row_idx, column=214).value) or "2026"
+                        # 原汁原味拼接，不加任何补零操作
                         period_str = f"{year_val}{p1}{p2}{p3}"
                         
                         row_dict = {}
-                        for col_idx in range(1, 215):
+                        for col_idx in range(1, 214):
                             cell_val = ws.cell(row=row_idx, column=col_idx).value
                             row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
                             
@@ -681,17 +675,20 @@ def render_console(df_data):
                     
                     all_data = list(unique_data_dict.values())
                     
-                    # 🔥 关键：强制按数字大小降序（越新越大）
-                    try:
-                        all_data.sort(key=lambda x: int(x["期数"]), reverse=True)
-                    except:
-                        pass
+                    # 按数字大小降序
+                    try: all_data.sort(key=lambda x: int(x["期数"]), reverse=True)
+                    except: pass
                     
-                    for i in range(0, len(all_data), 20):
-                        chunk = all_data[i:i+20]
+                    total = len(all_data)
+                    if total == 0: return f"{file_name} 没有有效数据"
+                    
+                    progress_bar = st.progress(0)
+                    for i in range(0, total, 200):
+                        chunk = all_data[i:i+200]
                         client.table(table_name).upsert(chunk, on_conflict="期数").execute()
+                        progress_bar.progress(min((i + 200) / total, 1.0))
                     
-                    return f"{file_name} 成功导入 {len(all_data)} 条去重后记录"
+                    return f"{file_name} 成功导入 {total} 条记录"
                 
                 try:
                     msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
