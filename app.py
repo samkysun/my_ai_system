@@ -1596,13 +1596,13 @@ def render_multi_analysis(df_data):
         if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
             load_excel_data.clear() 
             st.toast("✅ 缓存已清空！")
-            
+            st.rerun()
     
     if selected_file_type != st.session_state.current_file:
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
-        
+        st.rerun()
     
     st.divider()
     #==========更改多维分析核算内部逻辑=============
