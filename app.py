@@ -628,9 +628,12 @@ def render_console(df_data):
     # ==========================================
     # 🚚 临时：一键搬运历史数据到新库
     # ==========================================
-    if st.session_state.username == admin_name:
+        # ==========================================
+    # 🚚 临时按钮：一键搬运历史数据到新库 (防爆去重版)
+    # ==========================================
+    if st.session_state.username == st.secrets.get("ADMIN_USERNAME", "admin"):
         if st.button("🚚 一键搬家：把历史数据全导进数据库", use_container_width=True, type="secondary"):
-            with st.spinner("正在从云端拉取全套表并转入数据库，请稍候..."):
+            with st.spinner("正在拉取、去重并分批导入数据库，请稍候..."):
                 token = st.secrets.get("GITHUB_TOKEN")
                 repo = st.secrets.get("GITHUB_REPO")
                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
@@ -649,13 +652,15 @@ def render_console(df_data):
                     ws = wb[sheet_name]
                     
                     client = get_supabase_client()
-                    all_data = []
+                    
+                    # 🔥 核心修复 1：使用字典去重，保证期数唯一，防止主键冲突
+                    unique_data_dict = {}
                     
                     for row_idx in range(3, ws.max_row + 1):
                         p1 = str(ws.cell(row=row_idx, column=1).value or "")
                         p2 = str(ws.cell(row=row_idx, column=2).value or "")
                         p3 = str(ws.cell(row=row_idx, column=3).value or "")
-                        year_val = str(ws.cell(row=row_idx, column=27).value or "2026") 
+                        year_val = str(ws.cell(row=row_idx, column=214).value or "2026") 
                         
                         if not p1 and not p2 and not p3: continue
                         
@@ -666,16 +671,26 @@ def render_console(df_data):
                             cell_val = ws.cell(row=row_idx, column=col_idx).value
                             row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
                             
-                        all_data.append({"期数": period_str, "data": row_dict})
+                        # 用期数作为 key，如果遇到重复期数，后面会覆盖前面，保证唯一
+                        unique_data_dict[period_str] = {"期数": period_str, "data": row_dict}
                     
-                    for i in range(0, len(all_data), 100):
-                        client.table(table_name).upsert(all_data[i:i+100]).execute()
+                    all_data = list(unique_data_dict.values())
                     
-                    return f"{file_name} 成功导入 {len(all_data)} 条记录"
+                    # 🔥 核心修复 2：每次只传 20 条（大幅减小数据包体积），并使用 on_conflict
+                    for i in range(0, len(all_data), 20):
+                        chunk = all_data[i:i+20]
+                        client.table(table_name).upsert(chunk, on_conflict="期数").execute()
+                    
+                    return f"{file_name} 成功导入 {len(all_data)} 条去重后记录"
                 
-                msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
-                msg2 = fetch_and_upload("按序全套.xlsx", "full_desc")
-                st.success(f"✅ 搬家完成！{msg1} | {msg2}")
+                # 执行搬家
+                try:
+                    msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
+                    msg2 = fetch_and_upload("按序全套.xlsx", "full_desc")
+                    st.success(f"✅ 搬家完成！{msg1} | {msg2}")
+                    st.info("👉 请去 Supabase 后台查看数据是否已满，然后去多维分析测试！")
+                except Exception as e:
+                    st.error(f"❌ 搬家失败，真实原因: {e}")
 
     #======测试终点=========
     # ==========================================
