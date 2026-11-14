@@ -782,6 +782,7 @@ def render_console(df_data):
                                                    json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
                                 
                                 
+                               
                                 if res.status_code in [200, 201]: 
                                     # 🔥 核心新增：老库（Excel）同步成功后，瞬间将最新数据静默写入 Supabase 新库
                                     try:
@@ -789,31 +790,32 @@ def render_console(df_data):
                                         if client:
                                             table_name = "full_asc" if "升序" in dst_f else "full_desc"
                                             
-                                            # 提取第 3 行（最新一期）的所有数据，打包成字典
                                             row_dict = {}
-                                            # 这里提取 1 到 214 列（对应你 Excel 里的所有属性）
                                             for col_idx in range(1, 215):
                                                 cell_val = ws_dst.cell(row=3, column=col_idx).value
                                                 row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
                                                 
-                                            # 获取当前期数
                                             p1 = str(ws_dst.cell(row=3, column=1).value or "")
                                             p2 = str(ws_dst.cell(row=3, column=2).value or "")
                                             p3 = str(ws_dst.cell(row=3, column=3).value or "")
                                             year_val = str(ws_dst.cell(row=3, column=27).value or "2026")
                                             period_str = f"{year_val}{p1}{p2}{p3}"
                                             
-                                            # 写入（如果存在就覆盖，不存在就插入）
+                                            # 👇 👇 👇 看这里，缩进必须和上面的变量赋值完全对齐！
+                                            st.info(f"正在同步写入数据库: 表={table_name}, 期数={period_str}")
+                                            
                                             client.table(table_name).upsert({
                                                 "期数": period_str,
                                                 "data": row_dict
                                             }).execute()
                                     except Exception as db_err:
-                                        # 即使数据库卡了，也不影响你老库的 Excel 保存
-                                        print(f"静默同步数据库失败: {db_err}")
+                                        # 🔥 改成红字，直接暴露真实错误
+                                        st.error(f"❌ 数据库写入失败！原因：{db_err}")
                                     
                                     return True, "成功"
                                 return False, res.text    
+                
+                                
                                 
     
                             s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
