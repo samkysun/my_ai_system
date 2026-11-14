@@ -957,12 +957,20 @@ def render_console(df_data):
             next_win_nums = [clean_period(next_row.iloc[i]) for i in range(19, 25) if pd.notna(next_row.iloc[i])]
             if len(next_win_nums) > 0: has_next_data = True
     
-    def render_compare_table(df_trigger, is_multi=False):
+    def render_compare_panel(df_trigger, df_counts, is_multi=False):
         if df_trigger is None or df_trigger.empty:
             st.info("暂无数据。")
             return
             
-        st.write(f"**对比目标：下一期【{next_period_str}】开奖号码:**")
+        # 1. 显示原汁原味的原始测算结果（折叠起来，避免太长）
+        with st.expander(f"📊 查看原始{'多排' if is_multi else '单排'}测算明细 ({len(df_trigger)}处)", expanded=False):
+            st.write("**触发记录表**")
+            st.dataframe(df_trigger, use_container_width=True, hide_index=True, height=250)
+            st.write("**下期号码频次表**")
+            st.dataframe(df_counts, use_container_width=True, hide_index=True, height=250)
+            
+        # 2. 对比开奖结果
+        st.write(f"--- \\n**对比目标：下一期【{next_period_str}】开奖号码:**")
         if has_next_data:
             balls_html = '<div style="display:flex; gap:10px; margin-bottom: 10px;">'
             for n in next_win_nums:
@@ -973,13 +981,10 @@ def render_console(df_data):
             st.warning("下一期暂未开奖，无法比对。")
             return
     
-        # 🔥 1. 数据清洗与去重
-        # 只取前6个号码，并重新组合
+        # 3. 数据清洗与去重 (只取前6个号码)
         df_trigger['6码'] = df_trigger['触发行号码'].apply(lambda x: ','.join(str(x).split(',')[:6]))
-        # 按6码去重，保留第一条
         df_unique = df_trigger.drop_duplicates(subset=['6码']).copy()
         
-        # 🔥 2. 计算中奖
         def get_matches(nums_str):
             nums = nums_str.split(',')
             return [n for n in nums if n in next_win_nums]
@@ -987,11 +992,10 @@ def render_console(df_data):
         df_unique['中奖号码'] = df_unique['6码'].apply(get_matches)
         df_unique['中奖个数'] = df_unique['中奖号码'].apply(len)
         
-        # 统计总中出数
         total_hits = df_unique['中奖个数'].sum()
         st.success(f"✅ 去重后共 {len(df_unique)} 组触发号码，总计中出 **{total_hits}** 个号码！")
     
-        # 🔥 3. 生成高亮 HTML 表格
+        # 4. 生成高亮 HTML 表格
         html_table = """
         <style>
             .custom-table { width: 100%; border-collapse: collapse; font-family: Consolas, monospace; font-size: 14px; text-align: center; }
@@ -1030,10 +1034,10 @@ def render_console(df_data):
             html_table += f"""
                 <tr style="{row_color}">
                     <td>{row['触发期数']}</td>
-                <td>{nums_display_str}</td>
-                <td><b>{hit_count}</b></td>
-                <td>{hit_nums_str}</td>
-            </tr>
+                    <td>{nums_display_str}</td>
+                    <td><b>{hit_count}</b></td>
+                    <td>{hit_nums_str}</td>
+                </tr>
             """
             
         html_table += "</tbody></table></div>"
@@ -1060,14 +1064,14 @@ def render_console(df_data):
         st.subheader("单排结果分析")
         if st.session_state.calc_data_single is not None:
             df_t1, df_c1 = st.session_state.calc_data_single
-            render_compare_table(df_t1, is_multi=False)
+            render_compare_panel(df_t1, df_c1, is_multi=False)
         else: st.info("暂无单排数据。")
         
     with col_lb2:
         st.subheader("多排结果分析")
         if st.session_state.calc_data_multi is not None:
             df_t2, df_c2 = st.session_state.calc_data_multi
-            render_compare_table(df_t2, is_multi=True)
+            render_compare_panel(df_t2, df_c2, is_multi=True)
         else: st.info("暂无多排数据。")
     
 #==============走势图功能代码===========
