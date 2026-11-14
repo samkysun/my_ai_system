@@ -781,8 +781,40 @@ def render_console(df_data):
                                                    headers=headers, 
                                                    json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
                                 
-                                if res.status_code in [200, 201]: return True, "成功"
-                                return False, res.text
+                                
+                                if res.status_code in [200, 201]: 
+                                    # 🔥 核心新增：老库（Excel）同步成功后，瞬间将最新数据静默写入 Supabase 新库
+                                    try:
+                                        client = get_supabase_client()
+                                        if client:
+                                            table_name = "full_asc" if "升序" in dst_f else "full_desc"
+                                            
+                                            # 提取第 3 行（最新一期）的所有数据，打包成字典
+                                            row_dict = {}
+                                            # 这里提取 1 到 214 列（对应你 Excel 里的所有属性）
+                                            for col_idx in range(1, 215):
+                                                cell_val = ws_dst.cell(row=3, column=col_idx).value
+                                                row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
+                                                
+                                            # 获取当前期数
+                                            p1 = str(ws_dst.cell(row=3, column=1).value or "")
+                                            p2 = str(ws_dst.cell(row=3, column=2).value or "")
+                                            p3 = str(ws_dst.cell(row=3, column=3).value or "")
+                                            year_val = str(ws_dst.cell(row=3, column=27).value or "2026")
+                                            period_str = f"{year_val}{p1}{p2}{p3}"
+                                            
+                                            # 写入（如果存在就覆盖，不存在就插入）
+                                            client.table(table_name).upsert({
+                                                "期数": period_str,
+                                                "data": row_dict
+                                            }).execute()
+                                    except Exception as db_err:
+                                        # 即使数据库卡了，也不影响你老库的 Excel 保存
+                                        print(f"静默同步数据库失败: {db_err}")
+                                    
+                                    return True, "成功"
+                                return False, res.text    
+                                
     
                             s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
                             s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
@@ -1522,43 +1554,47 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter
 
 # ==========================================
-# ==== 1. 云端文件极速读取核心 (带1小时缓存)
+# ==== 极速读取引擎 (从云端数据库提取) ====
 # ==========================================
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_excel_data(file_path, sheet_name):
-    import requests
-    import io
-    import openpyxl
-    
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    
-    def parse_workbook(wb):
-        ws = wb[sheet_name]
-        return list(ws.iter_rows(values_only=True))
-        
-    if not token or not repo:
-        try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            return parse_workbook(wb)
-        except Exception:
-            return []
-        
+    """
+    🔥 极速读取：直接从 Supabase 读取纯数据，并还原成原代码习惯的二维列表格式。
+    无需下载几十兆的 Excel，毫秒级响应，绝不卡顿！
+    """
     try:
-        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            download_url = r.json()["download_url"]
-            content = requests.get(download_url).content
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-            return parse_workbook(wb)
-        else:
-            st.error(f"读取云端文件失败，状态码: {r.status_code}")
+        client = get_supabase_client()
+        if not client: 
             return []
+        
+        # 根据文件名判断读取哪张表
+        table_name = "full_asc" if "升序" in file_path else "full_desc"
+        
+        # 按照期数倒序拉取所有数据
+        response = client.table(table_name).select("*").order("期数", desc=True).execute()
+        
+        if not response.data: 
+            return []
+        
+        # 将 jsonb 格式的数据，还原成原来 Excel 的 214 列二维列表
+        rows_list = []
+        for item in response.data:
+            data_dict = item.get("data", {})
+            row = [""] * 214
+            for k, v in data_dict.items():
+                try:
+                    col_idx = int(k) - 1
+                    if 0 <= col_idx < 214:
+                        row[col_idx] = v
+                except:
+                    pass
+            rows_list.append(row)
+            
+        return rows_list
+        
     except Exception as e:
-        st.error(f"云端读取异常: {e}")
-        return []
+        st.error(f"数据库极速读取异常: {e}")
+        return []    
 
 
 # ==========================================
