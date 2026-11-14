@@ -1795,9 +1795,26 @@ def render_multi_analysis(df_data):
             attr_map_val = ATTR_MAP[selected_attr]
             
             # 不管什么模式，我们只算你下拉框选中的这一个属性
+            # 不管什么模式，我们只算你下拉框选中的这一个属性
             res_lines = do_match(selected_attr, attr_map_val, ball_num, min_len, max_len)
             
+            # ?? 新增：获取基准列的字母和具体内容，用于生成基准行排列
+            base_col_num = attr_map_val + (ball_num - 1) * 30
+            base_col_letter = get_column_letter(base_col_num)
+            base_col_idx = column_index_from_string(base_col_letter) - 1
+            
+            base_rows = []
+            for r in range(target_row_idx, len(all_rows)):
+                val = clean_str(all_rows[r][base_col_idx]) if base_col_idx < len(all_rows[r]) else ""
+                if val:
+                    base_rows.append(f"{base_col_letter}{r+1}:{val}")
+                if len(base_rows) >= max_len: break
+            
+            # ?? 拼接报告头部
             out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
+            # ?? 插入基准行排列
+            out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
+            
             if not res_lines: 
                 out_txt += "未找到符合条件的匹配记录。"
             else:
@@ -1805,19 +1822,13 @@ def render_multi_analysis(df_data):
                     out_txt += f"{line}\n"
             
             # 如果是全属性透视模式，就把结果累积起来；如果是单属性，直接覆盖
-        
             if "全属性" in analysis_mode:
-                # ?? 确保每次点执行前，如果上一次点了清空，这里绝对不能报错
                 if "full_scan_results" not in st.session_state:
                     st.session_state.full_scan_results = []
                 
-                # 把当前这个属性的结果存进历史列表
                 st.session_state.full_scan_results.append(out_txt)
-                
-                # 把所有的历史结果拼接到一起（这就实现了多个属性区分开来一同写入）
                 st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
             else:
-                # 单属性模式：直接覆盖，清空历史列表
                 st.session_state.full_scan_results = [out_txt]
                 st.session_state.multi_result_text = out_txt
             
