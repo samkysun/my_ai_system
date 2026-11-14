@@ -1142,10 +1142,14 @@ def render_stats(df_data):
                     st.bar_chart(res_df.set_index("同频号码")["同现次数"])
             except Exception as e: st.error(f"出错：{e}")
 #==============AI推演页面代码=========================
+# 🔥 加个缓存，1小时内只读一次，读取极快
+@st.cache_data(show_spinner=False, ttl=3600)
 def build_rule_database():
     try:
-        # 🔥 确保后缀是 .xlsm，括号是英文
-        file_name = "数据分析系统最终版本(智能全套).xlsm" 
+        # 🔥 核心修改点：直接读取你独立出来的 AI规则 工作簿
+        file_name = "AI规则.xlsx" 
+        
+        # 工作表名字保持为 "规则"
         df = pd.read_excel(file_name, sheet_name="规则")
         db = {}
         col_num = next((c for c in df.columns if "号码" in str(c)), "号码")
@@ -1159,7 +1163,7 @@ def build_rule_database():
         col_role = next((c for c in df.columns if "人物" in str(c)), "人物")
         col_sum = next((c for c in df.columns if "合数" in str(c)), "合数")
         
-        # 🔥 新增：读取方位列
+        # 🔥 读取方位列
         col_dir = next((c for c in df.columns if "方位" in str(c)), "方位")
         
         for _, row in df.iterrows():
@@ -1172,11 +1176,10 @@ def build_rule_database():
                     "波色": str(row[col_color]), "大小": str(row[col_size]), 
                     "物象": str(row[col_obj]), "人物": str(row[col_role]), 
                     "合数": str(row[col_sum]),
-                    "方位": str(row[col_dir])  # 🔥 新增：把方位存入字典
+                    "方位": str(row[col_dir])
                 }
         return db
     except Exception as e: 
-        # 遇到错误直接把真实原因打印出来
         st.error(f"底层读取失败，真实原因：{e}")
         return None
 
