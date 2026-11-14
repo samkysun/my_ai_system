@@ -624,12 +624,8 @@ def render_console(df_data):
                                     if not s2: st.error(f"? 按序文件同步失败: {m2}")
     
     st.divider()
-   
     # ==========================================
-    # 🚚 临时：一键搬运历史数据到新库
-    # ==========================================
-        # ==========================================
-    # 🚚 临时按钮：一键搬运历史数据到新库 (防爆去重版)
+    # 🚚 临时按钮：一键搬运历史数据到新库 (终极精准降序版)
     # ==========================================
     if st.session_state.username == st.secrets.get("ADMIN_USERNAME", "admin"):
         if st.button("🚚 一键搬家：把历史数据全导进数据库", use_container_width=True, type="secondary"):
@@ -652,18 +648,28 @@ def render_console(df_data):
                     ws = wb[sheet_name]
                     
                     client = get_supabase_client()
-                    
-                    # 🔥 核心修复 1：使用字典去重，保证期数唯一，防止主键冲突
                     unique_data_dict = {}
                     
+                    def clean_val(v):
+                        if v is None: return ""
+                        if isinstance(v, (int, float)): return str(int(v))
+                        return str(v).strip()
+
                     for row_idx in range(3, ws.max_row + 1):
-                        p1 = str(ws.cell(row=row_idx, column=1).value or "")
-                        p2 = str(ws.cell(row=row_idx, column=2).value or "")
-                        p3 = str(ws.cell(row=row_idx, column=3).value or "")
-                        year_val = str(ws.cell(row=row_idx, column=214).value or "2026") 
+                        # 🔥 A, B, C 三列专门处理：如果是空的补 0，如果是 5 则变成 05
+                        p1 = clean_val(ws.cell(row=row_idx, column=1).value)
+                        p2 = clean_val(ws.cell(row=row_idx, column=2).value)
+                        p3 = clean_val(ws.cell(row=row_idx, column=3).value)
                         
+                        # 如果三列全是空，跳过
                         if not p1 and not p2 and not p3: continue
                         
+                        # 补齐格式，防止丢失
+                        if len(p1) == 1: p1 = p1.zfill(2)
+                        if len(p2) == 1: p2 = p2.zfill(2)
+                        if len(p3) == 1: p3 = p3.zfill(2)
+                        
+                        year_val = clean_val(ws.cell(row=row_idx, column=214).value) or "2026"
                         period_str = f"{year_val}{p1}{p2}{p3}"
                         
                         row_dict = {}
@@ -671,24 +677,26 @@ def render_console(df_data):
                             cell_val = ws.cell(row=row_idx, column=col_idx).value
                             row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
                             
-                        # 用期数作为 key，如果遇到重复期数，后面会覆盖前面，保证唯一
                         unique_data_dict[period_str] = {"期数": period_str, "data": row_dict}
                     
                     all_data = list(unique_data_dict.values())
                     
-                    # 🔥 核心修复 2：每次只传 20 条（大幅减小数据包体积），并使用 on_conflict
+                    # 🔥 关键：强制按数字大小降序（越新越大）
+                    try:
+                        all_data.sort(key=lambda x: int(x["期数"]), reverse=True)
+                    except:
+                        pass
+                    
                     for i in range(0, len(all_data), 20):
                         chunk = all_data[i:i+20]
                         client.table(table_name).upsert(chunk, on_conflict="期数").execute()
                     
                     return f"{file_name} 成功导入 {len(all_data)} 条去重后记录"
                 
-                # 执行搬家
                 try:
                     msg1 = fetch_and_upload("升序全套.xlsx", "full_asc")
                     msg2 = fetch_and_upload("按序全套.xlsx", "full_desc")
                     st.success(f"✅ 搬家完成！{msg1} | {msg2}")
-                    st.info("👉 请去 Supabase 后台查看数据是否已满，然后去多维分析测试！")
                 except Exception as e:
                     st.error(f"❌ 搬家失败，真实原因: {e}")
 
@@ -1621,40 +1629,46 @@ from openpyxl.utils import get_column_letter
 # ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_excel_data(file_path, sheet_name):
-    """
-    🔥 极速读取：直接从 Supabase 读取纯数据，并还原成原代码习惯的二维列表格式。
-    无需下载几十兆的 Excel，毫秒级响应，绝不卡顿！
-    """
     try:
         client = get_supabase_client()
-        if not client: 
-            return []
+        if not client: return []
         
-        # 根据文件名判断读取哪张表
         table_name = "full_asc" if "升序" in file_path else "full_desc"
+        response = client.table(table_name).select("*").execute()
         
-        # 按照期数倒序拉取所有数据
-        response = client.table(table_name).select("*").order("期数", desc=True).execute()
+        if not response.data: return []
         
-        if not response.data: 
-            return []
-        
-        # 将 jsonb 格式的数据，还原成原来 Excel 的 214 列二维列表
         rows_list = []
         for item in response.data:
             data_dict = item.get("data", {})
+            if isinstance(data_dict, str):
+                import json
+                try: data_dict = json.loads(data_dict)
+                except: data_dict = {}
+                
             row = [""] * 214
-            for k, v in data_dict.items():
-                try:
-                    col_idx = int(k) - 1
-                    if 0 <= col_idx < 214:
-                        row[col_idx] = v
-                except:
-                    pass
+            if isinstance(data_dict, dict):
+                for k, v in data_dict.items():
+                    try:
+                        col_idx = int(k) - 1
+                        if 0 <= col_idx < 214:
+                            row[col_idx] = v
+                    except: pass
             rows_list.append(row)
             
-        return rows_list
+        # 🔥 关键：在本地再按照期数数字大小降序排一次，确保越新越在上面！
+        def get_period_num(row):
+            period_str = row[18]
+            try: return int(float(period_str))
+            except: return 0
+            
+        rows_list.sort(key=get_period_num, reverse=True)
         
+        # 加上两行假表头，防错位
+        header_row = [""] * 214
+        rows_list = [header_row, header_row] + rows_list
+            
+        return rows_list
     except Exception as e:
         st.error(f"数据库极速读取异常: {e}")
         return []    
