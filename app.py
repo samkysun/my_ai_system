@@ -481,10 +481,12 @@ def render_console(df_data):
         # ==== 模块一：一键全量抓取 (1976年至今) ====
         # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
+        
         if st.button("🚀 从正规数据源重建数据库 (1976年至今)", use_container_width=True, type="primary"):
             import requests
             import io
             import pandas as pd
+            from datetime import datetime
             
             status_container = st.container()
             
@@ -513,6 +515,7 @@ def render_console(df_data):
                     year_col = cols.get("year")
                     no_col = cols.get("times", cols.get("no", cols.get("issue")))
                     special_col = cols.get("s1", cols.get("special"))
+                    date_col = cols.get("date") # 获取日期列用于过滤未来数据
                     num_cols = [cols.get(f"n{i}") for i in range(1, 7)]
                     
                     if not year_col or not no_col or not special_col or None in num_cols:
@@ -531,15 +534,26 @@ def render_console(df_data):
                     asc_data, desc_data = [], []
                     total_records = len(df)
                     skipped_count = 0
+                    future_count = 0 # 记录过滤掉的未来假数据
                     
                     def clean_num(val):
                         if pd.isna(val): return 0
                         s = str(val).split('.')[0].strip()
                         return int(s) if s.isdigit() else 0
                         
-                    st.write("⚙️ 正在计算 214 列属性并组装数据...")
+                    st.write("⚙️ 正在计算 214 列属性并组装数据（自动过滤未开奖假数据）...")
                     for idx, row in df.iterrows():
                         try:
+                            # === 核心修复：过滤未来的未开奖数据 ===
+                            if date_col:
+                                try:
+                                    draw_date = pd.to_datetime(row[date_col])
+                                    if draw_date > pd.Timestamp.now():
+                                        future_count += 1
+                                        continue # 如果开奖日期大于今天，直接跳过
+                                except:
+                                    pass
+                                    
                             y_val = str(row[year_col]).split('.')[0]
                             no_raw = str(row[no_col]).split('.')[0].strip()
                             no_digits = ''.join(c for c in no_raw if c.isdigit())
@@ -587,15 +601,17 @@ def render_console(df_data):
                             skipped_count += 1
                             continue
                             
-                    # === 核心修复：利用字典强制去重 ===
+                    # 强制去重
                     unique_asc_dict = {item["期数"]: item for item in asc_data}
                     unique_desc_dict = {item["期数"]: item for item in desc_data}
                     
                     final_asc = list(unique_asc_dict.values())
                     final_desc = list(unique_desc_dict.values())
                     
-                    st.write(f"✅ 数据处理完毕，去重后有效期为 {len(final_asc)} 期（跳过了 {len(asc_data) - len(final_asc)} 条重复期数，及 {skipped_count} 条异常行）。")
-                    
+                    st.write(f"✅ 数据处理完毕：去重后有效期为 {len(final_asc)} 期。")
+                    if future_count > 0:
+                        st.write(f"🛡️ 已成功过滤掉 {future_count} 期尚未开奖的未来占位假数据。")
+                        
                     if len(final_asc) == 0:
                         st.error("❌ 严重错误：计算后有效数据仍然为 0 期。")
                         st.stop()
