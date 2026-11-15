@@ -235,7 +235,8 @@ def load_real_data():
 def generate_20_combos(nums):
     combos = list(itertools.combinations(nums, 3))
     return [",".join([str(x).zfill(2) for x in c]) for c in combos]
-
+    
+#==========解决数据保持与老数据库一致的计算结果起点==================
 def calculate_linkage(df_data, target_period, mode):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
@@ -245,12 +246,15 @@ def calculate_linkage(df_data, target_period, mode):
     base_nums = [int(clean_period(current_row.iloc[i])) for i in range(19, 25) if pd.notna(current_row.iloc[i]) and clean_period(current_row.iloc[i]) != ""]
     special_num = int(clean_period(current_row.iloc[25])) if pd.notna(current_row.iloc[25]) and clean_period(current_row.iloc[25]) != "" else None
     if len(base_nums) < 6: return None, None, "基准期开奖号码不足6个"
-    try: is_descending = int(clean_period(df_data.iloc[0, 18])) > int(clean_period(df_data.iloc[1, 18]))
-    except: is_descending = True
-    if is_descending: start_idx, end_idx = base_idx + 1, len(df_data) - 1
-    else: start_idx, end_idx = 0, base_idx - 1
+
+    # 🔥 核心修复：彻底废除 is_descending 猜测，强制锁定降序方向！
+    # 历史数据一定在基准期的下方（索引更大）
+    start_idx = base_idx + 1
+    end_idx = len(df_data) - 1
+    
     if start_idx > end_idx: return None, None, "基准期附近没有可匹配的历史数据"
     triggers, total_counter = [], Counter()
+    
     if mode == "单排分析":
         combos_str = generate_20_combos(base_nums)
         for idx in range(start_idx, end_idx + 1):
@@ -260,7 +264,10 @@ def calculate_linkage(df_data, target_period, mode):
                 combo = [int(x) for x in combo_str.split(",")]
                 if all(n in row_nums for n in combo):
                     triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
-                    next_idx = idx - 1 if is_descending else idx + 1
+                    
+                    # 🔥 核心修复：因为是降序，下一期一定在它的上方，所以是 idx - 1
+                    next_idx = idx - 1
+                    
                     if 0 <= next_idx < len(df_data):
                         next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
                         for n in next_row_nums: total_counter[n] += 1
@@ -281,15 +288,19 @@ def calculate_linkage(df_data, target_period, mode):
                     combo = [int(x) for x in combo_str.split(",")]
                     if all(n in row_nums for n in combo):
                         triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
-                        next_idx = idx - 1 if is_descending else idx + 1
+                        
+                        # 🔥 核心修复：同样是 idx - 1
+                        next_idx = idx - 1
+                        
                         if 0 <= next_idx < len(df_data):
                             next_row_nums = [int(clean_period(df_data.iloc[next_idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[next_idx, j]) and clean_period(df_data.iloc[next_idx, j]) != ""]
                             for n in next_row_nums: total_counter[n] += 1
+                            
     sorted_counts = sorted(total_counter.items(), key=lambda x: x[1], reverse=True)
     df_triggers = pd.DataFrame(triggers) if triggers else pd.DataFrame(columns=["组合", "触发行", "触发期数", "触发行号码"])
     df_counts = pd.DataFrame([{"下期数字": f"{n:02d}", "出现次数": c} for n, c in sorted_counts])
     return df_triggers, df_counts, None
-
+#==================解决数据结果不一致的终点============================
 def calculate_prize(df_data, target_period, predicted_nums):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
@@ -1769,7 +1780,24 @@ def render_multi_analysis(df_data):
         
         try:
             status_text.text("正在读取 Excel 数据...")
+            #========判断是否是降序的开端代码=============
             all_rows = load_excel_data(target_file, sheet_name)
+            if not all_rows:
+                st.error(f"读取 {target_file} 失败或文件为空。"); st.stop()
+
+            # ==========================================
+            # 🔥 核心修复1：强制把数据按降序排列（最新在上，最旧在下）
+            # ==========================================
+            def get_sort_key(row):
+                y = clean_str(row[213]) if len(row) > 213 else ""
+                p1 = clean_str(row[0])
+                p2 = clean_str(row[1])
+                p3 = clean_str(row[2])
+                s = f"{y}{p1}{p2}{p3}"
+                try: return int(s)
+                except: return 0
+                
+            all_rows.sort(key=get_sort_key, reverse=True)
             if not all_rows:
                 st.error(f"读取 {target_file} 失败或文件为空。"); st.stop()
             progress_bar.progress(20)
