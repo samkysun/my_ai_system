@@ -1257,7 +1257,8 @@ def build_rule_database():
             return None
         
         # 查询云端 rules 表中的所有数据
-        response = client.table("rules").select("*").execute()
+        # 🔥 加上 .order("期数", desc=True) 强制降序
+        response = client.table(table_name).select("*").order("期数", desc=True).execute()
         
         if not response.data:
             st.error("⚠️ 云端 rules 表中没有数据，请检查 Supabase。")
