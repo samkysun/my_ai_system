@@ -434,7 +434,97 @@ def render_console(df_data):
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
         return
-        
+    #=========测试数据搬家代码七点========
+    # ==========================================
+    # 🚚 临时按钮：从云端 GitHub 直接读取 Excel 导入数据库
+    # ==========================================
+    if st.session_state.username == st.secrets.get("ADMIN_USERNAME", "admin"):
+        if st.button("🚚 一键搬家：从云端导入历史全套表", use_container_width=True, type="secondary"):
+            import io
+            import requests
+            import openpyxl
+            
+            with st.spinner("正在从 GitHub 下载 Excel 并全速导入数据库，请稍候..."):
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                
+                def upload_excel_from_github(file_name, table_name, sheet_name):
+                    try:
+                        # 1. 从 GitHub 下载 Excel
+                        url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
+                        r = requests.get(url, headers=headers)
+                        if r.status_code != 200:
+                            return f"❌ 找不到云端文件: {file_name}"
+                        
+                        download_url = r.json()["download_url"]
+                        content = requests.get(download_url).content
+                        
+                        # 2. 读取 Excel
+                        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+                        ws = wb[sheet_name]
+                        
+                        client = get_supabase_client()
+                        all_data = []
+                        
+                        def clean_val(v):
+                            if v is None: return ""
+                            if isinstance(v, (int, float)): return str(int(v)) # 防止 1.0 变成 "1.0"
+                            return str(v).strip()
+                            
+                        # 3. 遍历数据 (从第 3 行开始)
+                        for row_idx in range(3, ws.max_row + 1):
+                            # 🔥 严格按照你的设定：年份 HF(214) + A(1) + B(2) + C(3)
+                            year_val = clean_val(ws.cell(row=row_idx, column=214).value)
+                            p1 = clean_val(ws.cell(row=row_idx, column=1).value)
+                            p2 = clean_val(ws.cell(row=row_idx, column=2).value)
+                            p3 = clean_val(ws.cell(row=row_idx, column=3).value)
+                            
+                            # 如果 ABC 全空，跳过
+                            if not p1 and not p2 and not p3: continue
+                            
+                            # 如果年份没抓到，默认 2026
+                            if not year_val: year_val = "2026"
+                            
+                            # 拼接期数
+                            period_str = f"{year_val}{p1}{p2}{p3}"
+                            
+                            # 🚨 终极安检门：只要包含非数字（比如中肖），或者长度不对（比如少于5位），直接抛弃！
+                            if not period_str.isdigit() or len(period_str) < 5:
+                                continue
+                                
+                            # 4. 把这一行所有的 214 列打包成字典
+                            row_dict = {}
+                            for col_idx in range(1, 215):
+                                cell_val = ws.cell(row=row_idx, column=col_idx).value
+                                row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
+                                
+                            all_data.append({"期数": period_str, "data": row_dict})
+                        
+                        # 5. 去重并强制降序
+                        unique_dict = {item["期数"]: item for item in all_data}
+                        final_data = list(unique_dict.values())
+                        final_data.sort(key=lambda x: int(x["期数"]), reverse=True)
+                        
+                        # 6. 批量导入 Supabase
+                        total = len(final_data)
+                        if total == 0: return f"⚠️ {file_name} 中没有找到符合规范的纯数字期数"
+                        
+                        progress_bar = st.progress(0)
+                        for i in range(0, total, 200):
+                            chunk = final_data[i:i+200]
+                            client.table(table_name).upsert(chunk, on_conflict="期数").execute()
+                            progress_bar.progress(min((i + 200) / total, 1.0))
+                            
+                        return f"✅ {file_name} 成功导入 {total} 条记录"
+                    except Exception as e:
+                        return f"❌ 导入 {file_name} 出错: {e}"
+                
+                # 执行双写
+                msg1 = upload_excel_from_github("升序全套.xlsx", "full_asc", "升序全套分析")
+                msg2 = upload_excel_from_github("按序全套.xlsx", "full_desc", "按序全套分析")
+                st.success(f"{msg1} | {msg2}")
+    #======================测试数据搬家代码结束点===============================    
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
     except: unique_periods.sort(reverse=True)
