@@ -10,7 +10,19 @@ import requests
 import openpyxl
 import io       # 👈 新增
 import base64   # 👈 新增
+# ==========================================
+# 🔥 数据库连接初始化
+# ==========================================
+from supabase import create_client
 
+@st.cache_resource
+def get_supabase_client():
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+    if not url or not key:
+        st.error("⚠️ 请在 Secrets 中配置 SUPABASE_URL 和 SUPABASE_KEY")
+        return None
+    return create_client(url, key)
 # ==========================================
 # ⚙️ 配置区
 # ==========================================
@@ -871,7 +883,43 @@ def render_console(df_data):
                                                    headers=headers, 
                                                    json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
                                 
-                                if res.status_code in [200, 201]: return True, "成功"
+                                
+                                # ==========================================
+                                # 🔥 核心：推送到 GitHub 后，静默双写进 Supabase
+                                # ==========================================
+                                if res.status_code in [200, 201]: 
+                                    try:
+                                        client = get_supabase_client()
+                                        if client:
+                                            table_name = "full_asc" if "升序" in dst_f else "full_desc"
+                                            
+                                            row_dict = {}
+                                            for col_idx in range(1, 215):
+                                                cell_val = ws_dst.cell(row=3, column=col_idx).value
+                                                row_dict[str(col_idx)] = str(cell_val) if cell_val is not None else ""
+                                                
+                                            # 🔥 精准提取期数：HF(214) + A(1) + B(2) + C(3)
+                                            def clean_val(v):
+                                                if v is None: return ""
+                                                if isinstance(v, (int, float)): return str(int(v))
+                                                return str(v).strip()
+                                                
+                                            year_val = clean_val(ws_dst.cell(row=3, column=214).value) or "2026"
+                                            p1 = clean_val(ws_dst.cell(row=3, column=1).value)
+                                            p2 = clean_val(ws_dst.cell(row=3, column=2).value)
+                                            p3 = clean_val(ws_dst.cell(row=3, column=3).value)
+                                            
+                                            period_str = f"{year_val}{p1}{p2}{p3}"
+                                            
+                                            client.table(table_name).upsert({
+                                                "期数": period_str,
+                                                "data": row_dict
+                                            }, on_conflict="期数").execute()
+                                            st.info(f"☁️ 已静默同步至数据库: {period_str}")
+                                    except Exception as db_err:
+                                        st.warning(f"⚠️ 数据库同步失败（不影响本地 Excel）：{db_err}")
+                                    
+                                    return True, "成功"
                                 return False, res.text
     
                             s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
@@ -1248,32 +1296,26 @@ def get_supabase_client():
         return None
     return create_client(url, key)
 
+# ==========================================
+# 🔥 AI 推演：规则库云端极速读取
+# ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def build_rule_database():
-    """从云端数据库拉取规则，并转换成与原代码完全一致的字典格式"""
     try:
         client = get_supabase_client()
-        if not client:
-            return None
+        if not client: return None
         
-        # 查询云端 rules 表中的所有数据
-        # 🔥 加上 .order("期数", desc=True) 强制降序
-        response = client.table(table_name).select("*").order("期数", desc=True).execute()
-        
+        response = client.table("rules").select("*").execute()
         if not response.data:
             st.error("⚠️ 云端 rules 表中没有数据，请检查 Supabase。")
             return None
         
-        # 将云端数据转换为字典，确保后面的推演逻辑无缝对接
         db = {}
         for row in response.data:
             num_raw = row.get("号码")
-            if num_raw is None:
-                continue
-            try:
-                n = str(int(float(num_raw)))
-            except (ValueError, TypeError):
-                continue
+            if num_raw is None: continue
+            try: n = str(int(float(num_raw)))
+            except: continue
             
             db[n] = {
                 "生肖": str(row.get("生肖", "")),
@@ -1287,11 +1329,9 @@ def build_rule_database():
                 "合数": str(row.get("合数", "")),
                 "方位": str(row.get("方位", "")),
             }
-        
         return db if db else None
-        
     except Exception as e:
-        st.error(f"❌ 云端数据库读取失败：{e}")
+        st.error(f"❌ 云端规则库读取失败：{e}")
         return None
 # ==========================================
 # ==== 功能：读取规则 (云端版) 结束 ====
@@ -1613,44 +1653,45 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter
 
 # ==========================================
-# ==== 1. 云端文件极速读取核心 (带1小时缓存)
+# 🔥 多维分析：从云端数据库拉取全套数据
 # ==========================================
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_excel_data(file_path, sheet_name):
-    import requests
-    import io
-    import openpyxl
-    
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    
-    def parse_workbook(wb):
-        ws = wb[sheet_name]
-        return list(ws.iter_rows(values_only=True))
-        
-    if not token or not repo:
-        try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            return parse_workbook(wb)
-        except Exception:
-            return []
-        
     try:
-        url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            download_url = r.json()["download_url"]
-            content = requests.get(download_url).content
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-            return parse_workbook(wb)
-        else:
-            st.error(f"读取云端文件失败，状态码: {r.status_code}")
-            return []
+        client = get_supabase_client()
+        if not client: return []
+        
+        table_name = "full_asc" if "升序" in file_path else "full_desc"
+        
+        # 🔥 直接从数据库拉取并按期数降序（最新的在最上面）
+        response = client.table(table_name).select("*").order("期数", desc=True).execute()
+        if not response.data: return []
+        
+        rows_list = []
+        for item in response.data:
+            data_dict = item.get("data", {})
+            if isinstance(data_dict, str):
+                import json
+                try: data_dict = json.loads(data_dict)
+                except: data_dict = {}
+                
+            row = [""] * 214
+            if isinstance(data_dict, dict):
+                for k, v in data_dict.items():
+                    try:
+                        col_idx = int(k) - 1
+                        if 0 <= col_idx < 214:
+                            row[col_idx] = v
+                    except: pass
+            rows_list.append(row)
+            
+        # 🔥 加入两行假表头（为了适配你原有代码从第3行开始读的逻辑）
+        header_row = [""] * 214
+        rows_list = [header_row, header_row] + rows_list
+        return rows_list
     except Exception as e:
-        st.error(f"云端读取异常: {e}")
+        st.error(f"数据库极速读取异常: {e}")
         return []
-
 
 # ==========================================
 # ==== 2. 多维分析页面主入口
