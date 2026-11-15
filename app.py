@@ -2172,8 +2172,11 @@ def render_deep_linkage(df_data):
         target_file = "升序全套.csv"
     else:
         target_file = "按序全套.csv"
-        sheet_name = None 
-    st.info(f"💡当前读取文件：【{target_file}】 | 工作表：【{sheet_name}】")
+        
+    # 🔥 核心修复：把 sheet_name = None 移出来，不管升序按序都有这个变量
+    sheet_name = None 
+    
+    st.info(f"💡当前读取文件：【{target_file}】 (CSV 极速模式)")
 
     # ==========================
     # 2. 执行分析逻辑
@@ -2183,146 +2186,125 @@ def render_deep_linkage(df_data):
             import requests
             import io
             import itertools
-            import openpyxl
             from openpyxl.utils import get_column_letter, column_index_from_string
             
-            token = st.secrets.get("GITHUB_TOKEN")
-            repo = st.secrets.get("GITHUB_REPO")
-            
             try:
-                url = f"https://api.github.com/repos/{repo}/contents/{target_file}"
-                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                r = requests.get(url, headers=headers)
+                # 直接调用你的读取函数
+                all_rows = load_excel_data(target_file, sheet_name)
+                if not all_rows:
+                    st.error(f"读取 {target_file} 失败！")
+                    st.stop()
+                    
+                grouped_data = {}
                 
-                if r.status_code == 200:
-                    download_url = r.json()["download_url"]
-                    file_content = requests.get(download_url).content
+                def clean_cell(c):
+                    if c is None: return ""
+                    try: return str(int(float(c)))
+                    except: return str(c).strip()
                     
-                    # 🔥 极速版：直接调用支持 CSV 的读取函数
-                    all_rows = load_excel_data(target_file, sheet_name)
-                    if not all_rows:
-                        st.error(f"读取 {target_file} 失败！")
-                        st.stop()
-                    grouped_data = {}
-                    
-                    def clean_cell(c):
-                        if c is None: return ""
-                        try: return str(int(float(c)))
-                        except: return str(c).strip()
-                        
-                    # 根据你的要求，定义精准的字母列
-                    if "生肖" in mode:
-                        col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
-                    elif "尾数" in mode:
-                        col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
-                    else:
-                        col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
-    
-                    # 遍历每一行（跳过前两行表头）
-                    # all_rows 是二维数组，第1行索引为0，所以第3行索引为2
-                    for r_idx in range(2, len(all_rows)):
-                        row = all_rows[r_idx]
-                        
-                        # 安全获取数组元素的辅助函数，防止越界
-                        def get_val(c_idx):
-                            return clean_cell(row[c_idx]) if c_idx < len(row) else ""
-                            
-                        p1 = get_val(0) # A列 (索引0)
-                        p2 = get_val(1) # B列 (索引1)
-                        p3 = get_val(2) # C列 (索引2)
-                        year_val = get_val(213) # HF列(214列，索引213)
-                        
-                        if not p1 and not p2 and not p3: continue
-                        if not year_val: year_val = "2026" 
-                            
-                        period_str = f"{year_val}{p1}{p2}{p3}"    
-                        
-                        # ?? 防覆盖盾：如果这期已经有了，绝对不让后面的脏行覆盖
-                        if period_str in grouped_data:
-                            continue
-                            
-                        
-                        ball_attrs = []
-                        for ball_i in range(7):
-                            col_letter = col_names[ball_i]
-                            col_idx = column_index_from_string(col_letter) # 1 开始的列号
-                            
-                            if "数字" in mode:
-                                # 数组是从 0 开始的，所以列号要减 1
-                                tens = get_val(col_idx - 1)
-                                units = get_val(col_idx) # 下一列（个位）
-                                if not tens: tens = "0"
-                                if not units: units = "0"
-                                val = f"{tens}{units}"
-                            else:
-                                # 生肖和尾数，直接取对应列的数组值
-                                val = get_val(col_idx - 1)
-                                
-                            ball_attrs.append(val) 
-                                
-                            
-                            
-                        grouped_data[period_str] = ball_attrs
-                            
-                    sorted_periods = sorted(list(grouped_data.keys()))
-                    
-                    if selected_period not in sorted_periods:
-                        st.error(f"在历史数据中找不到基准期数 {selected_period}！")
-                        st.stop()
-                        
-                    target_idx = sorted_periods.index(selected_period)
-                    base_attrs = grouped_data[selected_period]
-                    target_combos = list(itertools.combinations(base_attrs, 3))
-                    
-                    if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
-                    elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
-                    else: all_possible = [f"{i:02d}" for i in range(1, 50)]
-                        
-                    freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
-                    hit_count = 0
-                    
-                    for i in range(target_idx):
-                        hist_attrs = grouped_data[sorted_periods[i]]
-                        is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
-                                
-                        if is_hit and i + 1 < target_idx:
-                            next_attrs = grouped_data[sorted_periods[i+1]]
-                            hit_count += 1
-                            for ball_i in range(7):
-                                attr = next_attrs[ball_i]
-                                if attr in freq_dict[ball_i]:
-                                    freq_dict[ball_i][attr] += 1
-                                    
-                    report_lines = []
-                    report_lines.append(f"========== {mode} 3码联动分析 ==========")
-                    report_lines.append(f"【基准期数】: {selected_period}")
-                    report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
-                    report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
-                    report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\\\\n")
-                    
-                    ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
-                    
-                    for ball_i in range(7):
-                        sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
-                        top_N = sorted_freq[:pick_num]
-                        kills = sorted_freq[pick_num:]
-                        
-                        top_names = [item[0] for item in top_N]
-                        kill_names = [item[0] for item in kills]
-                        
-                        line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
-                        if kill_names:
-                            line += f"  | 杀({','.join(kill_names)})"
-                        report_lines.append(line)
-                        
-                    report_lines.append("\\\\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
-                    
-                    # ?? 修复了原本的 \\\\\\\\n 换行符，让报告可以直接正常显示
-                    st.session_state.deep_linkage_result = "\\\\n".join(report_lines)
+                # 根据你的要求，定义精准的字母列
+                if "生肖" in mode:
+                    col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
+                elif "尾数" in mode:
+                    col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
                 else:
-                    st.error(f"?云端文件 {target_file} 读取失败。")
+                    col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
+
+                # 遍历每一行（跳过前两行表头，CSV 从索引 2 开始）
+                for r_idx in range(2, len(all_rows)):
+                    row = all_rows[r_idx]
+                    
+                    def get_val(c_idx):
+                        return clean_cell(row[c_idx]) if c_idx < len(row) else ""
+                        
+                    p1 = get_val(0) # A列
+                    p2 = get_val(1) # B列
+                    p3 = get_val(2) # C列
+                    year_val = get_val(213) # HF列
+                    
+                    if not p1 and not p2 and not p3: continue
+                    if not year_val: year_val = "2026" 
+                        
+                    period_str = f"{year_val}{p1}{p2}{p3}"    
+                    
+                    if period_str in grouped_data:
+                        continue
+                        
+                    ball_attrs = []
+                    for ball_i in range(7):
+                        col_letter = col_names[ball_i]
+                        col_idx = column_index_from_string(col_letter) # 1 开始的列号
+                        
+                        if "数字" in mode:
+                            tens = get_val(col_idx - 1)
+                            units = get_val(col_idx) 
+                            if not tens: tens = "0"
+                            if not units: units = "0"
+                            val = f"{tens}{units}"
+                        else:
+                            val = get_val(col_idx - 1)
+                            
+                        ball_attrs.append(val) 
+                        
+                    grouped_data[period_str] = ball_attrs
+                        
+                sorted_periods = sorted(list(grouped_data.keys()))
+                
+                if selected_period not in sorted_periods:
+                    st.error(f"在历史数据中找不到基准期数 {selected_period}！")
+                    st.stop()
+                    
+                target_idx = sorted_periods.index(selected_period)
+                base_attrs = grouped_data[selected_period]
+                target_combos = list(itertools.combinations(base_attrs, 3))
+                
+                if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+                elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
+                else: all_possible = [f"{i:02d}" for i in range(1, 50)]
+                    
+                freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
+                hit_count = 0
+                
+                for i in range(target_idx):
+                    hist_attrs = grouped_data[sorted_periods[i]]
+                    is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
+                            
+                    if is_hit and i + 1 < target_idx:
+                        next_attrs = grouped_data[sorted_periods[i+1]]
+                        hit_count += 1
+                        for ball_i in range(7):
+                            attr = next_attrs[ball_i]
+                            if attr in freq_dict[ball_i]:
+                                freq_dict[ball_i][attr] += 1
+                                
+                report_lines = []
+                report_lines.append(f"========== {mode} 3码联动分析 ==========")
+                report_lines.append(f"【基准期数】: {selected_period}")
+                report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
+                report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
+                report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\n")
+                
+                ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+                
+                for ball_i in range(7):
+                    sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
+                    top_N = sorted_freq[:pick_num]
+                    kills = sorted_freq[pick_num:]
+                    
+                    top_names = [item[0] for item in top_N]
+                    kill_names = [item[0] for item in kills]
+                    
+                    line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
+                    if kill_names:
+                        line += f"  | 杀({','.join(kill_names)})"
+                    report_lines.append(line)
+                    
+                report_lines.append("\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
+                
+                st.session_state.deep_linkage_result = "\n".join(report_lines)
+                
             except Exception as e:
-                st.error(f"?分析异常: {e}")
+                st.error(f"分析异常: {e}")
 
     # ==========================
     # 4. 结果显示与打印
