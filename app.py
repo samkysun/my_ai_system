@@ -676,6 +676,7 @@ def render_console(df_data):
         
        
             
+        
         with col_sync2:
             # ==========================================
             # ==== 独立下载：生成并下载真实落球顺序双表 ====
@@ -684,7 +685,6 @@ def render_console(df_data):
                 st.session_state.perfect_excel_data = None
 
             if st.session_state.perfect_excel_data is not None:
-                # 只要生成过，按钮就一直挂在这里
                 st.download_button(
                     label="✅ 点击下载：真实落球顺序_完美数据.xlsx",
                     data=st.session_state.perfect_excel_data,
@@ -698,30 +698,40 @@ def render_console(df_data):
                     st.session_state.perfect_excel_data = None
                     st.rerun()
             else:
-                if st.button("📥 生成并下载完美双表 (不覆盖原文件)", use_container_width=True, type="primary"):
-                    with st.spinner("正在合并数据，请稍候（约需10秒）..."):
+                if st.button("📥 生成并下载完美双表 (修复真实落球)", use_container_width=True, type="primary"):
+                    with st.spinner("正在合并双源数据，请稍候..."):
                         try:
                             import requests, io, pandas as pd, openpyxl, zipfile, json
                             
-                            # 下载 1976 底表
+                            # 1. 下载 1976 底表
                             res1 = requests.get("https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json", timeout=30)
                             df_hist = pd.read_json(io.StringIO(res1.text))
                             cols1 = {str(c).lower(): c for c in df_hist.columns}
                             
-                            # 下载 1993 真实顺序
-                            res2 = requests.get("https://github.com/kitce/marker/archive/refs/heads/master.zip", timeout=120)
+                            # 2. 下载 1993 真实顺序 (修复了大小写：Kitce)
+                            st.write("⏳ 正在从 CDN 下载真实落球顺序数据...")
+                            res2 = requests.get("https://cdn.jsdelivr.net/gh/Kitce/marker@master/data/records.zip", timeout=120)
+                            
                             real_desc_dict = {}
-                            with zipfile.ZipFile(io.BytesIO(res2.content)) as z:
-                                for jf in [f for f in z.namelist() if f.endswith('.json') and 'records' in f]:
-                                    try:
-                                        with z.open(jf) as f:
-                                            item = json.load(f)
-                                            date_str, raw_id = item.get("date", ""), item.get("id", "")
-                                            nums, special = item.get("numbers", []), item.get("special", 0)
-                                            if len(nums) == 6 and special and raw_id:
-                                                p_str = f"{date_str[:4]}{raw_id.split('/')[-1].zfill(3)}"
-                                                real_desc_dict[p_str] = nums + [special]
-                                    except: continue
+                            if res2.status_code == 200:
+                                with zipfile.ZipFile(io.BytesIO(res2.content)) as z:
+                                    for jf in [f for f in z.namelist() if f.endswith('.json')]:
+                                        try:
+                                            with z.open(jf) as f:
+                                                item = json.load(f)
+                                                date_str, raw_id = item.get("date", ""), item.get("id", "")
+                                                nums, special = item.get("numbers", []), item.get("special", 0)
+                                                if len(nums) == 6 and special and raw_id:
+                                                    p_str = f"{date_str[:4]}{raw_id.split('/')[-1].zfill(3)}"
+                                                    real_desc_dict[p_str] = nums + [special]
+                                        except: continue
+                            else:
+                                st.warning(f"⚠️ 真实顺序压缩包下载失败，状态码: {res2.status_code}。按序将无法修复。")
+                                
+                            st.write(f"✅ 成功提取真实落球顺序：{len(real_desc_dict)} 期")
+                            # 强制打印第一期的真实顺序，让你肉眼确认
+                            test_num = real_desc_dict.get("1993001", "未找到")
+                            st.info(f"🔍 调试：1993年第一期（1993001）的真实落球号码为 {test_num}")
                                             
                             asc_data, desc_data = {}, {}
                             def build_row(p_str, nums):
@@ -737,6 +747,7 @@ def render_console(df_data):
                             year_col, no_col, special_col = cols1.get("year"), cols1.get("times"), cols1.get("s1")
                             num_cols = [cols1.get(f"n{i}") for i in range(1, 7)]
                             
+                            # 处理 1976-1992
                             for _, row in df_hist.iterrows():
                                 try:
                                     y_val = str(row[year_col]).split('.')[0]
@@ -750,11 +761,13 @@ def render_console(df_data):
                                         desc_data[p_str] = build_row(p_str, nums + [sp])
                                 except: continue
                                     
+                            # 处理 1993 至今 (真实顺序覆盖)
                             for p_str, real_nums in real_desc_dict.items():
                                 if len(real_nums) == 7:
                                     asc_data[p_str] = build_row(p_str, sorted(real_nums[:6]) + [real_nums[6]])
                                     desc_data[p_str] = build_row(p_str, real_nums)
 
+                            # 生成 Excel
                             wb = openpyxl.Workbook()
                             ws1 = wb.active; ws1.title = "升序全套分析"
                             ws1.append([str(i) for i in range(1, 215)]); ws1.append([])
