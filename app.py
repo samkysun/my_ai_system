@@ -509,19 +509,16 @@ def render_console(df_data):
                         
                     st.write(f"✅ 解析成功！共获取 {len(df)} 行原始数据。")
                     
-                    # === 核心修复：强制统一转小写去找列名 ===
+                    # === 核心修复：根据返回的列名精准匹配 ===
                     cols = {str(c).lower(): c for c in df.columns}
-                    st.write(f"🔍 识别到的原始列名: {list(df.columns)}")
                     
                     year_col = cols.get("year")
-                    no_col = cols.get("no", cols.get("issue"))
-                    special_col = cols.get("special")
+                    no_col = cols.get("times", cols.get("no", cols.get("issue")))
+                    special_col = cols.get("s1", cols.get("special"))
                     num_cols = [cols.get(f"n{i}") for i in range(1, 7)]
                     
                     if not year_col or not no_col or not special_col or None in num_cols:
                         st.error(f"❌ 字段缺失！未能识别所有的必需列。")
-                        st.write(f"年份列: {year_col}, 期号列: {no_col}, 特码列: {special_col}")
-                        st.write(f"平码列: {num_cols}")
                         st.stop()
                         
                     client = get_supabase_client()
@@ -548,13 +545,13 @@ def render_console(df_data):
                             # 提取年份和期号
                             y_val = str(row[year_col]).split('.')[0]
                             
-                            # 期号兼容 "001", "1.0", "2024/001" 等格式
+                            # 期号强制转纯数字并补齐 3 位
                             no_raw = str(row[no_col]).split('.')[0].strip()
                             no_digits = ''.join(c for c in no_raw if c.isdigit())
                             if not no_digits: 
                                 skipped_count += 1
                                 continue
-                            no_val = no_digits.zfill(3)[-3:] # 取最后3位作为期号
+                            no_val = no_digits.zfill(3)[-3:]
                             
                             period_raw = f"{y_val}{no_val}"
                             
@@ -601,7 +598,6 @@ def render_console(df_data):
                     
                     if len(asc_data) == 0:
                         st.error("❌ 严重错误：计算后有效数据仍然为 0 期。")
-                        st.write("数据样例行：", df.iloc[0].to_dict()) # 直接打印第一行供排查
                         st.stop()
                         
                     st.write("💾 [3/4] 正在分批写入 Supabase 数据库，请勿刷新页面...")
