@@ -14,8 +14,10 @@ import base64   # 👈 新增
 # ==========================================
 # ⚙️ 配置区
 # ==========================================
-EXCEL_FILE = "数据分析系统最终版本(智能全套).xlsm"
-SHEET_NAME = "总数据" 
+#EXCEL_FILE = "数据分析系统最终版本(智能全套).xlsm"（原来用的数据库）
+# 修改为：
+EXCEL_FILE = "总数据.xlsx"
+SHEET_NAME = "总数据表" 
 USER_FILE = "users.csv"
 # ==========================================
 # 🔥 核心引擎：28个属性纯代码计算器 (绝对不遗漏版)
@@ -636,7 +638,7 @@ def render_console(df_data):
         col_sync1, col_sync2 = st.columns(2)
         
         with col_sync1:
-            if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
+            if st.button("🚀 同步【升序源文件】至【总数据表】", use_container_width=True, type="primary"):
                 with st.spinner("正在合并总表..."):
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
@@ -649,47 +651,72 @@ def render_console(df_data):
                                 r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
                                 return r.json() if r.status_code == 200 else None
                             
+                            # 读取升序源文件
                             src_info = get_info("升序源文件.xlsx")
                             if not src_info: st.error("找不到升序源文件"); st.stop()
                             df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name="数据源", header=None)
                             
-                            m_file = "数据分析系统最终版本(智能全套).xlsm"
+                            # 读取总数据文件
+                            m_file = "总数据.xlsx" 
                             m_info = get_info(m_file)
-                            if not m_info: st.error("找不到主文件"); st.stop()
-                            wb = openpyxl.load_workbook(io.BytesIO(requests.get(m_info["download_url"]).content), keep_vba=True)
-                            ws = wb["总数据"]
-                            if ws.max_row > 1: ws.delete_rows(2, ws.max_row)
+                            if not m_info: st.error("找不到总数据文件，请确保已上传到 GitHub"); st.stop()
+                            
+                            wb = openpyxl.load_workbook(io.BytesIO(requests.get(m_info["download_url"]).content))
+                            ws = wb["总数据表"] # 你的截图里它叫总数据表
+                            
+                            if ws.max_row > 2: 
+                                ws.delete_rows(3, ws.max_row) # 保留前两行表头
                                 
                             def clean_val(v):
                                 if pd.isna(v) or v is None: return ""
                                 try: return str(int(float(v)))
                                 except: return str(v).strip()
                                 
-                            row_idx = 2
+                            row_idx = 3
                             for idx, row in df_src.iterrows():
                                 if idx < 2: continue
                                 p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
                                 if not p1 and not p2 and not p3: continue
                                 y_val = clean_val(row[26]) if len(row) > 26 else "2026"
                                 
+                                # 写入 A-C列 (期号)
+                                ws.cell(row=row_idx, column=1, value=p1)
+                                ws.cell(row=row_idx, column=2, value=p2)
+                                ws.cell(row=row_idx, column=3, value=p3)
+                                
+                                # 写入 D~Q 列 (号码拆解)
+                                for i in range(7):
+                                    t = clean_val(row[3 + i*2]) if len(row) > 3 + i*2 else ""
+                                    u = clean_val(row[4 + i*2]) if len(row) > 4 + i*2 else ""
+                                    ws.cell(row=row_idx, column=4 + i*2, value=t)
+                                    ws.cell(row=row_idx, column=5 + i*2, value=u)
+                                    
+                                # 写入 S 列 (期数)
                                 ws.cell(row=row_idx, column=19, value=f"{y_val}{p1}{p2}{p3}")
-                                for i in range(6):
-                                    t, u = clean_val(row[3 + i*2]), clean_val(row[4 + i*2])
-                                    num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else (int(t) if t.isdigit() else 0)
-                                    ws.cell(row=row_idx, column=20 + i, value=num)
-                                t, u = clean_val(row[15]), clean_val(row[16])
-                                z_num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else (int(t) if t.isdigit() else 0)
-                                ws.cell(row=row_idx, column=26, value=z_num)
+                                
+                                # 写入 T~Z 列 (1-7球)
+                                for i in range(7):
+                                    t = clean_val(row[3 + i*2]) if len(row) > 3 + i*2 else ""
+                                    u = clean_val(row[4 + i*2]) if len(row) > 4 + i*2 else ""
+                                    num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else 0
+                                    if i < 6:
+                                        ws.cell(row=row_idx, column=20 + i, value=num)
+                                    else:
+                                        ws.cell(row=row_idx, column=26, value=num)
+                                        
+                                # 写入 AA 列 (年份)
+                                ws.cell(row=row_idx, column=27, value=y_val)
                                 row_idx += 1
                                 
                             out = io.BytesIO()
                             wb.save(out)
-                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{m_file}", headers=headers, json={"message": "自动更新总数据", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": m_info["sha"], "branch": "main"})
+                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{m_file}", headers=headers, json={"message": "自动更新总数据表", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": m_info["sha"], "branch": "main"})
+                            
                             if res.status_code in [200, 201]:
-                                st.success("✅ 主总数据表已更新！")
-                                load_real_data.clear()
+                                st.success("✅ 总数据表已完美更新！")
                             else: st.error(f"❌ 推送失败: {res.text}")
-                        except Exception as e: st.error(f"异常: {e}")
+                        except Exception as e: 
+                            st.error(f"异常: {e}")    
     
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
