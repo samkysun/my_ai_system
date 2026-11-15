@@ -739,11 +739,10 @@ def render_console(df_data):
                                 
                                 # 1. 拉取源文件 (升序源文件.xlsx)
                                 s_info = get_info(src_f)
-                                if not s_info: return False, f"找不到 {src_f}"
+                                if not s_info: return False, f"找不到 {src_f}，请确保已在GitHub根目录"
                                 wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
                                 ws_src = wb_src["数据源"]
                                 
-                                # 提取源文件第3行的最新期号
                                 def clean_val(cell):
                                     if cell is None: return ""
                                     val = str(cell).strip()
@@ -758,7 +757,7 @@ def render_console(df_data):
                                 
                                 # 2. 拉取目标全套文件 (CSV)
                                 d_info = get_info(dst_f)
-                                if not d_info: return False, f"找不到 {dst_f}"
+                                if not d_info: return False, f"找不到 {dst_f}，请确保已上传到GitHub"
                                 csv_content = requests.get(d_info["download_url"]).content
                                 
                                 try:
@@ -766,16 +765,16 @@ def render_console(df_data):
                                 except:
                                     text = csv_content.decode("gbk", errors="ignore")
                                 
-                                # 解析成二维数组
                                 all_rows = list(csv.reader(io.StringIO(text)))
-                                if len(all_rows) < 2: return False, f"{dst_f} 数据太少，无法插入"
+                                if not all_rows: return False, f"{dst_f} 数据为空"
                                 
                                 # 3. 防重复校验
                                 if len(all_rows) > 2:
                                     exist_row = all_rows[2]
-                                    dst_period = f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}"
-                                    if dst_period == period_str:
-                                        return True, f"该期数据已存在 ({period_str})，已跳过同步"
+                                    if len(exist_row) >= 214:
+                                        dst_period = f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}"
+                                        if dst_period == period_str:
+                                            return True, f"该期数据已存在 ({period_str})，已跳过同步"
 
                                 # 4. 计算新属性，生成 214 列的新行
                                 new_row_dict = {}
@@ -827,27 +826,30 @@ def render_console(df_data):
                                 }
                                 res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", headers=headers, json=payload)
                                 
-                                # 8. 同时静默同步到 Supabase
-                                if res.status_code in [200, 201]: 
-                                    try:
-                                        client = get_supabase_client()
-                                        if client:
-                                            row_dict_json = {str(i): new_row_dict.get(str(i), "") for i in range(1, 215)}
-                                            client.table(table_name).upsert({
-                                                "期数": period_str,
-                                                "data": row_dict_json
-                                            }, on_conflict="期数").execute()
-                                            st.info(f"☁️ 已静默同步至数据库: {period_str}")
-                                    except Exception as db_err:
-                                        st.warning(f"⚠️ 数据库同步失败：{db_err}")
-                                    return True, "成功"
-                                return False, res.text
+                                # 8. 如果 GitHub 报错，直接抛出真实原因
+                                if res.status_code not in [200, 201]:
+                                    return False, f"GitHub拒绝写入: {res.status_code} - {res.text}"
+                                
+                                # 9. 同时静默同步到 Supabase
+                                try:
+                                    client = get_supabase_client()
+                                    if client:
+                                        row_dict_json = {str(i): new_row_dict.get(str(i), "") for i in range(1, 215)}
+                                        client.table(table_name).upsert({
+                                            "期数": period_str,
+                                            "data": row_dict_json
+                                        }, on_conflict="期数").execute()
+                                except Exception as db_err:
+                                    st.warning(f"⚠️ 数据库同步失败：{db_err}")
+                                    
+                                return True, "成功"
 
+                            # 执行同步
                             s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.csv", "full_asc")
                             s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.csv", "full_desc")
                             
                             if s1 and s2:
-                                st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
+                                st.success(f"✅ 极速同步成功！\n升序：{m1}\n按序：{m2}")
                                 load_excel_data.clear() 
                                 if m1 == "成功" or m2 == "成功":
                                     st.info("👉 请点上方【同步数据】刷新网页！")
