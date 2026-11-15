@@ -481,27 +481,23 @@ def render_console(df_data):
         # ==== 模块一：一键全量抓取 (1976年至今) ====
         # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
-        if st.button("🚀 抓取全量历史数据并生成双表", use_container_width=True, type="primary"):
+        
+        if st.button("🚀 从正规数据源重建数据库 (1993年至今)", use_container_width=True, type="primary"):
             import requests
             import io
             import zipfile
             import json
             
-            with st.spinner("正在从开源镜像拉取全部历史数据，并计算 214 列属性入库，请稍候..."):
+            with st.spinner("正在从 GitHub 下载正规历史数据包，并计算 214 列属性，请稍候..."):
                 try:
-                    # 使用数据格式最干净、标准的 kitce/marker 仓库
+                    # kitce/marker 仓库的 ZIP 包地址
                     zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
                     res = requests.get(zip_url, timeout=120)
-                    
-                    # 如果 master 分支下载失败，尝试 main 分支
                     if res.status_code != 200:
-                        zip_url = "https://github.com/kitce/marker/archive/refs/heads/main.zip"
-                        res = requests.get(zip_url, timeout=120)
-                        if res.status_code != 200:
-                            st.error(f"下载数据包失败，请检查网络或仓库地址。")
-                            st.stop()
-                            
-                    st.info("✅ 数据包下载完成，正在解析数千个历史 JSON 文件...")
+                        st.error(f"下载数据包失败，请检查网络。")
+                        st.stop()
+                        
+                    st.info("✅ 数据包下载完成，正在解析 JSON 文件...")
                     
                     client = get_supabase_client()
                     if not client:
@@ -580,7 +576,7 @@ def render_console(df_data):
                         client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
                         client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
                         
-                    st.success(f"🎉 大功告成！已成功将 {len(asc_data)} 期历史数据完美对齐并存入 Supabase！")
+                    st.success(f"🎉 大功告成！已成功用 {len(asc_data)} 期正规数据重建数据库！")
                     load_real_data.clear()
                     load_excel_data.clear()
                     st.rerun()
@@ -588,7 +584,7 @@ def render_console(df_data):
                 except Exception as e:
                     st.error(f"执行出错: {e}")
                     
-        st.divider()    
+        st.divider()        
 
 
         # ==========================================
