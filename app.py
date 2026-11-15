@@ -717,10 +717,9 @@ def render_console(df_data):
                             else: st.error(f"❌ 推送失败: {res.text}")
                         except Exception as e: 
                             st.error(f"异常: {e}")    
-    
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
-                with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
+                with st.spinner("正在启动超级引擎，精准填入第三行属性..."):
                     
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
@@ -735,99 +734,128 @@ def render_console(df_data):
                                 r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
                                 return r.json() if r.status_code == 200 else None
                             
-                            def sync_attrs(src_f, dst_f, sheet):
-                                # 1. 拉取最新数字
+                            def sync_attrs(src_f, dst_f, table_name):
+                                import csv
+                                
+                                # 1. 拉取源文件 (升序源文件.xlsx)
                                 s_info = get_info(src_f)
                                 if not s_info: return False, f"找不到 {src_f}"
                                 wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
                                 ws_src = wb_src["数据源"]
                                 
-                                # 2. 拉取全套表
-                                d_info = get_info(dst_f)
-                                if not d_info: return False, f"找不到 {dst_f}"
-                                wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
-                                ws_dst = wb_dst[sheet]
-                                
-                                # ========================================================
-                                # ?? 新增：防重复校验
-                                # ========================================================
-                                def get_clean_val(cell):
+                                # 提取源文件第3行的最新期号
+                                def clean_val(cell):
                                     if cell is None: return ""
                                     val = str(cell).strip()
                                     if val.endswith(".0"): val = val[:-2]
                                     return val
-                            
-                                src_a = get_clean_val(ws_src["A3"].value)
-                                src_b = get_clean_val(ws_src["B3"].value)
-                                src_c = get_clean_val(ws_src["C3"].value)
-                                src_aa = get_clean_val(ws_src["AA3"].value)
-                            
-                                dst_a = get_clean_val(ws_dst["A3"].value)
-                                dst_b = get_clean_val(ws_dst["B3"].value)
-                                dst_c = get_clean_val(ws_dst["C3"].value)
-                                dst_hf = get_clean_val(ws_dst["HF3"].value)
-                            
-                                if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
-                                    return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
-                                # ========================================================
-                            
-                                # 3. 插入新的第 3 行
-                                ws_dst.insert_rows(3)
+
+                                p1 = clean_val(ws_src["A3"].value)
+                                p2 = clean_val(ws_src["B3"].value)
+                                p3 = clean_val(ws_src["C3"].value)
+                                year_val = clean_val(ws_src["AA3"].value) or "2026"
+                                period_str = f"{year_val}{p1}{p2}{p3}"
                                 
-                                # 4. 把最新的数字和期数填入第 3 行 (?? 加上 A, B, C 列)
-                                mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
-                                for sc, dc in mapping.items():
-                                    val = ws_src[f"{sc}3"].value
-                                    ws_dst[f"{dc}3"] = val if val is not None else ""
+                                # 2. 拉取目标全套文件 (CSV)
+                                d_info = get_info(dst_f)
+                                if not d_info: return False, f"找不到 {dst_f}"
+                                csv_content = requests.get(d_info["download_url"]).content
                                 
-                                # 5. 提取这 7 个球的数字 (?? 修复列偏移为 30)
-                                ball_nums = []
-                                for n in range(7):
-                                    tens = ws_dst.cell(row=3, column=4 + n*30).value
-                                    units = ws_dst.cell(row=3, column=5 + n*30).value
+                                try:
+                                    text = csv_content.decode("utf-8-sig")
+                                except:
+                                    text = csv_content.decode("gbk", errors="ignore")
+                                
+                                # 解析成二维数组
+                                all_rows = list(csv.reader(io.StringIO(text)))
+                                if len(all_rows) < 2: return False, f"{dst_f} 数据太少，无法插入"
+                                
+                                # 3. 防重复校验
+                                if len(all_rows) > 2:
+                                    exist_row = all_rows[2]
+                                    dst_period = f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}"
+                                    if dst_period == period_str:
+                                        return True, f"该期数据已存在 ({period_str})，已跳过同步"
+
+                                # 4. 计算新属性，生成 214 列的新行
+                                new_row_dict = {}
+                                for n_idx in range(7):
+                                    col_tens = 4 + n_idx * 2
+                                    col_units = 5 + n_idx * 2
+                                    tens = clean_val(ws_src.cell(row=3, column=col_tens).value)
+                                    units = clean_val(ws_src.cell(row=3, column=col_units).value)
                                     
-                                    if tens is None and units is None: 
-                                        ball_nums.append(None)
+                                    if not tens and not units: ball_num = 0
                                     else:
-                                        t = str(int(tens)) if str(tens).isdigit() else "0"
-                                        u = str(int(units)) if str(units).isdigit() else "0"
-                                        ball_nums.append(int(t + u))
-                                
-                                # 6. 填入 1-7 球属性
-                                for n_idx, ball_num in enumerate(ball_nums):
+                                        t = tens if tens.isdigit() else "0"
+                                        u = units if units.isdigit() else "0"
+                                        ball_num = int(t + u)
+                                        
+                                    base_col = 4 + n_idx * 30
+                                    new_row_dict[str(base_col)] = str(ball_num // 10) if ball_num else ""
+                                    new_row_dict[str(base_col+1)] = str(ball_num % 10) if ball_num else ""
+                                    
                                     if ball_num:
                                         attrs = calculate_all_attributes(ball_num)
-                                        for j_idx, attr_val in enumerate(attrs):
-                                            target_col = 6 + j_idx + (n_idx * 30)
-                                            ws_dst.cell(row=3, column=target_col, value=attr_val)
+                                        for a_idx, attr_val in enumerate(attrs):
+                                            new_row_dict[str(base_col + 2 + a_idx)] = str(attr_val)
+                                    else:
+                                        for a_idx in range(28):
+                                            new_row_dict[str(base_col + 2 + a_idx)] = ""
+                                            
+                                new_row_dict["1"], new_row_dict["2"], new_row_dict["3"] = p1, p2, p3
+                                new_row_dict["214"] = year_val
                                 
-                                # 7. 保存并推送
-                                out = io.BytesIO()
-                                wb_dst.save(out)
-                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
-                                                   headers=headers, 
-                                                   json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
+                                # 转成 214 列的纯文本数组
+                                new_row_list = [new_row_dict.get(str(i), "") for i in range(1, 215)]
                                 
-                                if res.status_code in [200, 201]: return True, "成功"
+                                # 5. 插入到第3行 (数组索引为 2)
+                                all_rows.insert(2, new_row_list)
+                                
+                                # 6. 重新生成 CSV 文本
+                                out_io = io.StringIO()
+                                writer = csv.writer(out_io)
+                                writer.writerows(all_rows)
+                                b64_content = base64.b64encode(out_io.getvalue().encode('utf-8-sig')).decode('utf-8')
+                                
+                                # 7. 推送到 GitHub
+                                payload = {
+                                    "message": f"更新属性 {dst_f} - {period_str}", 
+                                    "content": b64_content, 
+                                    "sha": d_info["sha"], 
+                                    "branch": "main"
+                                }
+                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", headers=headers, json=payload)
+                                
+                                # 8. 同时静默同步到 Supabase
+                                if res.status_code in [200, 201]: 
+                                    try:
+                                        client = get_supabase_client()
+                                        if client:
+                                            row_dict_json = {str(i): new_row_dict.get(str(i), "") for i in range(1, 215)}
+                                            client.table(table_name).upsert({
+                                                "期数": period_str,
+                                                "data": row_dict_json
+                                            }, on_conflict="期数").execute()
+                                            st.info(f"☁️ 已静默同步至数据库: {period_str}")
+                                    except Exception as db_err:
+                                        st.warning(f"⚠️ 数据库同步失败：{db_err}")
+                                    return True, "成功"
                                 return False, res.text
-    
-                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
-                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
+
+                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.csv", "full_asc")
+                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.csv", "full_desc")
                             
                             if s1 and s2:
                                 st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
-                                
-                                # 👇 👇 就是这里，加上这一行代码 👇 👇
                                 load_excel_data.clear() 
-                                # 👆 👆 清除网页内存中的旧表格 👆 👆
-                                
                                 if m1 == "成功" or m2 == "成功":
                                     st.info("👉 请点上方【同步数据】刷新网页！")
                             else:
                                 if not s1: st.error(f"❌ 升序失败: {m1}")
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
-                            st.error(f"运行异常: {e}")    
+                            st.error(f"运行异常: {e}")        
 
 
     
@@ -1547,10 +1575,9 @@ import pandas as pd
 import os
 from datetime import datetime
 from openpyxl.utils import get_column_letter
-
-# ========================================================
-# ==== 1. 云端文件极速读取核心 (带1小时缓存兼容 CSV 与 Excel)
-# ========================================================
+# ==========================================
+# ==== 1. 云端文件极速读取核心 (兼容 CSV 与 Excel，防乱码版)
+# ==========================================
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_excel_data(file_path, sheet_name=None):
     import requests
@@ -1564,7 +1591,13 @@ def load_excel_data(file_path, sheet_name=None):
     def parse_content(content):
         # 🔥 核心：如果是 CSV，用 csv 模块毫秒级解析
         if file_path.lower().endswith(".csv"):
-            text = content.decode("utf-8-sig")
+            try:
+                # 优先尝试标准的 UTF-8 编码
+                text = content.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                # 如果失败，自动回退到 Windows Excel 默认的 GBK 编码
+                text = content.decode("gbk", errors="ignore")
+                
             return list(csv.reader(io.StringIO(text)))
         # 如果是 Excel，退回原版逻辑
         else:
