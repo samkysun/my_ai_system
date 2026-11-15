@@ -2050,7 +2050,10 @@ def render_multi_analysis(df_data):
         
         # ==== 7.2 手动编辑面板 ====
         with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
-            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=250)
+        #===========调整多维修改处文本框的字体大小代码起始===================
+            st.markdown('<style>div[data-testid="stTextArea"] textarea { font-size: 20px !important; line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
+            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=300)
+        #=============调整多维修改处文本框的字体大小代码结尾=================   
             if st.button("💾保存修改并更新结果", type="secondary"):
                 st.session_state.multi_result_text = edited_text
                 st.rerun() 
@@ -2063,12 +2066,13 @@ def render_multi_analysis(df_data):
             '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
         ).replace("[[/HIGHLIGHT]]", '</span>')
     
+        #=======多维分析第二个文本框调整字体大小代码起始=============
         display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; text-align: center;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 20px; line-height: 2.2; white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
-        
+        #=======多维分析第二个文本框调整字体大小代码结尾=============
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
         body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
