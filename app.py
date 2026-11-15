@@ -481,95 +481,105 @@ def render_console(df_data):
         # ==== 模块一：一键全量抓取 (1976年至今) ====
         # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
-        
-        if st.button("🚀 从正规数据源重建数据库 (1993年至今)", use_container_width=True, type="primary"):
+        if st.button("🚀 从正规数据源重建数据库 (1976年至今)", use_container_width=True, type="primary"):
             import requests
             import io
-            import zipfile
             import json
             
-            with st.spinner("正在从 GitHub 下载正规历史数据包，并计算 214 列属性，请稍候..."):
+            with st.spinner("正在从 GitHub 下载 1976 年至今的完整数据文件，并计算 214 列属性，请稍候..."):
                 try:
-                    # kitce/marker 仓库的 ZIP 包地址
-                    zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
-                    res = requests.get(zip_url, timeout=120)
+                    # 直接请求 raw 文件，避免下载整个 ZIP 包
+                    raw_url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
+                    res = requests.get(raw_url, timeout=60)
+                    
                     if res.status_code != 200:
-                        st.error(f"下载数据包失败，请检查网络。")
+                        st.error(f"下载数据文件失败 (状态码: {res.status_code})，请检查网络。")
                         st.stop()
                         
-                    st.info("✅ 数据包下载完成，正在解析 JSON 文件...")
+                    st.info("✅ 数据文件下载完成，正在解析 1976 年至今的历史记录...")
+                    raw_data = res.json() # 直接解析为列表或字典
                     
+                    # 兼容可能的数据结构：如果是字典，尝试取出包含列表的值
+                    if isinstance(raw_data, dict):
+                        # 尝试常见的数据键名
+                        for key in ["data", "records", "results"]:
+                            if key in raw_data and isinstance(raw_data[key], list):
+                                raw_data = raw_data[key]
+                                break
+                        else:
+                            # 如果都不是，尝试遍历找出第一个列表
+                            for value in raw_data.values():
+                                if isinstance(value, list):
+                                    raw_data = value
+                                    break
+                                    
+                    if not isinstance(raw_data, list):
+                        st.error("解析失败：data.json 的结构不是预期的列表格式。")
+                        st.stop()
+                        
                     client = get_supabase_client()
                     if not client:
                         st.stop()
                         
                     asc_data, desc_data = [], []
                     progress_bar = st.progress(0)
+                    total_records = len(raw_data)
                     
-                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                        # 筛选出所有记录 JSON 文件
-                        json_files = [f for f in z.namelist() if f.endswith('.json') and '/records/' in f]
-                        total_files = len(json_files)
-                        
-                        if total_files == 0:
-                            st.error("压缩包内未找到 records JSON 文件，请检查仓库结构。")
-                            st.stop()
+                    for idx, item in enumerate(raw_data):
+                        try:
+                            # 兼容不同的字段名
+                            period_raw = str(item.get("id", item.get("issue", item.get("expect", "")))).replace("-", "").replace("/", "")
+                            if not period_raw.isdigit(): continue
                             
-                        for idx, jf in enumerate(json_files):
-                            try:
-                                with z.open(jf) as f:
-                                    item = json.load(f)
-                                    
-                                # 从该仓库的标准格式提取数据
-                                date_str = item.get("date", "")
-                                raw_id = item.get("id", "") # 格式如 "93/001"
-                                nums = item.get("numbers", [])
-                                special = item.get("special", 0)
+                            nums_raw = item.get("numbers", item.get("code", item.get("opencode", [])))
+                            if isinstance(nums_raw, str):
+                                try: nums = [int(x) for x in nums_raw.split(",")]
+                                except: continue
+                            else:
+                                nums = [int(x) for x in nums_raw]
                                 
-                                if len(nums) != 6 or not special or not raw_id: continue
-                                
-                                # 组合标准期数：年份 + 期号 (例如 1993001)
-                                year_val = date_str[:4] if len(date_str) >= 4 else "1993"
-                                p_str = raw_id.split('/')[-1].zfill(3)
-                                period_raw = f"{year_val}{p_str}"
-                                
-                                desc_nums = nums + [special]
-                                asc_nums = sorted(nums) + [special]
-                                
-                                p1, p2, p3 = p_str[0], p_str[1], p_str[2]
-                                
-                                # 组装按序表 (full_desc)
-                                row_desc = {"1": p1, "2": p2, "3": p3, "214": year_val}
-                                for ball_idx, ball_num in enumerate(desc_nums):
-                                    tens, units = str(ball_num // 10), str(ball_num % 10)
-                                    base_col = 4 + ball_idx * 30
-                                    row_desc[str(base_col)] = tens
-                                    row_desc[str(base_col+1)] = units
-                                    attrs = calculate_all_attributes(ball_num)
-                                    for a_idx, attr_val in enumerate(attrs):
-                                        row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
-                                desc_data.append({"期数": period_raw, "data": row_desc})
-                                
-                                # 组装升序表 (full_asc)
-                                row_asc = {"1": p1, "2": p2, "3": p3, "214": year_val}
-                                for ball_idx, ball_num in enumerate(asc_nums):
-                                    tens, units = str(ball_num // 10), str(ball_num % 10)
-                                    base_col = 4 + ball_idx * 30
-                                    row_asc[str(base_col)] = tens
-                                    row_asc[str(base_col+1)] = units
-                                    attrs = calculate_all_attributes(ball_num)
-                                    for a_idx, attr_val in enumerate(attrs):
-                                        row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
-                                asc_data.append({"期数": period_raw, "data": row_asc})
-                                
-                                if idx % 100 == 0:
-                                    progress_bar.progress(min((idx + 1) / total_files, 1.0))
-                            except Exception:
-                                continue
-                                
+                            special = item.get("special", item.get("specialNumber", 0))
+                            if len(nums) != 6 or not special: continue
+                            
+                            desc_nums = nums + [special]
+                            asc_nums = sorted(nums) + [special]
+                            
+                            year_val = period_raw[:4] if len(period_raw) >= 7 else "1976"
+                            p_str = period_raw[4:] if len(period_raw) >= 7 else period_raw
+                            p1, p2, p3 = p_str[0], p_str[1] if len(p_str)>1 else "0", p_str[2] if len(p_str)>2 else "0"
+                            
+                            # 组装按序表 (full_desc)
+                            row_desc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                            for ball_idx, ball_num in enumerate(desc_nums):
+                                tens, units = str(ball_num // 10), str(ball_num % 10)
+                                base_col = 4 + ball_idx * 30
+                                row_desc[str(base_col)] = tens
+                                row_desc[str(base_col+1)] = units
+                                attrs = calculate_all_attributes(ball_num)
+                                for a_idx, attr_val in enumerate(attrs):
+                                    row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
+                            desc_data.append({"期数": period_raw, "data": row_desc})
+                            
+                            # 组装升序表 (full_asc)
+                            row_asc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                            for ball_idx, ball_num in enumerate(asc_nums):
+                                tens, units = str(ball_num // 10), str(ball_num % 10)
+                                base_col = 4 + ball_idx * 30
+                                row_asc[str(base_col)] = tens
+                                row_asc[str(base_col+1)] = units
+                                attrs = calculate_all_attributes(ball_num)
+                                for a_idx, attr_val in enumerate(attrs):
+                                    row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
+                            asc_data.append({"期数": period_raw, "data": row_asc})
+                            
+                            if idx % 100 == 0:
+                                progress_bar.progress(min((idx + 1) / total_records, 1.0))
+                        except Exception:
+                            continue
+                            
                     st.info(f"✅ 成功解析 {len(asc_data)} 期数据，正在覆盖写入数据库...")
                     
-                    # 批量 Upsert 写入 Supabase (每次 200 条，防超载)
+                    # 批量 Upsert 写入 Supabase (每次 200 条)
                     for i in range(0, len(asc_data), 200):
                         chunk_asc = asc_data[i:i+200]
                         chunk_desc = desc_data[i:i+200]
@@ -584,7 +594,7 @@ def render_console(df_data):
                 except Exception as e:
                     st.error(f"执行出错: {e}")
                     
-        st.divider()        
+        st.divider()            
 
 
         # ==========================================
