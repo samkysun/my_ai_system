@@ -1857,23 +1857,16 @@ def render_multi_analysis(df_data):
                     vc = len(valid_data)
                     
                     
+                    #===========设置对比起点不在基准列起点开始========
                     if vc >= min_l:
                         k = 0
                         while k <= vc - min_l:
                             # ==========================================
-                            # 🔥 核心修复：如果当前扫的是“自身参考列”，且扫描区间与基准区间有重叠，直接跳过！
+                            # 🔥 核心修复：只拦截“起点完全一致”的假数据！
                             # ==========================================
-                            if is_self:
-                                current_sr = valid_data[k][0]          # 当前扫描起点
-                                current_er = valid_data[k + min_l - 1][0] # 当前扫描终点
-                                
-                                base_start = target_row_idx                # 基准行起点 (第3行)
-                                base_end = target_row_idx + len(template) - 1  # 基准行终点
-                                
-                                # 如果当前扫描的区间和基准区间有任何交集，立刻跳过，防止自己跟自己比！
-                                if not (current_er < base_start or current_sr > base_end):
-                                    k += 1
-                                    continue 
+                            if is_self and valid_data[k][0] == target_row_idx:
+                                k += 1
+                                continue 
                             # ==========================================
 
                             max_l_hit = 0
@@ -1896,7 +1889,7 @@ def render_multi_analysis(df_data):
                                         return f"{v}{v_suffix}"
                                     if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
-                                    return v    
+                                    return v
                                     
                                 # ==== 5.1 组装匹配结果与杀号 (统一放末尾) ====
                                 w1, w2 = get_ctx(sr-1), get_ctx(er+1)
