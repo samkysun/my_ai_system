@@ -477,7 +477,121 @@ def render_console(df_data):
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
     
     # 只有当前登录的用户名和 Secrets 里一致，才显示录入面板
+    
     if st.session_state.username == admin_name:
+        st.markdown("### ☁️ 云端数据流转 (管理员操作)")
+        
+        # ==========================================
+        # 🚀 新增：1976年全量数据一键抓取、计算并入库
+        # ==========================================
+        if st.button("🚀 抓取1976年至今全量数据并生成双表 (一键直达)", use_container_width=True, type="primary"):
+            import requests
+            import io
+            import zipfile
+            import json
+            
+            with st.spinner("正在从开源镜像拉取 1976 年至今的全部历史数据，并计算 214 列属性入库..."):
+                try:
+                    # 1. 下载开源仓库的 ZIP 包（包含全量 JSON 数据）
+                    zip_url = "https://github.com/kenchudigital/ML-SixMark-Lab/archive/refs/heads/main.zip"
+                    res = requests.get(zip_url, timeout=60)
+                    if res.status_code != 200:
+                        st.error("下载数据包失败，请检查网络。")
+                        st.stop()
+                        
+                    # 2. 在内存中解压并读取 JSON
+                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                        # 寻找包含全量数据的 JSON 文件
+                        json_files = [f for f in z.namelist() if f.endswith('.json') and 'data' in f]
+                        if not json_files:
+                            st.error("压缩包内未找到全量数据 JSON 文件。")
+                            st.stop()
+                            
+                        # 读取数据
+                        with z.open(json_files[0]) as f:
+                            raw_data = json.load(f)
+                            
+                    st.info(f"✅ 成功读取原始数据，共 {len(raw_data)} 期，正在深度处理...")
+                    
+                    # 3. 连接 Supabase 准备写入
+                    client = get_supabase_client()
+                    if not client:
+                        st.stop()
+                        
+                    asc_data, desc_data = [], []
+                    progress_bar = st.progress(0)
+                    
+                    # 4. 遍历数据，计算属性并组装
+                    for idx, item in enumerate(raw_data):
+                        # 兼容不同格式的期数提取（如 "2026-001" 或 "2026001"）
+                        period_raw = str(item.get("id", item.get("issue", ""))).replace("-", "").replace("/", "")
+                        if not period_raw.isdigit(): continue
+                        
+                        # 提取号码：前 6 个为平码，第 7 个为特码
+                        nums = item.get("numbers", [])
+                        special = item.get("special", 0)
+                        if len(nums) != 6 or not special: continue
+                        
+                        desc_nums = nums + [special]
+                        asc_nums = sorted(nums) + [special]
+                        
+                        year_val = period_raw[:4] if len(period_raw) >= 7 else "1976"
+                        p_str = period_raw[4:] if len(period_raw) >= 7 else period_raw
+                        p1, p2, p3 = p_str[0], p_str[1] if len(p_str)>1 else "0", p_str[2] if len(p_str)>2 else "0"
+                        
+                        # === 组装按序表 (full_desc) ===
+                        row_desc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                        for ball_idx, ball_num in enumerate(desc_nums):
+                            tens, units = str(ball_num // 10), str(ball_num % 10)
+                            base_col = 4 + ball_idx * 30
+                            row_desc[str(base_col)] = tens
+                            row_desc[str(base_col+1)] = units
+                            attrs = calculate_all_attributes(ball_num)
+                            for a_idx, attr_val in enumerate(attrs):
+                                row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
+                        desc_data.append({"期数": period_raw, "data": row_desc})
+                        
+                        # === 组装升序表 (full_asc) ===
+                        row_asc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                        for ball_idx, ball_num in enumerate(asc_nums):
+                            tens, units = str(ball_num // 10), str(ball_num % 10)
+                            base_col = 4 + ball_idx * 30
+                            row_asc[str(base_col)] = tens
+                            row_asc[str(base_col+1)] = units
+                            attrs = calculate_all_attributes(ball_num)
+                            for a_idx, attr_val in enumerate(attrs):
+                                row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
+                        asc_data.append({"期数": period_raw, "data": row_asc})
+                        
+                        # 更新进度条
+                        if idx % 100 == 0:
+                            progress_bar.progress(min((idx + 1) / len(raw_data), 1.0))
+                            
+                    # 5. 批量 Upsert 写入 Supabase (每次 200 条，防超载)
+                    st.info("正在将全量计算好的数据覆盖写入数据库...")
+                    for i in range(0, len(asc_data), 200):
+                        chunk_asc = asc_data[i:i+200]
+                        chunk_desc = desc_data[i:i+200]
+                        client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
+                        client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                        
+                    st.success(f"🎉 大功告成！已成功将 1976 年至今的 {len(asc_data)} 期数据完美对齐并存入 Supabase！")
+                    load_real_data.clear()
+                    load_excel_data.clear()
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"执行出错: {e}")
+                        
+            st.divider()
+            # ==========================================
+            
+            col_sync1, col_sync2 = st.columns(2)
+            
+            with col_sync1:
+                if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
+                    # ... 你原本的代码往下保持不动 ...   
+        #=========爬取数据的代码终点===================            
         with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
                 st.info("💡提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
