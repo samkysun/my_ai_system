@@ -1680,15 +1680,35 @@ def render_multi_analysis(df_data):
         selected_period = st.selectbox("选择分析/预测期数", unique_periods)
     with row1_col2: 
         selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])  
+    #======多维属性下拉框自定义代码起始=======
     with row1_col3: 
-        selected_attr = st.selectbox("分析属性", list(ATTR_MAP.keys()), index=1)    
+        # 1. 提取字典里所有的属性
+        all_attrs = list(ATTR_MAP.keys())
+        
+        # 2. 🔥 在这里自定义你最常用的属性排序（按你想要的顺序写）
+        # 后面没写到的属性，系统会自动排在它们后面
+        my_order = [
+                    "生肖", "尾数", "数字合", "数字五行", "门数", "段数", 
+                    "单双组合","波单双","生肖五行","四宝","物象",
+                    "阴阳天地","方位","尾五行","颜色肖","波色","3模","福禄寿",
+                    "大小肖","生肖五行相生","生肖五行相克","数字五行相生","数字五行相克",
+                    "尾五行相生","尾五行相克","生肖五行与数字五行相生","生肖五行与数字五行相生",
+                    "数字五行与生肖五行相生","数字五行与生肖五行相克",
+                    ]
+        
+        # 3. 重新组合列表：自定义的在前，剩下的在后
+        sorted_attrs = my_order + [a for a in all_attrs if a not in my_order]
+        
+        # 4. 生成下拉框，默认选第一个（即"生肖"）
+        selected_attr = st.selectbox("分析属性", sorted_attrs, index=0)
+      #======多维属性下拉框自定义代码结尾=======  
     with row1_col4:
         ball_str = st.selectbox("基准球号", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"])
         ball_num = int(ball_str.replace("第", "").split("球")[0])
     
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
     with row2_col1: min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
-    with row2_col2: max_len = st.number_input("最多分组行数", min_value=3, max_value=20, value=12, step=1)
+    with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=12, step=1)
     with row2_col3:
         st.write(""); st.write("")
         run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
