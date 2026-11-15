@@ -471,20 +471,17 @@ def render_console(df_data):
     fetch_btn = b6.button("🤏抓取香港数据", use_container_width=True)
 
     # ==========================================
-    # ?? 管理员专属：云端数据录入与同步
+    # 🔥 管理员专属：全量抓取、手动录入与数据同步控制台
     # ==========================================
-    # 读取 Secrets 里的管理员用户名，如果没有配置，默认叫 "admin"
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
-    
-    # 只有当前登录的用户名和 Secrets 里一致，才显示录入面板
-    
+
     if st.session_state.username == admin_name:
-        st.markdown("### ☁️ 云端数据流转 (管理员操作)")
         
         # ==========================================
-        # 🚀 新增：1976年全量数据一键抓取、计算并入库
+        # ==== 模块一：一键全量抓取 (1976年至今) ====
+        # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
-        if st.button("🚀 抓取1976年至今全量数据并生成双表 (一键直达)", use_container_width=True, type="primary"):
+        if st.button("🚀 抓取1976年至今全量数据并生成双表", use_container_width=True, type="primary"):
             import requests
             import io
             import zipfile
@@ -492,28 +489,25 @@ def render_console(df_data):
             
             with st.spinner("正在从开源镜像拉取 1976 年至今的全部历史数据，并计算 214 列属性入库..."):
                 try:
-                    # 1. 下载开源仓库的 ZIP 包（包含全量 JSON 数据）
-                    zip_url = "https://github.com/kenchudigital/ML-SixMark-Lab/archive/refs/heads/main.zip"
+                    # 注意：仓库主分支叫 master，这里已修复
+                    zip_url = "https://github.com/kenchudigital/ML-SixMark-Lab/archive/refs/heads/master.zip"
                     res = requests.get(zip_url, timeout=60)
                     if res.status_code != 200:
-                        st.error("下载数据包失败，请检查网络。")
+                        st.error(f"下载数据包失败 (状态码 {res.status_code})，请检查网络或稍后再试。")
                         st.stop()
                         
-                    # 2. 在内存中解压并读取 JSON
                     with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                        # 寻找包含全量数据的 JSON 文件
+                        # 自动寻找内部包含数据的 json 文件
                         json_files = [f for f in z.namelist() if f.endswith('.json') and 'data' in f]
                         if not json_files:
                             st.error("压缩包内未找到全量数据 JSON 文件。")
                             st.stop()
                             
-                        # 读取数据
                         with z.open(json_files[0]) as f:
                             raw_data = json.load(f)
                             
                     st.info(f"✅ 成功读取原始数据，共 {len(raw_data)} 期，正在深度处理...")
                     
-                    # 3. 连接 Supabase 准备写入
                     client = get_supabase_client()
                     if not client:
                         st.stop()
@@ -521,14 +515,19 @@ def render_console(df_data):
                     asc_data, desc_data = [], []
                     progress_bar = st.progress(0)
                     
-                    # 4. 遍历数据，计算属性并组装
                     for idx, item in enumerate(raw_data):
-                        # 兼容不同格式的期数提取（如 "2026-001" 或 "2026001"）
-                        period_raw = str(item.get("id", item.get("issue", ""))).replace("-", "").replace("/", "")
+                        # 兼容不同字段名提取期数
+                        period_raw = str(item.get("id", item.get("issue", item.get("expect", "")))).replace("-", "").replace("/", "")
                         if not period_raw.isdigit(): continue
                         
-                        # 提取号码：前 6 个为平码，第 7 个为特码
-                        nums = item.get("numbers", [])
+                        # 兼容提取号码
+                        nums_raw = item.get("numbers", item.get("code", item.get("opencode", "")))
+                        if isinstance(nums_raw, str):
+                            try: nums = [int(x) for x in nums_raw.split(",")]
+                            except: continue
+                        else:
+                            nums = [int(x) for x in nums_raw]
+                            
                         special = item.get("special", 0)
                         if len(nums) != 6 or not special: continue
                         
@@ -539,7 +538,7 @@ def render_console(df_data):
                         p_str = period_raw[4:] if len(period_raw) >= 7 else period_raw
                         p1, p2, p3 = p_str[0], p_str[1] if len(p_str)>1 else "0", p_str[2] if len(p_str)>2 else "0"
                         
-                        # === 组装按序表 (full_desc) ===
+                        # 组装按序表 (full_desc)
                         row_desc = {"1": p1, "2": p2, "3": p3, "214": year_val}
                         for ball_idx, ball_num in enumerate(desc_nums):
                             tens, units = str(ball_num // 10), str(ball_num % 10)
@@ -551,7 +550,7 @@ def render_console(df_data):
                                 row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
                         desc_data.append({"期数": period_raw, "data": row_desc})
                         
-                        # === 组装升序表 (full_asc) ===
+                        # 组装升序表 (full_asc)
                         row_asc = {"1": p1, "2": p2, "3": p3, "214": year_val}
                         for ball_idx, ball_num in enumerate(asc_nums):
                             tens, units = str(ball_num // 10), str(ball_num % 10)
@@ -563,17 +562,13 @@ def render_console(df_data):
                                 row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
                         asc_data.append({"期数": period_raw, "data": row_asc})
                         
-                        # 更新进度条
                         if idx % 100 == 0:
                             progress_bar.progress(min((idx + 1) / len(raw_data), 1.0))
                             
-                    # 5. 批量 Upsert 写入 Supabase (每次 200 条，防超载)
-                    st.info("正在将全量计算好的数据覆盖写入数据库...")
+                    st.info("正在将全量数据覆盖写入数据库...")
                     for i in range(0, len(asc_data), 200):
-                        chunk_asc = asc_data[i:i+200]
-                        chunk_desc = desc_data[i:i+200]
-                        client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
-                        client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                        client.table("full_asc").upsert(asc_data[i:i+200], on_conflict="期数").execute()
+                        client.table("full_desc").upsert(desc_data[i:i+200], on_conflict="期数").execute()
                         
                     st.success(f"🎉 大功告成！已成功将 1976 年至今的 {len(asc_data)} 期数据完美对齐并存入 Supabase！")
                     load_real_data.clear()
@@ -582,16 +577,14 @@ def render_console(df_data):
                     
                 except Exception as e:
                     st.error(f"执行出错: {e}")
-                        
-            st.divider()
-            # ==========================================
-            
-            col_sync1, col_sync2 = st.columns(2)
-            
-            with col_sync1:
-                if st.button("🚀 同步【升序源文件】至【主总数据表】", use_container_width=True, type="primary"):
-                    # ... 你原本的代码往下保持不动 ...   
-        #=========爬取数据的代码终点===================            
+                    
+        st.divider()
+
+
+        # ==========================================
+        # ==== 模块二：手动补录开奖数据 ====
+        # ==== 功能：管理员手动输入最新期号，追加到 GitHub 的源文件中 ====
+        # ==========================================
         with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
                 st.info("💡提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
@@ -619,20 +612,16 @@ def render_console(df_data):
                     elif len(set(nums)) < 7:
                         st.error("录入的 7 个号码中有重复，请检查！")
                     else:
-                        # 1. 准备数据 (按序 和 升序)
                         raw_nums = nums.copy()
                         asc_nums = sorted(nums[:6]) + [nums[6]]
                         
-                        # 2. 获取 GitHub 配置
                         token = st.secrets.get("GITHUB_TOKEN")
                         repo = st.secrets.get("GITHUB_REPO") 
                         
                         if not token or not repo:
                             st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
                         else:
-                            # 3. 核心函数：拉取 -> 修改 -> 推送 GitHub
                             def update_github_excel(file_path, nums_list, commit_msg):
-                                # 🔥 核心修复：必须在这里加一遍，打破 Streamlit 的作用域魔咒
                                 import requests
                                 import openpyxl
                                 import io
@@ -644,7 +633,6 @@ def render_console(df_data):
                                         "Accept": "application/vnd.github.v3+json"
                                     }
                                     
-                                    # 3.1 获取文件的 SHA 和下载链接
                                     r = requests.get(api_url, headers=headers)
                                     if r.status_code != 200:
                                         return False, f"找不到云端文件或API错误: {r.status_code}"
@@ -652,17 +640,13 @@ def render_console(df_data):
                                     file_info = r.json()
                                     sha = file_info["sha"]
                                     download_url = file_info["download_url"]
-                                    
-                                    # 3.2 从云端下载现有 Excel
                                     file_content = requests.get(download_url).content
                                     
-                                    # 3.3 在内存中操作 openpyxl
                                     wb = openpyxl.load_workbook(io.BytesIO(file_content))
                                     if "数据源" not in wb.sheetnames:
                                         return False, "源文件中找不到“数据源”工作表"
                                     ws = wb["数据源"]
                                     
-                                    # 🔥 新增：拦截重复期号（结合 AA 列年份）
                                     def get_cell_str(r, c):
                                         v = ws.cell(row=r, column=c).value
                                         if v is None: return ""
@@ -679,18 +663,12 @@ def render_console(df_data):
                                         if r_year == current_year and r_p1 == p1 and r_p2 == p2 and r_p3 == p3:
                                             return False, f"{current_year}年的 {p1}-{p2}-{p3} 期已经存在，禁止重复录入！"
                                     
-                                    # 3.4 强制在第 3 行插入空白行
                                     ws.insert_rows(3)
-                                    
-                                    # 3.5 写入期号 (A, B, C 列)
                                     ws.cell(row=3, column=1, value=p1)
                                     ws.cell(row=3, column=2, value=p2)
                                     ws.cell(row=3, column=3, value=p3)
-                                    
-                                    # 3.6 写入年份 (AA列 第27列)
                                     ws.cell(row=3, column=27, value=year_val)
                                     
-                                    # 3.7 写入7个号码
                                     for i, num in enumerate(nums_list):
                                         tens = num // 10
                                         units = num % 10
@@ -699,17 +677,15 @@ def render_console(df_data):
                                         ws.cell(row=3, column=col_tens, value=str(tens))
                                         ws.cell(row=3, column=col_units, value=str(units))
                                     
-                                    # 3.8 保存到内存字节流
                                     output = io.BytesIO()
                                     wb.save(output)
                                     b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
                                     
-                                    # 3.9 推送到 GitHub (覆盖原文件)
                                     payload = {
                                         "message": commit_msg,
                                         "content": b64_content,
                                         "sha": sha,
-                                        "branch": "main" # ?? 如果你的分支叫 master，请改成 master
+                                        "branch": "main"
                                     }
                                     
                                     put_res = requests.put(api_url, headers=headers, json=payload)
@@ -722,11 +698,8 @@ def render_console(df_data):
                                 except Exception as e:
                                     return False, str(e)
     
-                            # 4. 执行双写
                             with st.spinner("正在覆盖更新 GitHub 云端的两个 Excel 文件..."):
-                                # 先更新升序源文件
                                 s1, m1 = update_github_excel("升序源文件.xlsx", asc_nums, f"更新升序数据 {year_val}-{p1}{p2}{p3}")
-                                # 再更新按序源文件
                                 s2, m2 = update_github_excel("按序源文件.xlsx", raw_nums, f"更新按序数据 {year_val}-{p1}{p2}{p3}")
                                 
                                 if s1 and s2:
@@ -736,15 +709,13 @@ def render_console(df_data):
                                 else:
                                     if not s1: st.error(f"? 升序文件同步失败: {m1}")
                                     if not s2: st.error(f"? 按序文件同步失败: {m2}")
-    
-    st.divider()
-   
-    
-    
-    # ==========================================
-    # 🔥 管理员专属：云端数据流转控制台
-    # ==========================================
-    if st.session_state.username == admin_name:
+
+        st.divider()
+       
+        # ==========================================
+        # ==== 模块三：云端数据流转控制台 ====
+        # ==== 功能：合并总表、一键计算 214 列属性并同步全套表 ====
+        # ==========================================
         st.markdown("### ☁️ 云端数据流转 (管理员操作)")
         
         col_sync1, col_sync2 = st.columns(2)
@@ -808,7 +779,6 @@ def render_console(df_data):
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
                 with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
-                    
                     token = st.secrets.get("GITHUB_TOKEN")
                     repo = st.secrets.get("GITHUB_REPO")
                     
@@ -823,21 +793,16 @@ def render_console(df_data):
                                 return r.json() if r.status_code == 200 else None
                             
                             def sync_attrs(src_f, dst_f, sheet):
-                                # 1. 拉取最新数字
                                 s_info = get_info(src_f)
                                 if not s_info: return False, f"找不到 {src_f}"
                                 wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
                                 ws_src = wb_src["数据源"]
                                 
-                                # 2. 拉取全套表
                                 d_info = get_info(dst_f)
                                 if not d_info: return False, f"找不到 {dst_f}"
                                 wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
                                 ws_dst = wb_dst[sheet]
                                 
-                                # ========================================================
-                                # ?? 新增：防重复校验
-                                # ========================================================
                                 def get_clean_val(cell):
                                     if cell is None: return ""
                                     val = str(cell).strip()
@@ -856,18 +821,14 @@ def render_console(df_data):
                             
                                 if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
                                     return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
-                                # ========================================================
                             
-                                # 3. 插入新的第 3 行
                                 ws_dst.insert_rows(3)
                                 
-                                # 4. 把最新的数字和期数填入第 3 行 (?? 加上 A, B, C 列)
                                 mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
                                 for sc, dc in mapping.items():
                                     val = ws_src[f"{sc}3"].value
                                     ws_dst[f"{dc}3"] = val if val is not None else ""
                                 
-                                # 5. 提取这 7 个球的数字 (?? 修复列偏移为 30)
                                 ball_nums = []
                                 for n in range(7):
                                     tens = ws_dst.cell(row=3, column=4 + n*30).value
@@ -880,7 +841,6 @@ def render_console(df_data):
                                         u = str(int(units)) if str(units).isdigit() else "0"
                                         ball_nums.append(int(t + u))
                                 
-                                # 6. 填入 1-7 球属性
                                 for n_idx, ball_num in enumerate(ball_nums):
                                     if ball_num:
                                         attrs = calculate_all_attributes(ball_num)
@@ -888,7 +848,6 @@ def render_console(df_data):
                                             target_col = 6 + j_idx + (n_idx * 30)
                                             ws_dst.cell(row=3, column=target_col, value=attr_val)
                                 
-                                # 7. 保存并推送
                                 out = io.BytesIO()
                                 wb_dst.save(out)
                                 res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
@@ -903,18 +862,16 @@ def render_console(df_data):
                             
                             if s1 and s2:
                                 st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
-                                
-                                # 👇 👇 就是这里，加上这一行代码 👇 👇
                                 load_excel_data.clear() 
-                                # 👆 👆 清除网页内存中的旧表格 👆 👆
-                                
                                 if m1 == "成功" or m2 == "成功":
                                     st.info("👉 请点上方【同步数据】刷新网页！")
                             else:
                                 if not s1: st.error(f"❌ 升序失败: {m1}")
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
-                            st.error(f"运行异常: {e}")    
+                            st.error(f"运行异常: {e}")
+
+    st.divider()    
 
 
     
