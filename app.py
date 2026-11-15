@@ -481,14 +481,14 @@ def render_console(df_data):
         # ==== 模块一：一键全量抓取 (1976年至今) ====
         # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
+        
         if st.button("🚀 从正规数据源重建数据库 (1976年至今)", use_container_width=True, type="primary"):
             import requests
             import io
-            import json
+            import pandas as pd
             
             with st.spinner("正在从 GitHub 下载 1976 年至今的完整数据文件，并计算 214 列属性，请稍候..."):
                 try:
-                    # 直接请求 raw 文件，避免下载整个 ZIP 包
                     raw_url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
                     res = requests.get(raw_url, timeout=60)
                     
@@ -496,25 +496,19 @@ def render_console(df_data):
                         st.error(f"下载数据文件失败 (状态码: {res.status_code})，请检查网络。")
                         st.stop()
                         
-                    st.info("✅ 数据文件下载完成，正在解析 1976 年至今的历史记录...")
-                    raw_data = res.json() # 直接解析为列表或字典
+                    # 直接读取 DataFrame 格式的列式 JSON
+                    df = pd.read_json(io.StringIO(res.text))
+                    st.info(f"✅ 数据文件下载完成，共解析出 {len(df)} 期历史记录，正在深度处理...")
                     
-                    # 兼容可能的数据结构：如果是字典，尝试取出包含列表的值
-                    if isinstance(raw_data, dict):
-                        # 尝试常见的数据键名
-                        for key in ["data", "records", "results"]:
-                            if key in raw_data and isinstance(raw_data[key], list):
-                                raw_data = raw_data[key]
-                                break
-                        else:
-                            # 如果都不是，尝试遍历找出第一个列表
-                            for value in raw_data.values():
-                                if isinstance(value, list):
-                                    raw_data = value
-                                    break
-                                    
-                    if not isinstance(raw_data, list):
-                        st.error("解析失败：data.json 的结构不是预期的列表格式。")
+                    # 自动识别关键列名（兼容大小写及英文/中文）
+                    year_col = next((c for c in df.columns if c.upper() == "YEAR"), "YEAR")
+                    no_col = next((c for c in df.columns if c.upper() in ["NO", "ISSUE", "期数", "期号"]), "NO")
+                    special_col = next((c for c in df.columns if c.upper() in ["SPECIAL", "特码", "N7"]), "SPECIAL")
+                    
+                    # 平码列自动按顺序查找（如 N1~N6）
+                    num_cols = sorted([c for c in df.columns if c.upper().startswith("N") and c.upper() not in [no_col, special_col]])
+                    if len(num_cols) < 6:
+                        st.error(f"未能自动识别出 6 个平码列，当前识别列名: {num_cols}")
                         st.stop()
                         
                     client = get_supabase_client()
@@ -523,50 +517,48 @@ def render_console(df_data):
                         
                     asc_data, desc_data = [], []
                     progress_bar = st.progress(0)
-                    total_records = len(raw_data)
+                    total_records = len(df)
                     
-                    for idx, item in enumerate(raw_data):
+                    def clean_num(val):
+                        if pd.isna(val): return 0
+                        s = str(val).split('.')[0].strip() # 处理类似 "1.0" 的字符串
+                        return int(s) if s.isdigit() else 0
+                        
+                    for idx, row in df.iterrows():
                         try:
-                            # 兼容不同的字段名
-                            period_raw = str(item.get("id", item.get("issue", item.get("expect", "")))).replace("-", "").replace("/", "")
-                            if not period_raw.isdigit(): continue
+                            y_val = str(row[year_col]).split('.')[0]
+                            no_val = str(row[no_col]).split('.')[0].zfill(3)
+                            period_raw = f"{y_val}{no_val}"
                             
-                            nums_raw = item.get("numbers", item.get("code", item.get("opencode", [])))
-                            if isinstance(nums_raw, str):
-                                try: nums = [int(x) for x in nums_raw.split(",")]
-                                except: continue
-                            else:
-                                nums = [int(x) for x in nums_raw]
-                                
-                            special = item.get("special", item.get("specialNumber", 0))
+                            if len(period_raw) < 5: continue
+                            
+                            nums = [clean_num(row[c]) for c in num_cols[:6]]
+                            special = clean_num(row[special_col])
+                            
                             if len(nums) != 6 or not special: continue
                             
                             desc_nums = nums + [special]
                             asc_nums = sorted(nums) + [special]
                             
-                            year_val = period_raw[:4] if len(period_raw) >= 7 else "1976"
-                            p_str = period_raw[4:] if len(period_raw) >= 7 else period_raw
-                            p1, p2, p3 = p_str[0], p_str[1] if len(p_str)>1 else "0", p_str[2] if len(p_str)>2 else "0"
+                            p1, p2, p3 = no_val[0], no_val[1], no_val[2]
                             
                             # 组装按序表 (full_desc)
-                            row_desc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                            row_desc = {"1": p1, "2": p2, "3": p3, "214": y_val}
                             for ball_idx, ball_num in enumerate(desc_nums):
-                                tens, units = str(ball_num // 10), str(ball_num % 10)
                                 base_col = 4 + ball_idx * 30
-                                row_desc[str(base_col)] = tens
-                                row_desc[str(base_col+1)] = units
+                                row_desc[str(base_col)] = str(ball_num // 10)
+                                row_desc[str(base_col+1)] = str(ball_num % 10)
                                 attrs = calculate_all_attributes(ball_num)
                                 for a_idx, attr_val in enumerate(attrs):
                                     row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
                             desc_data.append({"期数": period_raw, "data": row_desc})
                             
                             # 组装升序表 (full_asc)
-                            row_asc = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                            row_asc = {"1": p1, "2": p2, "3": p3, "214": y_val}
                             for ball_idx, ball_num in enumerate(asc_nums):
-                                tens, units = str(ball_num // 10), str(ball_num % 10)
                                 base_col = 4 + ball_idx * 30
-                                row_asc[str(base_col)] = tens
-                                row_asc[str(base_col+1)] = units
+                                row_asc[str(base_col)] = str(ball_num // 10)
+                                row_asc[str(base_col+1)] = str(ball_num % 10)
                                 attrs = calculate_all_attributes(ball_num)
                                 for a_idx, attr_val in enumerate(attrs):
                                     row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
@@ -577,7 +569,7 @@ def render_console(df_data):
                         except Exception:
                             continue
                             
-                    st.info(f"✅ 成功解析 {len(asc_data)} 期数据，正在覆盖写入数据库...")
+                    st.info(f"✅ 成功计算 {len(asc_data)} 期数据，正在覆盖写入数据库...")
                     
                     # 批量 Upsert 写入 Supabase (每次 200 条)
                     for i in range(0, len(asc_data), 200):
@@ -586,7 +578,7 @@ def render_console(df_data):
                         client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
                         client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
                         
-                    st.success(f"🎉 大功告成！已成功用 {len(asc_data)} 期正规数据重建数据库！")
+                    st.success(f"🎉 大功告成！已成功用 {len(asc_data)} 期正规数据（1976年至今）重建数据库！")
                     load_real_data.clear()
                     load_excel_data.clear()
                     st.rerun()
