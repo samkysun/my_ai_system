@@ -834,6 +834,7 @@ def render_console(df_data):
                             else: st.error(f"❌ 推送失败: {res.text}")
                         except Exception as e: st.error(f"异常: {e}")
     
+        
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
                 with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
@@ -928,6 +929,87 @@ def render_console(df_data):
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
                             st.error(f"运行异常: {e}")
+
+        # ==========================================
+        # 👇 👇 👇 新增的完美导出功能 👇 👇 👇
+        # ==========================================
+        st.divider()
+        if st.button("📥 导出 214 列横向完美表格 (替换老数据专用)", use_container_width=True, type="primary"):
+            with st.spinner("正在从数据库拉取并拆解 JSON，生成标准 214 列 Excel..."):
+                try:
+                    client = get_supabase_client()
+                    if not client:
+                        st.stop()
+                        
+                    # 1. 分页拉取所有数据
+                    def fetch_all(table_name):
+                        all_rows = []
+                        start = 0
+                        while True:
+                            res = client.table(table_name).select("期数", "data").range(start, start + 999).execute()
+                            if not res.data: break
+                            all_rows.extend(res.data)
+                            if len(res.data) < 1000: break
+                            start += 1000
+                        return all_rows
+                        
+                    asc_rows = fetch_all("full_asc")
+                    desc_rows = fetch_all("full_desc")
+                    
+                    import openpyxl
+                    import io
+                    
+                    # 2. 组装 214 列矩阵的辅助函数
+                    def build_matrix(rows):
+                        matrix = []
+                        for r in rows:
+                            d = r["data"]
+                            # 按 1 到 214 的顺序提取值，没有的填空
+                            row_list = [d.get(str(i), "") for i in range(1, 215)]
+                            matrix.append(row_list)
+                        return matrix
+                        
+                    asc_matrix = build_matrix(asc_rows)
+                    desc_matrix = build_matrix(desc_rows)
+                    
+                    # 3. 创建 Excel 并写入两个 Sheet
+                    wb = openpyxl.Workbook()
+                    
+                    # --- 升序表 ---
+                    ws_asc = wb.active
+                    ws_asc.title = "升序全套分析"
+                    # 为了完美兼容你的系统（系统从第3行开始读数据），前两行留空或写表头
+                    ws_asc.append(["年份", "A", "B", "C", "球1十", "球1个"]) # 第一行随便写个提示
+                    ws_asc.append([]) # 第二行留空
+                    for row_data in asc_matrix:
+                        ws_asc.append(row_data)
+                        
+                    # --- 按序表 ---
+                    ws_desc = wb.create_sheet("按序全套分析")
+                    ws_desc.append(["年份", "A", "B", "C", "球1十", "球1个"])
+                    ws_desc.append([])
+                    for row_data in desc_matrix:
+                        ws_desc.append(row_data)
+                        
+                    # 4. 保存到内存供下载
+                    output = io.BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    
+                    st.download_button(
+                        label="✅ 点击下载：完美数据_升序按序全套.xlsx",
+                        data=output,
+                        file_name="完美数据_升序按序全套.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                    st.success("生成成功！下载后打开，你会看到数据全部横向排满 214 列，且完全无乱码！")
+                    
+                except Exception as e:
+                    st.error(f"生成失败: {e}")
+        # ==========================================
+        # 👆 👆 👆 新增的完美导出功能结束 👆 👆 👆
+        # ==========================================
 
     st.divider()    
 
