@@ -509,9 +509,7 @@ def render_console(df_data):
                         
                     st.write(f"✅ 解析成功！共获取 {len(df)} 行原始数据。")
                     
-                    # === 核心修复：根据返回的列名精准匹配 ===
                     cols = {str(c).lower(): c for c in df.columns}
-                    
                     year_col = cols.get("year")
                     no_col = cols.get("times", cols.get("no", cols.get("issue")))
                     special_col = cols.get("s1", cols.get("special"))
@@ -542,10 +540,7 @@ def render_console(df_data):
                     st.write("⚙️ 正在计算 214 列属性并组装数据...")
                     for idx, row in df.iterrows():
                         try:
-                            # 提取年份和期号
                             y_val = str(row[year_col]).split('.')[0]
-                            
-                            # 期号强制转纯数字并补齐 3 位
                             no_raw = str(row[no_col]).split('.')[0].strip()
                             no_digits = ''.join(c for c in no_raw if c.isdigit())
                             if not no_digits: 
@@ -555,11 +550,9 @@ def render_console(df_data):
                             
                             period_raw = f"{y_val}{no_val}"
                             
-                            # 提取平码和特码
                             nums = [clean_num(row[c]) for c in num_cols]
                             special = clean_num(row[special_col])
                             
-                            # 号码合法性检查（不能为0，不能超过49）
                             if len(nums) != 6 or special == 0 or any(n == 0 or n > 49 for n in nums):
                                 skipped_count += 1
                                 continue
@@ -594,17 +587,24 @@ def render_console(df_data):
                             skipped_count += 1
                             continue
                             
-                    st.write(f"✅ 数据处理完毕，有效期为 {len(asc_data)} 期，跳过异常行 {skipped_count} 期。")
+                    # === 核心修复：利用字典强制去重 ===
+                    unique_asc_dict = {item["期数"]: item for item in asc_data}
+                    unique_desc_dict = {item["期数"]: item for item in desc_data}
                     
-                    if len(asc_data) == 0:
+                    final_asc = list(unique_asc_dict.values())
+                    final_desc = list(unique_desc_dict.values())
+                    
+                    st.write(f"✅ 数据处理完毕，去重后有效期为 {len(final_asc)} 期（跳过了 {len(asc_data) - len(final_asc)} 条重复期数，及 {skipped_count} 条异常行）。")
+                    
+                    if len(final_asc) == 0:
                         st.error("❌ 严重错误：计算后有效数据仍然为 0 期。")
                         st.stop()
                         
                     st.write("💾 [3/4] 正在分批写入 Supabase 数据库，请勿刷新页面...")
                     batch_size = 200
-                    for i in range(0, len(asc_data), batch_size):
-                        chunk_asc = asc_data[i:i+batch_size]
-                        chunk_desc = desc_data[i:i+batch_size]
+                    for i in range(0, len(final_asc), batch_size):
+                        chunk_asc = final_asc[i:i+batch_size]
+                        chunk_desc = final_desc[i:i+batch_size]
                         
                         try:
                             client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
@@ -613,9 +613,9 @@ def render_console(df_data):
                             st.error(f"❌ 写入数据库失败 (第 {i} 条起): {db_err}")
                             st.stop()
                             
-                        st.write(f"⌛ 已写入 {min(i+batch_size, len(asc_data))} / {len(asc_data)} 期...")
+                        st.write(f"⌛ 已写入 {min(i+batch_size, len(final_asc))} / {len(final_asc)} 期...")
                         
-                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(asc_data)} 期正规数据重建数据库！")
+                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(final_asc)} 期正规数据重建数据库！")
                     
                 except Exception as e:
                     st.error(f"❌ 执行中发生致命错误: {e}")
