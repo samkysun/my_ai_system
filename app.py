@@ -481,110 +481,129 @@ def render_console(df_data):
         # ==== 模块一：一键全量抓取 (1976年至今) ====
         # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
         # ==========================================
-        
         if st.button("🚀 从正规数据源重建数据库 (1976年至今)", use_container_width=True, type="primary"):
             import requests
             import io
             import pandas as pd
             
-            with st.spinner("正在从 GitHub 下载 1976 年至今的完整数据文件，并计算 214 列属性，请稍候..."):
+            status_container = st.container()
+            
+            with status_container:
+                st.write("⏳ [1/4] 开始从 CDN 下载 1976 年至今的历史数据...")
+                
                 try:
-                    raw_url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
-                    res = requests.get(raw_url, timeout=60)
+                    # 使用 jsDelivr CDN 下载
+                    url = "https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json"
+                    res = requests.get(url, timeout=30)
                     
                     if res.status_code != 200:
-                        st.error(f"下载数据文件失败 (状态码: {res.status_code})，请检查网络。")
+                        st.error(f"❌ 下载失败！状态码: {res.status_code}")
                         st.stop()
                         
-                    # 直接读取 DataFrame 格式的列式 JSON
-                    df = pd.read_json(io.StringIO(res.text))
-                    st.info(f"✅ 数据文件下载完成，共解析出 {len(df)} 期历史记录，正在深度处理...")
+                    st.write(f"✅ [2/4] 下载成功！文件大小: {len(res.text)} 字节，正在解析...")
                     
-                    # 自动识别关键列名（兼容大小写及英文/中文）
+                    try:
+                        df = pd.read_json(io.StringIO(res.text))
+                    except Exception as parse_err:
+                        st.error(f"❌ 解析失败！错误信息: {parse_err}")
+                        st.write("数据包前 200 个字符:", res.text[:200])
+                        st.stop()
+                        
+                    st.write(f"✅ 解析成功！共获取 {len(df)} 行原始数据。")
+                    
+                    # 自动识别列名
                     year_col = next((c for c in df.columns if c.upper() == "YEAR"), "YEAR")
-                    no_col = next((c for c in df.columns if c.upper() in ["NO", "ISSUE", "期数", "期号"]), "NO")
+                    no_col = next((c for c in df.columns if c.upper() in ["NO", "ISSUE", "期数"]), "NO")
                     special_col = next((c for c in df.columns if c.upper() in ["SPECIAL", "特码", "N7"]), "SPECIAL")
-                    
-                    # 平码列自动按顺序查找（如 N1~N6）
                     num_cols = sorted([c for c in df.columns if c.upper().startswith("N") and c.upper() not in [no_col, special_col]])
+                    
                     if len(num_cols) < 6:
-                        st.error(f"未能自动识别出 6 个平码列，当前识别列名: {num_cols}")
+                        st.error(f"❌ 识别平码列失败！当前列名: {list(df.columns)}")
                         st.stop()
                         
                     client = get_supabase_client()
                     if not client:
                         st.stop()
                         
+                    st.write("🧹 正在清空 Supabase 中的旧错误数据...")
+                    client.table("full_asc").delete().neq("期数", "0").execute()
+                    client.table("full_desc").delete().neq("期数", "0").execute()
+                    st.write("✅ 旧数据已清空。")
+                    
                     asc_data, desc_data = [], []
-                    progress_bar = st.progress(0)
                     total_records = len(df)
                     
                     def clean_num(val):
                         if pd.isna(val): return 0
-                        s = str(val).split('.')[0].strip() # 处理类似 "1.0" 的字符串
+                        s = str(val).split('.')[0].strip()
                         return int(s) if s.isdigit() else 0
                         
+                    st.write("⚙️ 正在计算 214 列属性并组装数据...")
                     for idx, row in df.iterrows():
                         try:
                             y_val = str(row[year_col]).split('.')[0]
                             no_val = str(row[no_col]).split('.')[0].zfill(3)
                             period_raw = f"{y_val}{no_val}"
-                            
                             if len(period_raw) < 5: continue
                             
                             nums = [clean_num(row[c]) for c in num_cols[:6]]
                             special = clean_num(row[special_col])
-                            
                             if len(nums) != 6 or not special: continue
                             
                             desc_nums = nums + [special]
                             asc_nums = sorted(nums) + [special]
-                            
                             p1, p2, p3 = no_val[0], no_val[1], no_val[2]
                             
-                            # 组装按序表 (full_desc)
+                            # 组装按序
                             row_desc = {"1": p1, "2": p2, "3": p3, "214": y_val}
-                            for ball_idx, ball_num in enumerate(desc_nums):
-                                base_col = 4 + ball_idx * 30
-                                row_desc[str(base_col)] = str(ball_num // 10)
-                                row_desc[str(base_col+1)] = str(ball_num % 10)
-                                attrs = calculate_all_attributes(ball_num)
-                                for a_idx, attr_val in enumerate(attrs):
-                                    row_desc[str(base_col + 2 + a_idx)] = str(attr_val)
+                            for b_idx, b_num in enumerate(desc_nums):
+                                base = 4 + b_idx * 30
+                                row_desc[str(base)] = str(b_num // 10)
+                                row_desc[str(base+1)] = str(b_num % 10)
+                                attrs = calculate_all_attributes(b_num)
+                                for a_idx, attr in enumerate(attrs):
+                                    row_desc[str(base + 2 + a_idx)] = str(attr)
                             desc_data.append({"期数": period_raw, "data": row_desc})
                             
-                            # 组装升序表 (full_asc)
+                            # 组装升序
                             row_asc = {"1": p1, "2": p2, "3": p3, "214": y_val}
-                            for ball_idx, ball_num in enumerate(asc_nums):
-                                base_col = 4 + ball_idx * 30
-                                row_asc[str(base_col)] = str(ball_num // 10)
-                                row_asc[str(base_col+1)] = str(ball_num % 10)
-                                attrs = calculate_all_attributes(ball_num)
-                                for a_idx, attr_val in enumerate(attrs):
-                                    row_asc[str(base_col + 2 + a_idx)] = str(attr_val)
+                            for b_idx, b_num in enumerate(asc_nums):
+                                base = 4 + b_idx * 30
+                                row_asc[str(base)] = str(b_num // 10)
+                                row_asc[str(base+1)] = str(b_num % 10)
+                                attrs = calculate_all_attributes(b_num)
+                                for a_idx, attr in enumerate(attrs):
+                                    row_asc[str(base + 2 + a_idx)] = str(attr)
                             asc_data.append({"期数": period_raw, "data": row_asc})
-                            
-                            if idx % 100 == 0:
-                                progress_bar.progress(min((idx + 1) / total_records, 1.0))
                         except Exception:
                             continue
                             
-                    st.info(f"✅ 成功计算 {len(asc_data)} 期数据，正在覆盖写入数据库...")
+                    st.write(f"✅ 数据处理完毕，有效期为 {len(asc_data)} 期。")
                     
-                    # 批量 Upsert 写入 Supabase (每次 200 条)
-                    for i in range(0, len(asc_data), 200):
-                        chunk_asc = asc_data[i:i+200]
-                        chunk_desc = desc_data[i:i+200]
-                        client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
-                        client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                    if len(asc_data) == 0:
+                        st.error("❌ 严重错误：计算后有效数据为 0 期，请检查源数据。")
+                        st.stop()
                         
-                    st.success(f"🎉 大功告成！已成功用 {len(asc_data)} 期正规数据（1976年至今）重建数据库！")
-                    load_real_data.clear()
-                    load_excel_data.clear()
-                    st.rerun()
+                    st.write("💾 [3/4] 正在分批写入 Supabase 数据库，请勿刷新页面...")
+                    batch_size = 200
+                    for i in range(0, len(asc_data), batch_size):
+                        chunk_asc = asc_data[i:i+batch_size]
+                        chunk_desc = desc_data[i:i+batch_size]
+                        
+                        # 捕捉写入异常
+                        try:
+                            client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
+                            client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                        except Exception as db_err:
+                            st.error(f"❌ 写入数据库失败 (第 {i} 条起): {db_err}")
+                            st.stop()
+                            
+                        st.write(f"⌛ 已写入 {min(i+batch_size, len(asc_data))} / {len(asc_data)} 期...")
+                        
+                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(asc_data)} 期正规数据（1976年至今）重建数据库！")
                     
                 except Exception as e:
-                    st.error(f"执行出错: {e}")
+                    st.error(f"❌ 执行中发生致命错误: {e}")
                     
         st.divider()            
 
