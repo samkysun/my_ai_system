@@ -238,6 +238,12 @@ def generate_20_combos(nums):
     
 #==========解决数据保持与老数据库一致的计算结果起点==================
 def calculate_linkage(df_data, target_period, mode):
+    # 🔥 核心修复：把这个工具函数直接搬到内部，彻底解决作用域报错
+    def clean_str(v):
+        if v is None: return ""
+        try: return str(int(float(v)))
+        except: return str(v).strip()
+
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
     if matched.empty: return None, None, "未找到该期数据"
@@ -247,8 +253,7 @@ def calculate_linkage(df_data, target_period, mode):
     special_num = int(clean_period(current_row.iloc[25])) if pd.notna(current_row.iloc[25]) and clean_period(current_row.iloc[25]) != "" else None
     if len(base_nums) < 6: return None, None, "基准期开奖号码不足6个"
 
-    # 🔥 核心修复：彻底废除 is_descending 猜测，强制锁定降序方向！
-    # 历史数据一定在基准期的下方（索引更大）
+    # 🔥 强制锁定降序方向：历史数据一定在基准期的下方
     start_idx = base_idx + 1
     end_idx = len(df_data) - 1
     
@@ -265,7 +270,7 @@ def calculate_linkage(df_data, target_period, mode):
                 if all(n in row_nums for n in combo):
                     triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
                     
-                    # 🔥 核心修复：因为是降序，下一期一定在它的上方，所以是 idx - 1
+                    # 🔥 降序排列下，下一期一定在它的上方（索引减1）
                     next_idx = idx - 1
                     
                     if 0 <= next_idx < len(df_data):
@@ -289,7 +294,7 @@ def calculate_linkage(df_data, target_period, mode):
                     if all(n in row_nums for n in combo):
                         triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
                         
-                        # 🔥 核心修复：同样是 idx - 1
+                        # 🔥 同样是 idx - 1
                         next_idx = idx - 1
                         
                         if 0 <= next_idx < len(df_data):
