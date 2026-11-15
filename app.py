@@ -1782,21 +1782,21 @@ def render_multi_analysis(df_data):
     # ==========================================
     
     if run_btn:
-    st.session_state.play_alert = False
-    target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
-    sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
+        st.session_state.play_alert = False
+        target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
+        sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
+            
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    try:
-        # ==========================================
-        # 🔥 核心修复1：把 clean_str 提前定义，解决作用域报错
-        # ==========================================
-        def clean_str(v):
-            if v is None: return ""
-            try: return str(int(float(v)))
-            except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
+        try:
+            # ==========================================
+            # 🔥 核心修复1：把 clean_str 提前定义，解决作用域报错
+            # ==========================================
+            def clean_str(v):
+                if v is None: return ""
+                try: return str(int(float(v)))
+                except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
 
         status_text.text("正在读取 Excel 数据...")
         all_rows = load_excel_data(target_file, sheet_name)
