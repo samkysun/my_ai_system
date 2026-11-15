@@ -836,182 +836,143 @@ def render_console(df_data):
     
         
         with col_sync2:
-            if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
-                with st.spinner("正在启动超级宏引擎，精准填入第三行属性..."):
-                    token = st.secrets.get("GITHUB_TOKEN")
-                    repo = st.secrets.get("GITHUB_REPO")
-                    
-                    if not token or not repo:
-                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                    else:
-                        try:
-                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+            
+            # ==========================================
+            # ==== 模块一：一键重建数据库 (真实落球顺序完美版) ====
+            # ==== 逻辑：开源数据(升序) + kitce真实顺序(按序) ====
+            # ==========================================
+            if st.button("🚀 重建完美双源数据库 (含真实落球顺序)", use_container_width=True, type="primary"):
+                import requests
+                import io
+                import pandas as pd
+                import openpyxl
+                import zipfile
+                import json
+                
+                status_container = st.container()
+                
+                with status_container:
+                    st.write("⏳ [1/5] 开始下载基础历史数据 (1976年至今)...")
+                    try:
+                        # 1. 下载 1976 年的底表 (它只有升序)
+                        url1 = "https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json"
+                        res1 = requests.get(url1, timeout=30)
+                        if res1.status_code != 200:
+                            st.error("❌ 基础历史数据下载失败！")
+                            st.stop()
+                        df_hist = pd.read_json(io.StringIO(res1.text))
+                        cols1 = {str(c).lower(): c for c in df_hist.columns}
+                        
+                        # 2. 下载包含真实落球顺序的 kitce 数据 (1993年至今)
+                        st.write("⏳ [2/5] 正在下载真实落球顺序数据 (1993年至今，文件较大请稍候)...")
+                        url2 = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
+                        res2 = requests.get(url2, timeout=120)
+                        if res2.status_code != 200:
+                            st.error("❌ kitce真实顺序数据下载失败！")
+                            st.stop()
                             
-                            def get_info(fp):
-                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
-                                return r.json() if r.status_code == 200 else None
-                            
-                            def sync_attrs(src_f, dst_f, sheet):
-                                s_info = get_info(src_f)
-                                if not s_info: return False, f"找不到 {src_f}"
-                                wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
-                                ws_src = wb_src["数据源"]
-                                
-                                d_info = get_info(dst_f)
-                                if not d_info: return False, f"找不到 {dst_f}"
-                                wb_dst = openpyxl.load_workbook(io.BytesIO(requests.get(d_info["download_url"]).content))
-                                ws_dst = wb_dst[sheet]
-                                
-                                def get_clean_val(cell):
-                                    if cell is None: return ""
-                                    val = str(cell).strip()
-                                    if val.endswith(".0"): val = val[:-2]
-                                    return val
-                            
-                                src_a = get_clean_val(ws_src["A3"].value)
-                                src_b = get_clean_val(ws_src["B3"].value)
-                                src_c = get_clean_val(ws_src["C3"].value)
-                                src_aa = get_clean_val(ws_src["AA3"].value)
-                            
-                                dst_a = get_clean_val(ws_dst["A3"].value)
-                                dst_b = get_clean_val(ws_dst["B3"].value)
-                                dst_c = get_clean_val(ws_dst["C3"].value)
-                                dst_hf = get_clean_val(ws_dst["HF3"].value)
-                            
-                                if src_a == dst_a and src_b == dst_b and src_c == dst_c and src_aa == dst_hf:
-                                    return True, f"该期数据已存在 (年份:{src_aa} 期数:{src_a}-{src_b}-{src_c})，已跳过同步"
-                            
-                                ws_dst.insert_rows(3)
-                                
-                                mapping = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'AH', 'G': 'AI', 'H': 'BL', 'I': 'BM', 'J': 'CP', 'K': 'CQ', 'L': 'DT', 'M': 'DU', 'N': 'EX', 'O': 'EY', 'P': 'GB', 'Q': 'GC', 'AA': 'HF'}
-                                for sc, dc in mapping.items():
-                                    val = ws_src[f"{sc}3"].value
-                                    ws_dst[f"{dc}3"] = val if val is not None else ""
-                                
-                                ball_nums = []
-                                for n in range(7):
-                                    tens = ws_dst.cell(row=3, column=4 + n*30).value
-                                    units = ws_dst.cell(row=3, column=5 + n*30).value
+                        st.write("✅ 双源数据下载成功，正在解析中...")
+                        
+                        # 解析 kitce 的真实落球顺序
+                        real_desc_dict = {} # 期数 -> [N1, N2, N3, N4, N5, N6, S1]
+                        with zipfile.ZipFile(io.BytesIO(res2.content)) as z:
+                            json_files = [f for f in z.namelist() if f.endswith('.json') and 'records' in f]
+                            for jf in json_files:
+                                try:
+                                    with z.open(jf) as f:
+                                        item = json.load(f)
+                                        date_str = item.get("date", "")
+                                        raw_id = item.get("id", "")
+                                        nums = item.get("numbers", [])
+                                        special = item.get("special", 0)
+                                        if len(nums) == 6 and special and raw_id:
+                                            y = date_str[:4]
+                                            p = raw_id.split('/')[-1].zfill(3)
+                                            p_str = f"{y}{p}"
+                                            real_desc_dict[p_str] = nums + [special]
+                                except:
+                                    continue
                                     
-                                    if tens is None and units is None: 
-                                        ball_nums.append(None)
-                                    else:
-                                        t = str(int(tens)) if str(tens).isdigit() else "0"
-                                        u = str(int(units)) if str(units).isdigit() else "0"
-                                        ball_nums.append(int(t + u))
-                                
-                                for n_idx, ball_num in enumerate(ball_nums):
-                                    if ball_num:
-                                        attrs = calculate_all_attributes(ball_num)
-                                        for j_idx, attr_val in enumerate(attrs):
-                                            target_col = 6 + j_idx + (n_idx * 30)
-                                            ws_dst.cell(row=3, column=target_col, value=attr_val)
-                                
-                                out = io.BytesIO()
-                                wb_dst.save(out)
-                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", 
-                                                   headers=headers, 
-                                                   json={"message": f"更新属性 {sheet}", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": d_info["sha"], "branch": "main"})
-                                
-                                if res.status_code in [200, 201]: return True, "成功"
-                                return False, res.text
+                        st.write(f"✅ 解析成功！获取到了 {len(real_desc_dict)} 期真实落球顺序。")
+                        
+                        client = get_supabase_client()
+                        if not client: st.stop()
+                        
+                        st.write("🧹 [3/5] 正在清空 Supabase 旧数据...")
+                        client.table("full_asc").delete().neq("期数", "0").execute()
+                        client.table("full_desc").delete().neq("期数", "0").execute()
+                        
+                        asc_data_dict, desc_data_dict = {}, {}
+                        
+                        def build_row(p_str, nums):
+                            year_val = p_str[:4]
+                            no_val = p_str[4:].zfill(3)[-3:]
+                            p1, p2, p3 = no_val[0], no_val[1], no_val[2]
+                            row = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                            for b_idx, b_num in enumerate(nums):
+                                base = 4 + b_idx * 30
+                                row[str(base)] = str(b_num // 10)
+                                row[str(base+1)] = str(b_num % 10)
+                                attrs = calculate_all_attributes(b_num)
+                                for a_idx, attr in enumerate(attrs):
+                                    row[str(base + 2 + a_idx)] = str(attr)
+                            return row
     
-                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.xlsx", "升序全套分析")
-                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.xlsx", "按序全套分析")
+                        st.write("⚙️ [4/5] 正在合并数据并计算 214 列属性...")
+                        
+                        # 1. 先遍历 1976-1992 的数据 (这部分因为没法找到真实顺序，当作升序处理)
+                        year_col, no_col, special_col = cols1.get("year"), cols1.get("times"), cols1.get("s1")
+                        num_cols = [cols1.get(f"n{i}") for i in range(1, 7)]
+                        
+                        for _, row in df_hist.iterrows():
+                            try:
+                                y_val = str(row[year_col]).split('.')[0]
+                                no_val = ''.join(c for c in str(row[no_col]).split('.')[0] if c.isdigit()).zfill(3)[-3:]
+                                p_str = f"{y_val}{no_val}"
+                                
+                                # 如果这个期数在 kitce 真实库里已经有了，直接跳过，后面统一用真实顺序
+                                if p_str in real_desc_dict:
+                                    continue
+                                    
+                                nums = [int(str(row[c]).split('.')[0] or 0) for c in num_cols]
+                                sp = int(str(row[special_col]).split('.')[0] or 0)
+                                
+                                if len(nums) == 6 and sp > 0 and all(0 < n <= 49 for n in nums):
+                                    asc_nums = sorted(nums) + [sp]
+                                    desc_nums = nums + [sp] # 1976-1992 只能强制用升序当按序
+                                    asc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, asc_nums)}
+                                    desc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, desc_nums)}
+                            except:
+                                continue
+                                
+                        # 2. 再把 kitce 的 1993 至今的真实数据合并进来
+                        for p_str, real_nums in real_desc_dict.items():
+                            if len(real_nums) == 7:
+                                asc_nums = sorted(real_nums[:6]) + [real_nums[6]]
+                                desc_nums = real_nums # 真实落球顺序
+                                asc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, asc_nums)}
+                                desc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, desc_nums)}
+    
+                        final_asc = list(asc_data_dict.values())
+                        final_desc = list(desc_data_dict.values())
+                        
+                        st.write(f"✅ 合并完成！共计 {len(final_asc)} 期，最新一期为：{max(asc_data_dict.keys())}")
+                        
+                        # 3. 写入 Supabase
+                        st.write("💾 [5/5] 正在分批写入 Supabase 数据库...")
+                        for i in range(0, len(final_asc), 200):
+                            chunk_asc = final_asc[i:i+200]
+                            chunk_desc = final_desc[i:i+200]
+                            client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
+                            client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                            st.write(f"⌛ 已写入 {min(i+200, len(final_asc))} / {len(final_asc)} 期...")
                             
-                            if s1 and s2:
-                                st.success(f"✅ 极速同步成功！\\n升序：{m1}\\n按序：{m2}")
-                                load_excel_data.clear() 
-                                if m1 == "成功" or m2 == "成功":
-                                    st.info("👉 请点上方【同步数据】刷新网页！")
-                            else:
-                                if not s1: st.error(f"❌ 升序失败: {m1}")
-                                if not s2: st.error(f"❌ 按序失败: {m2}")
-                        except Exception as e:
-                            st.error(f"运行异常: {e}")
-
-        # ==========================================
-        # 👇 👇 👇 新增的完美导出功能 👇 👇 👇
-        # ==========================================
-        st.divider()
-        if st.button("📥 导出 214 列横向完美表格 (替换老数据专用)", use_container_width=True, type="primary"):
-            with st.spinner("正在从数据库拉取并拆解 JSON，生成标准 214 列 Excel..."):
-                try:
-                    client = get_supabase_client()
-                    if not client:
-                        st.stop()
+                        st.success(f"🎉 大功告成！已成功用真实落球顺序重建 {len(final_asc)} 期完美数据！")
                         
-                    # 1. 分页拉取所有数据
-                    def fetch_all(table_name):
-                        all_rows = []
-                        start = 0
-                        while True:
-                            res = client.table(table_name).select("期数", "data").range(start, start + 999).execute()
-                            if not res.data: break
-                            all_rows.extend(res.data)
-                            if len(res.data) < 1000: break
-                            start += 1000
-                        return all_rows
+                    except Exception as e:
+                        st.error(f"❌ 执行中发生致命错误: {e}")
                         
-                    asc_rows = fetch_all("full_asc")
-                    desc_rows = fetch_all("full_desc")
-                    
-                    import openpyxl
-                    import io
-                    
-                    # 2. 组装 214 列矩阵的辅助函数
-                    def build_matrix(rows):
-                        matrix = []
-                        for r in rows:
-                            d = r["data"]
-                            # 按 1 到 214 的顺序提取值，没有的填空
-                            row_list = [d.get(str(i), "") for i in range(1, 215)]
-                            matrix.append(row_list)
-                        return matrix
-                        
-                    asc_matrix = build_matrix(asc_rows)
-                    desc_matrix = build_matrix(desc_rows)
-                    
-                    # 3. 创建 Excel 并写入两个 Sheet
-                    wb = openpyxl.Workbook()
-                    
-                    # --- 升序表 ---
-                    ws_asc = wb.active
-                    ws_asc.title = "升序全套分析"
-                    # 为了完美兼容你的系统（系统从第3行开始读数据），前两行留空或写表头
-                    ws_asc.append(["年份", "A", "B", "C", "球1十", "球1个"]) # 第一行随便写个提示
-                    ws_asc.append([]) # 第二行留空
-                    for row_data in asc_matrix:
-                        ws_asc.append(row_data)
-                        
-                    # --- 按序表 ---
-                    ws_desc = wb.create_sheet("按序全套分析")
-                    ws_desc.append(["年份", "A", "B", "C", "球1十", "球1个"])
-                    ws_desc.append([])
-                    for row_data in desc_matrix:
-                        ws_desc.append(row_data)
-                        
-                    # 4. 保存到内存供下载
-                    output = io.BytesIO()
-                    wb.save(output)
-                    output.seek(0)
-                    
-                    st.download_button(
-                        label="✅ 点击下载：完美数据_升序按序全套.xlsx",
-                        data=output,
-                        file_name="完美数据_升序按序全套.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                    st.success("生成成功！下载后打开，你会看到数据全部横向排满 214 列，且完全无乱码！")
-                    
-                except Exception as e:
-                    st.error(f"生成失败: {e}")
-        # ==========================================
-        # 👆 👆 👆 新增的完美导出功能结束 👆 👆 👆
-        # ==========================================
-
-    st.divider()    
+            st.divider()    
 
 
     
