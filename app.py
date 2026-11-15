@@ -1584,30 +1584,31 @@ from openpyxl.utils import get_column_letter
 def load_excel_data(file_path, sheet_name=None):
     import requests
     import io
-    import csv
     import openpyxl
     
     token = st.secrets.get("GITHUB_TOKEN")
     repo = st.secrets.get("GITHUB_REPO")
     
     def parse_content(content):
-        # 🔥 核心：如果是 CSV，用 csv 模块毫秒级解析
         if file_path.lower().endswith(".csv"):
             try:
-                # 优先尝试标准的 UTF-8 编码
                 text = content.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                # 如果失败，自动回退到 Windows Excel 默认的 GBK 编码
+            except:
                 text = content.decode("gbk", errors="ignore")
-                
-            return list(csv.reader(io.StringIO(text)))
-        # 如果是 Excel，退回原版逻辑
+            
+            # 🔥 极速暴力解析：彻底隔绝换行符和引号导致的错位
+            rows = []
+            for line in text.splitlines():
+                if not line.strip(): continue # 跳过空行
+                # 强制按逗号切分，并清理每个单元格里的隐藏字符
+                row = [cell.replace('\r', '').replace('\n', '').strip() for cell in line.split(',')]
+                rows.append(row)
+            return rows
         else:
             wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
             ws = wb[sheet_name]
             return list(ws.iter_rows(values_only=True))
         
-    # 本地调试模式
     if not token or not repo:
         try:
             with open(file_path, "rb") as f:
@@ -1615,7 +1616,6 @@ def load_excel_data(file_path, sheet_name=None):
         except Exception:
             return []
         
-    # 云端 GitHub 读取模式
     try:
         url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
@@ -1661,11 +1661,23 @@ def render_multi_analysis(df_data):
     analysis_mode = st.radio("分析模式：", ["单属性透视 (按球查属性)", "单球全属性透视 (按球查全部)"], horizontal=True)
     
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+    
     with row1_col1:
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
         try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
         except: unique_periods.sort(reverse=True)
-        selected_period = st.selectbox("基准期数", unique_periods)
+        
+        # 🔥 核心新增：自动推算最新一期的下一期（如122期），并插到下拉框顶端
+        if unique_periods:
+            latest = unique_periods[0]
+            try:
+                next_p = str(int(float(latest)) + 1)
+                if next_p not in unique_periods:
+                    unique_periods.insert(0, next_p)
+            except: 
+                pass
+                
+        selected_period = st.selectbox("选择分析/预测期数", unique_periods)
     with row1_col2: 
         selected_file_type = st.selectbox("选择分析文件", ["升序全套", "按序全套"])  
     with row1_col3: 
