@@ -1856,9 +1856,26 @@ def render_multi_analysis(df_data):
                     valid_data = [(r, col_data[r][1]) for r in range(2, len(col_data)) if col_data[r][1]]
                     vc = len(valid_data)
                     
+                    
                     if vc >= min_l:
                         k = 0
                         while k <= vc - min_l:
+                            # ==========================================
+                            # 🔥 核心修复：如果当前扫的是“自身参考列”，且扫描区间与基准区间有重叠，直接跳过！
+                            # ==========================================
+                            if is_self:
+                                current_sr = valid_data[k][0]          # 当前扫描起点
+                                current_er = valid_data[k + min_l - 1][0] # 当前扫描终点
+                                
+                                base_start = target_row_idx                # 基准行起点 (第3行)
+                                base_end = target_row_idx + len(template) - 1  # 基准行终点
+                                
+                                # 如果当前扫描的区间和基准区间有任何交集，立刻跳过，防止自己跟自己比！
+                                if not (current_er < base_start or current_sr > base_end):
+                                    k += 1
+                                    continue 
+                            # ==========================================
+
                             max_l_hit = 0
                             for j in range(vc - k):
                                 if j >= len(template): break
