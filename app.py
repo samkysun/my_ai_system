@@ -237,20 +237,19 @@ def generate_20_combos(nums):
     return [",".join([str(x).zfill(2) for x in c]) for c in combos]
     
 #==========解决数据保持与老数据库一致的计算结果起点==================
-def calculate_linkage(df_data, target_period, mode):
-    # 🔥 核心修复：把这个工具函数直接搬到内部，彻底解决作用域报错
-    def clean_str(v):
-        if v is None: return ""
-        try: return str(int(float(v)))
-        except: return str(v).strip()
 
+def calculate_linkage(df_data, target_period, mode):
     df_data['_temp_p'] = df_data.iloc[:, 18].apply(clean_period)
     matched = df_data[df_data['_temp_p'] == target_period]
     if matched.empty: return None, None, "未找到该期数据"
+    
     base_idx = matched.index[0]
     current_row = matched.iloc[0]
+    
+    # 提取基准期平码和特码
     base_nums = [int(clean_period(current_row.iloc[i])) for i in range(19, 25) if pd.notna(current_row.iloc[i]) and clean_period(current_row.iloc[i]) != ""]
     special_num = int(clean_period(current_row.iloc[25])) if pd.notna(current_row.iloc[25]) and clean_period(current_row.iloc[25]) != "" else None
+    
     if len(base_nums) < 6: return None, None, "基准期开奖号码不足6个"
 
     # 🔥 强制锁定降序方向：历史数据一定在基准期的下方
@@ -258,19 +257,22 @@ def calculate_linkage(df_data, target_period, mode):
     end_idx = len(df_data) - 1
     
     if start_idx > end_idx: return None, None, "基准期附近没有可匹配的历史数据"
+    
     triggers, total_counter = [], Counter()
     
     if mode == "单排分析":
         combos_str = generate_20_combos(base_nums)
         for idx in range(start_idx, end_idx + 1):
+            # 提取历史期的平码和特码
             row_nums = [int(clean_period(df_data.iloc[idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[idx, j]) and clean_period(df_data.iloc[idx, j]) != ""]
             row_period = clean_period(df_data.iloc[idx, 18])
+            
             for combo_str in combos_str:
                 combo = [int(x) for x in combo_str.split(",")]
                 if all(n in row_nums for n in combo):
                     triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
                     
-                    # 🔥 降序排列下，下一期一定在它的上方（索引减1）
+                    # 降序排列下，下一期一定在它的上方（索引减1）
                     next_idx = idx - 1
                     
                     if 0 <= next_idx < len(df_data):
@@ -286,15 +288,17 @@ def calculate_linkage(df_data, target_period, mode):
             valid_combos = [c for c in new_combos if c not in dict_history]
             for c in valid_combos: dict_history.add(c)
             if not valid_combos: continue
+            
             for idx in range(start_idx, end_idx + 1):
                 row_nums = [int(clean_period(df_data.iloc[idx, j])) for j in range(19, 26) if pd.notna(df_data.iloc[idx, j]) and clean_period(df_data.iloc[idx, j]) != ""]
                 row_period = clean_period(df_data.iloc[idx, 18])
+                
                 for combo_str in valid_combos:
                     combo = [int(x) for x in combo_str.split(",")]
                     if all(n in row_nums for n in combo):
                         triggers.append({"组合": combo_str, "触发行": idx + 1, "触发期数": row_period, "触发行号码": ",".join([f"{n:02d}" for n in row_nums])})
                         
-                        # 🔥 同样是 idx - 1
+                        # 同样是 idx - 1
                         next_idx = idx - 1
                         
                         if 0 <= next_idx < len(df_data):
@@ -304,6 +308,7 @@ def calculate_linkage(df_data, target_period, mode):
     sorted_counts = sorted(total_counter.items(), key=lambda x: x[1], reverse=True)
     df_triggers = pd.DataFrame(triggers) if triggers else pd.DataFrame(columns=["组合", "触发行", "触发期数", "触发行号码"])
     df_counts = pd.DataFrame([{"下期数字": f"{n:02d}", "出现次数": c} for n, c in sorted_counts])
+    
     return df_triggers, df_counts, None
 #==================解决数据结果不一致的终点============================
 def calculate_prize(df_data, target_period, predicted_nums):
