@@ -2019,7 +2019,9 @@ def render_multi_analysis(df_data):
                 st.session_state.play_alert = False
             
             progress_bar.progress(100)
-            status_text.text("计算完成！")
+            progress_bar.progress(100)
+            # 🔥 核心修改：把文件类型、期数、属性、球号全拼上去
+            status_text.success(f"✅ 计算完成：{selected_file_type} | {selected_period}期 | 属性：{selected_attr} | {ball_str}")
             
         except Exception as e:
             st.error(f"计算报错: {e}")
