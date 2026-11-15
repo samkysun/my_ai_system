@@ -1731,8 +1731,13 @@ def render_multi_analysis(df_data):
                 try: return str(int(float(v)))
                 except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
     
-            # 寻找基准期的行号
+            
+            # ==========================================
+            # 🔥 核心：寻找基准期的行号（支持未来期预测）
+            # ==========================================
             target_row_idx = -1
+            
+            # 第一步：先试着找当前选择期数（比如 122）
             for r_idx in range(len(all_rows)):
                 year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else "2026"
                 p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
@@ -1742,8 +1747,27 @@ def render_multi_analysis(df_data):
                     target_row_idx = r_idx
                     break
             
+            # 第二步：如果找不到（说明是未来期），自动回退找上一期（121）
+            if target_row_idx == -1:
+                try:
+                    prev_period = str(int(selected_period) - 1)
+                    for r_idx in range(len(all_rows)):
+                        year_val = clean_str(all_rows[r_idx][213]) if len(all_rows[r_idx]) > 213 else "2026"
+                        p1 = clean_str(all_rows[r_idx][0]) if len(all_rows[r_idx]) > 0 else ""
+                        p2 = clean_str(all_rows[r_idx][1]) if len(all_rows[r_idx]) > 1 else ""
+                        p3 = clean_str(all_rows[r_idx][2]) if len(all_rows[r_idx]) > 2 else ""
+                        
+                        if f"{year_val}{p1}{p2}{p3}" == prev_period: 
+                            target_row_idx = r_idx
+                            # 弹出提示告诉用户正在预测
+                            st.info(f"💡 检测到目标期 {selected_period} 尚未开奖，系统已自动使用上一期 {prev_period} 作为基准进行推演预测。")
+                            break
+                except Exception as e:
+                    pass
+                    
             if target_row_idx == -1: 
-                st.error(f"找不到基准期数 {selected_period}！"); st.stop()
+                st.error(f"找不到基准期数 {selected_period}，也找不到它的上一期！"); 
+                st.stop()
             
             # 五行生克字典
             cross_sheng = {"金": ["土", "水"], "木": ["水", "火"], "水": ["金", "木"], "火": ["木", "土"], "土": ["火", "金"]}
