@@ -492,7 +492,6 @@ def render_console(df_data):
                 st.write("⏳ [1/4] 开始从 CDN 下载 1976 年至今的历史数据...")
                 
                 try:
-                    # 使用 jsDelivr CDN 下载
                     url = "https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json"
                     res = requests.get(url, timeout=30)
                     
@@ -506,19 +505,23 @@ def render_console(df_data):
                         df = pd.read_json(io.StringIO(res.text))
                     except Exception as parse_err:
                         st.error(f"❌ 解析失败！错误信息: {parse_err}")
-                        st.write("数据包前 200 个字符:", res.text[:200])
                         st.stop()
                         
                     st.write(f"✅ 解析成功！共获取 {len(df)} 行原始数据。")
                     
-                    # 自动识别列名
-                    year_col = next((c for c in df.columns if c.upper() == "YEAR"), "YEAR")
-                    no_col = next((c for c in df.columns if c.upper() in ["NO", "ISSUE", "期数"]), "NO")
-                    special_col = next((c for c in df.columns if c.upper() in ["SPECIAL", "特码", "N7"]), "SPECIAL")
-                    num_cols = sorted([c for c in df.columns if c.upper().startswith("N") and c.upper() not in [no_col, special_col]])
+                    # === 核心修复：强制统一转小写去找列名 ===
+                    cols = {str(c).lower(): c for c in df.columns}
+                    st.write(f"🔍 识别到的原始列名: {list(df.columns)}")
                     
-                    if len(num_cols) < 6:
-                        st.error(f"❌ 识别平码列失败！当前列名: {list(df.columns)}")
+                    year_col = cols.get("year")
+                    no_col = cols.get("no", cols.get("issue"))
+                    special_col = cols.get("special")
+                    num_cols = [cols.get(f"n{i}") for i in range(1, 7)]
+                    
+                    if not year_col or not no_col or not special_col or None in num_cols:
+                        st.error(f"❌ 字段缺失！未能识别所有的必需列。")
+                        st.write(f"年份列: {year_col}, 期号列: {no_col}, 特码列: {special_col}")
+                        st.write(f"平码列: {num_cols}")
                         st.stop()
                         
                     client = get_supabase_client()
@@ -532,6 +535,7 @@ def render_console(df_data):
                     
                     asc_data, desc_data = [], []
                     total_records = len(df)
+                    skipped_count = 0
                     
                     def clean_num(val):
                         if pd.isna(val): return 0
@@ -541,15 +545,28 @@ def render_console(df_data):
                     st.write("⚙️ 正在计算 214 列属性并组装数据...")
                     for idx, row in df.iterrows():
                         try:
+                            # 提取年份和期号
                             y_val = str(row[year_col]).split('.')[0]
-                            no_val = str(row[no_col]).split('.')[0].zfill(3)
+                            
+                            # 期号兼容 "001", "1.0", "2024/001" 等格式
+                            no_raw = str(row[no_col]).split('.')[0].strip()
+                            no_digits = ''.join(c for c in no_raw if c.isdigit())
+                            if not no_digits: 
+                                skipped_count += 1
+                                continue
+                            no_val = no_digits.zfill(3)[-3:] # 取最后3位作为期号
+                            
                             period_raw = f"{y_val}{no_val}"
-                            if len(period_raw) < 5: continue
                             
-                            nums = [clean_num(row[c]) for c in num_cols[:6]]
+                            # 提取平码和特码
+                            nums = [clean_num(row[c]) for c in num_cols]
                             special = clean_num(row[special_col])
-                            if len(nums) != 6 or not special: continue
                             
+                            # 号码合法性检查（不能为0，不能超过49）
+                            if len(nums) != 6 or special == 0 or any(n == 0 or n > 49 for n in nums):
+                                skipped_count += 1
+                                continue
+                                
                             desc_nums = nums + [special]
                             asc_nums = sorted(nums) + [special]
                             p1, p2, p3 = no_val[0], no_val[1], no_val[2]
@@ -575,13 +592,16 @@ def render_console(df_data):
                                 for a_idx, attr in enumerate(attrs):
                                     row_asc[str(base + 2 + a_idx)] = str(attr)
                             asc_data.append({"期数": period_raw, "data": row_asc})
-                        except Exception:
+                            
+                        except Exception as loop_err:
+                            skipped_count += 1
                             continue
                             
-                    st.write(f"✅ 数据处理完毕，有效期为 {len(asc_data)} 期。")
+                    st.write(f"✅ 数据处理完毕，有效期为 {len(asc_data)} 期，跳过异常行 {skipped_count} 期。")
                     
                     if len(asc_data) == 0:
-                        st.error("❌ 严重错误：计算后有效数据为 0 期，请检查源数据。")
+                        st.error("❌ 严重错误：计算后有效数据仍然为 0 期。")
+                        st.write("数据样例行：", df.iloc[0].to_dict()) # 直接打印第一行供排查
                         st.stop()
                         
                     st.write("💾 [3/4] 正在分批写入 Supabase 数据库，请勿刷新页面...")
@@ -590,7 +610,6 @@ def render_console(df_data):
                         chunk_asc = asc_data[i:i+batch_size]
                         chunk_desc = desc_data[i:i+batch_size]
                         
-                        # 捕捉写入异常
                         try:
                             client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
                             client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
@@ -600,7 +619,7 @@ def render_console(df_data):
                             
                         st.write(f"⌛ 已写入 {min(i+batch_size, len(asc_data))} / {len(asc_data)} 期...")
                         
-                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(asc_data)} 期正规数据（1976年至今）重建数据库！")
+                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(asc_data)} 期正规数据重建数据库！")
                     
                 except Exception as e:
                     st.error(f"❌ 执行中发生致命错误: {e}")
