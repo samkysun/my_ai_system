@@ -1548,29 +1548,39 @@ import os
 from datetime import datetime
 from openpyxl.utils import get_column_letter
 
-# ==========================================
-# ==== 1. 云端文件极速读取核心 (带1小时缓存)
-# ==========================================
+# ========================================================
+# ==== 1. 云端文件极速读取核心 (带1小时缓存兼容 CSV 与 Excel)
+# ========================================================
 @st.cache_data(show_spinner=False, ttl=3600)
-def load_excel_data(file_path, sheet_name):
+def load_excel_data(file_path, sheet_name=None):
     import requests
     import io
+    import csv
     import openpyxl
     
     token = st.secrets.get("GITHUB_TOKEN")
     repo = st.secrets.get("GITHUB_REPO")
     
-    def parse_workbook(wb):
-        ws = wb[sheet_name]
-        return list(ws.iter_rows(values_only=True))
+    def parse_content(content):
+        # 🔥 核心：如果是 CSV，用 csv 模块毫秒级解析
+        if file_path.lower().endswith(".csv"):
+            text = content.decode("utf-8-sig")
+            return list(csv.reader(io.StringIO(text)))
+        # 如果是 Excel，退回原版逻辑
+        else:
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb[sheet_name]
+            return list(ws.iter_rows(values_only=True))
         
+    # 本地调试模式
     if not token or not repo:
         try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            return parse_workbook(wb)
+            with open(file_path, "rb") as f:
+                return parse_content(f.read())
         except Exception:
             return []
         
+    # 云端 GitHub 读取模式
     try:
         url = f"https://api.github.com/repos/{repo}/contents/{file_path}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
@@ -1578,8 +1588,7 @@ def load_excel_data(file_path, sheet_name):
         if r.status_code == 200:
             download_url = r.json()["download_url"]
             content = requests.get(download_url).content
-            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-            return parse_workbook(wb)
+            return parse_content(content)
         else:
             st.error(f"读取云端文件失败，状态码: {r.status_code}")
             return []
@@ -1656,9 +1665,10 @@ def render_multi_analysis(df_data):
     # ==========================================
     if run_btn:
         st.session_state.play_alert = False
-        target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
-        sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
-            
+        #===target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
+        #===sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
+        target_file = "升序全套.csv" if selected_file_type == "升序全套" else "按序全套.csv"
+        sheet_name = None # CSV 不需要 Sheet 名    
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -2042,12 +2052,10 @@ def render_deep_linkage(df_data):
         run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
 
     if "升序" in mode:
-        target_file = "升序全套.xlsx"
-        sheet_name = "升序全套分析"
+        target_file = "升序全套.csv"
     else:
-        target_file = "按序全套.xlsx"
-        sheet_name = "按序全套分析"
-
+        target_file = "按序全套.csv"
+        sheet_name = None 
     st.info(f"💡当前读取文件：【{target_file}】 | 工作表：【{sheet_name}】")
 
     # ==========================
@@ -2073,10 +2081,11 @@ def render_deep_linkage(df_data):
                     download_url = r.json()["download_url"]
                     file_content = requests.get(download_url).content
                     
-                    # ?? 核心绝杀：彻底抛弃 pandas 的错位，改用 openpyxl 绝对精准定位
-                    wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
-                    ws = wb[sheet_name]
-                    
+                    # 🔥 极速版：直接调用支持 CSV 的读取函数
+                    all_rows = load_excel_data(target_file, sheet_name)
+                    if not all_rows:
+                        st.error(f"读取 {target_file} 失败！")
+                        st.stop()
                     grouped_data = {}
                     
                     def clean_cell(c):
@@ -2093,39 +2102,48 @@ def render_deep_linkage(df_data):
                         col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
     
                     # 遍历每一行（跳过前两行表头）
-                    for r in range(3, ws.max_row + 1):
-                        p1 = clean_cell(ws.cell(row=r, column=1).value) # A列
-                        p2 = clean_cell(ws.cell(row=r, column=2).value) # B列
-                        p3 = clean_cell(ws.cell(row=r, column=3).value) # C列
-                        year_val = clean_cell(ws.cell(row=r, column=214).value) # HF列(214列)
+                    # all_rows 是二维数组，第1行索引为0，所以第3行索引为2
+                    for r_idx in range(2, len(all_rows)):
+                        row = all_rows[r_idx]
+                        
+                        # 安全获取数组元素的辅助函数，防止越界
+                        def get_val(c_idx):
+                            return clean_cell(row[c_idx]) if c_idx < len(row) else ""
+                            
+                        p1 = get_val(0) # A列 (索引0)
+                        p2 = get_val(1) # B列 (索引1)
+                        p3 = get_val(2) # C列 (索引2)
+                        year_val = get_val(213) # HF列(214列，索引213)
                         
                         if not p1 and not p2 and not p3: continue
                         if not year_val: year_val = "2026" 
                             
-                        period_str = f"{year_val}{p1}{p2}{p3}"
+                        period_str = f"{year_val}{p1}{p2}{p3}"    
                         
                         # ?? 防覆盖盾：如果这期已经有了，绝对不让后面的脏行覆盖
                         if period_str in grouped_data:
                             continue
                             
+                        
                         ball_attrs = []
                         for ball_i in range(7):
                             col_letter = col_names[ball_i]
+                            col_idx = column_index_from_string(col_letter) # 1 开始的列号
                             
                             if "数字" in mode:
-                                # 数字模式，取当前字母列（十位）和它的下一列（个位）
-                                col_idx = column_index_from_string(col_letter)
-                                next_col_letter = get_column_letter(col_idx + 1)
-                                tens = clean_cell(ws[f"{col_letter}{r}"].value)
-                                units = clean_cell(ws[f"{next_col_letter}{r}"].value)
+                                # 数组是从 0 开始的，所以列号要减 1
+                                tens = get_val(col_idx - 1)
+                                units = get_val(col_idx) # 下一列（个位）
                                 if not tens: tens = "0"
                                 if not units: units = "0"
                                 val = f"{tens}{units}"
                             else:
-                                # 生肖和尾数，直接取对应字母列
-                                val = clean_cell(ws[f"{col_letter}{r}"].value)
+                                # 生肖和尾数，直接取对应列的数组值
+                                val = get_val(col_idx - 1)
                                 
-                            ball_attrs.append(val)
+                            ball_attrs.append(val) 
+                                
+                            
                             
                         grouped_data[period_str] = ball_attrs
                             
