@@ -478,160 +478,136 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # ==== 模块一：一键全量抓取 (1976年至今) ====
-        # ==== 功能：从开源仓库拉取全量数据，计算属性，静默写入 Supabase ====
+        # ==== 模块一：一键重建数据库 (真实落球顺序完美版) ====
+        # ==== 逻辑：开源数据(升序) + kitce真实顺序(按序) 写入数据库 ====
         # ==========================================
         
-        if st.button("🚀 从正规数据源重建数据库 (1976年至今)", use_container_width=True, type="primary"):
+        if st.button("🚀 合并双源重建数据库 (补齐最新期数)", use_container_width=True, type="primary"):
             import requests
             import io
             import pandas as pd
-            from datetime import datetime
+            import zipfile
+            import json
             
             status_container = st.container()
             
             with status_container:
-                st.write("⏳ [1/4] 开始从 CDN 下载 1976 年至今的历史数据...")
-                
+                st.write("⏳ [1/5] 开始下载基础历史数据 (1976年至今)...")
                 try:
-                    url = "https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json"
-                    res = requests.get(url, timeout=30)
+                    # 1. 下载 1976 年的底表 (只有升序)
+                    url1 = "https://cdn.jsdelivr.net/gh/kenchudigital/ML-SixMark-Lab@main/data/data.json"
+                    res1 = requests.get(url1, timeout=30)
+                    if res1.status_code != 200:
+                        st.error("❌ 基础历史数据下载失败！")
+                        st.stop()
+                    df_hist = pd.read_json(io.StringIO(res1.text))
+                    cols1 = {str(c).lower(): c for c in df_hist.columns}
                     
-                    if res.status_code != 200:
-                        st.error(f"❌ 下载失败！状态码: {res.status_code}")
+                    # 2. 下载包含真实落球顺序的 kitce 数据 (1993年至今)
+                    st.write("⏳ [2/5] 正在下载真实落球顺序数据 (1993年至今，文件较大请稍候)...")
+                    url2 = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
+                    res2 = requests.get(url2, timeout=120)
+                    if res2.status_code != 200:
+                        st.error("❌ kitce真实顺序数据下载失败！")
                         st.stop()
                         
-                    st.write(f"✅ [2/4] 下载成功！文件大小: {len(res.text)} 字节，正在解析...")
+                    st.write("✅ 双源数据下载成功，正在解析中...")
                     
-                    try:
-                        df = pd.read_json(io.StringIO(res.text))
-                    except Exception as parse_err:
-                        st.error(f"❌ 解析失败！错误信息: {parse_err}")
-                        st.stop()
-                        
-                    st.write(f"✅ 解析成功！共获取 {len(df)} 行原始数据。")
-                    
-                    cols = {str(c).lower(): c for c in df.columns}
-                    year_col = cols.get("year")
-                    no_col = cols.get("times", cols.get("no", cols.get("issue")))
-                    special_col = cols.get("s1", cols.get("special"))
-                    date_col = cols.get("date") # 获取日期列用于过滤未来数据
-                    num_cols = [cols.get(f"n{i}") for i in range(1, 7)]
-                    
-                    if not year_col or not no_col or not special_col or None in num_cols:
-                        st.error(f"❌ 字段缺失！未能识别所有的必需列。")
-                        st.stop()
-                        
-                    client = get_supabase_client()
-                    if not client:
-                        st.stop()
-                        
-                    st.write("🧹 正在清空 Supabase 中的旧错误数据...")
-                    client.table("full_asc").delete().neq("期数", "0").execute()
-                    client.table("full_desc").delete().neq("期数", "0").execute()
-                    st.write("✅ 旧数据已清空。")
-                    
-                    asc_data, desc_data = [], []
-                    total_records = len(df)
-                    skipped_count = 0
-                    future_count = 0 # 记录过滤掉的未来假数据
-                    
-                    def clean_num(val):
-                        if pd.isna(val): return 0
-                        s = str(val).split('.')[0].strip()
-                        return int(s) if s.isdigit() else 0
-                        
-                    st.write("⚙️ 正在计算 214 列属性并组装数据（自动过滤未开奖假数据）...")
-                    for idx, row in df.iterrows():
-                        try:
-                            # === 核心修复：过滤未来的未开奖数据 ===
-                            if date_col:
-                                try:
-                                    draw_date = pd.to_datetime(row[date_col])
-                                    if draw_date > pd.Timestamp.now():
-                                        future_count += 1
-                                        continue # 如果开奖日期大于今天，直接跳过
-                                except:
-                                    pass
-                                    
-                            y_val = str(row[year_col]).split('.')[0]
-                            no_raw = str(row[no_col]).split('.')[0].strip()
-                            no_digits = ''.join(c for c in no_raw if c.isdigit())
-                            if not no_digits: 
-                                skipped_count += 1
-                                continue
-                            no_val = no_digits.zfill(3)[-3:]
-                            
-                            period_raw = f"{y_val}{no_val}"
-                            
-                            nums = [clean_num(row[c]) for c in num_cols]
-                            special = clean_num(row[special_col])
-                            
-                            if len(nums) != 6 or special == 0 or any(n == 0 or n > 49 for n in nums):
-                                skipped_count += 1
+                    # 解析 kitce 的真实落球顺序
+                    real_desc_dict = {}
+                    with zipfile.ZipFile(io.BytesIO(res2.content)) as z:
+                        json_files = [f for f in z.namelist() if f.endswith('.json') and 'records' in f]
+                        for jf in json_files:
+                            try:
+                                with z.open(jf) as f:
+                                    item = json.load(f)
+                                    date_str = item.get("date", "")
+                                    raw_id = item.get("id", "")
+                                    nums = item.get("numbers", [])
+                                    special = item.get("special", 0)
+                                    if len(nums) == 6 and special and raw_id:
+                                        y = date_str[:4]
+                                        p = raw_id.split('/')[-1].zfill(3)
+                                        p_str = f"{y}{p}"
+                                        real_desc_dict[p_str] = nums + [special]
+                            except:
                                 continue
                                 
-                            desc_nums = nums + [special]
-                            asc_nums = sorted(nums) + [special]
-                            p1, p2, p3 = no_val[0], no_val[1], no_val[2]
+                    st.write(f"✅ 解析成功！获取到了 {len(real_desc_dict)} 期真实落球顺序。")
+                    
+                    client = get_supabase_client()
+                    if not client: st.stop()
+                    
+                    st.write("🧹 [3/5] 正在清空 Supabase 旧数据...")
+                    client.table("full_asc").delete().neq("期数", "0").execute()
+                    client.table("full_desc").delete().neq("期数", "0").execute()
+                    
+                    asc_data_dict, desc_data_dict = {}, {}
+                    
+                    def build_row(p_str, nums):
+                        year_val = p_str[:4]
+                        no_val = p_str[4:].zfill(3)[-3:]
+                        p1, p2, p3 = no_val[0], no_val[1], no_val[2]
+                        row = {"1": p1, "2": p2, "3": p3, "214": year_val}
+                        for b_idx, b_num in enumerate(nums):
+                            base = 4 + b_idx * 30
+                            row[str(base)] = str(b_num // 10)
+                            row[str(base+1)] = str(b_num % 10)
+                            attrs = calculate_all_attributes(b_num)
+                            for a_idx, attr in enumerate(attrs):
+                                row[str(base + 2 + a_idx)] = str(attr)
+                        return row
+
+                    st.write("⚙️ [4/5] 正在合并数据并计算 214 列属性...")
+                    
+                    # 1. 先遍历 1976-1992 的数据
+                    year_col, no_col, special_col = cols1.get("year"), cols1.get("times"), cols1.get("s1")
+                    num_cols = [cols1.get(f"n{i}") for i in range(1, 7)]
+                    
+                    for _, row in df_hist.iterrows():
+                        try:
+                            y_val = str(row[year_col]).split('.')[0]
+                            no_val = ''.join(c for c in str(row[no_col]).split('.')[0] if c.isdigit()).zfill(3)[-3:]
+                            p_str = f"{y_val}{no_val}"
                             
-                            # 组装按序
-                            row_desc = {"1": p1, "2": p2, "3": p3, "214": y_val}
-                            for b_idx, b_num in enumerate(desc_nums):
-                                base = 4 + b_idx * 30
-                                row_desc[str(base)] = str(b_num // 10)
-                                row_desc[str(base+1)] = str(b_num % 10)
-                                attrs = calculate_all_attributes(b_num)
-                                for a_idx, attr in enumerate(attrs):
-                                    row_desc[str(base + 2 + a_idx)] = str(attr)
-                            desc_data.append({"期数": period_raw, "data": row_desc})
+                            # 如果这个期数在 kitce 真实库里已经有了，直接跳过，后面统一用真实顺序
+                            if p_str in real_desc_dict:
+                                continue
+                                
+                            nums = [int(str(row[c]).split('.')[0] or 0) for c in num_cols]
+                            sp = int(str(row[special_col]).split('.')[0] or 0)
                             
-                            # 组装升序
-                            row_asc = {"1": p1, "2": p2, "3": p3, "214": y_val}
-                            for b_idx, b_num in enumerate(asc_nums):
-                                base = 4 + b_idx * 30
-                                row_asc[str(base)] = str(b_num // 10)
-                                row_asc[str(base+1)] = str(b_num % 10)
-                                attrs = calculate_all_attributes(b_num)
-                                for a_idx, attr in enumerate(attrs):
-                                    row_asc[str(base + 2 + a_idx)] = str(attr)
-                            asc_data.append({"期数": period_raw, "data": row_asc})
-                            
-                        except Exception as loop_err:
-                            skipped_count += 1
+                            if len(nums) == 6 and sp > 0 and all(0 < n <= 49 for n in nums):
+                                asc_nums = sorted(nums) + [sp]
+                                desc_nums = nums + [sp] # 1976-1992 只能强制用升序当按序
+                                asc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, asc_nums)}
+                                desc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, desc_nums)}
+                        except:
                             continue
                             
-                    # 强制去重
-                    unique_asc_dict = {item["期数"]: item for item in asc_data}
-                    unique_desc_dict = {item["期数"]: item for item in desc_data}
+                    # 2. 再把 kitce 的 1993 至今的真实数据合并进来
+                    for p_str, real_nums in real_desc_dict.items():
+                        if len(real_nums) == 7:
+                            asc_nums = sorted(real_nums[:6]) + [real_nums[6]]
+                            desc_nums = real_nums # 真实落球顺序
+                            asc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, asc_nums)}
+                            desc_data_dict[p_str] = {"期数": p_str, "data": build_row(p_str, desc_nums)}
+
+                    final_asc = list(asc_data_dict.values())
+                    final_desc = list(desc_data_dict.values())
                     
-                    final_asc = list(unique_asc_dict.values())
-                    final_desc = list(unique_desc_dict.values())
+                    st.write(f"✅ 合并完成！共计 {len(final_asc)} 期，最新一期为：{max(asc_data_dict.keys())}")
                     
-                    st.write(f"✅ 数据处理完毕：去重后有效期为 {len(final_asc)} 期。")
-                    if future_count > 0:
-                        st.write(f"🛡️ 已成功过滤掉 {future_count} 期尚未开奖的未来占位假数据。")
+                    # 3. 写入 Supabase
+                    st.write("💾 [5/5] 正在分批写入 Supabase 数据库...")
+                    for i in range(0, len(final_asc), 200):
+                        chunk_asc = final_asc[i:i+200]
+                        chunk_desc = final_desc[i:i+200]
+                        client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
+                        client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
+                        st.write(f"⌛ 已写入 {min(i+200, len(final_asc))} / {len(final_asc)} 期...")
                         
-                    if len(final_asc) == 0:
-                        st.error("❌ 严重错误：计算后有效数据仍然为 0 期。")
-                        st.stop()
-                        
-                    st.write("💾 [3/4] 正在分批写入 Supabase 数据库，请勿刷新页面...")
-                    batch_size = 200
-                    for i in range(0, len(final_asc), batch_size):
-                        chunk_asc = final_asc[i:i+batch_size]
-                        chunk_desc = final_desc[i:i+batch_size]
-                        
-                        try:
-                            client.table("full_asc").upsert(chunk_asc, on_conflict="期数").execute()
-                            client.table("full_desc").upsert(chunk_desc, on_conflict="期数").execute()
-                        except Exception as db_err:
-                            st.error(f"❌ 写入数据库失败 (第 {i} 条起): {db_err}")
-                            st.stop()
-                            
-                        st.write(f"⌛ 已写入 {min(i+batch_size, len(final_asc))} / {len(final_asc)} 期...")
-                        
-                    st.success(f"🎉 [4/4] 大功告成！已成功用 {len(final_asc)} 期正规数据重建数据库！")
+                    st.success(f"🎉 大功告成！已成功用真实落球顺序重建 {len(final_asc)} 期完美数据！")
                     
                 except Exception as e:
                     st.error(f"❌ 执行中发生致命错误: {e}")
