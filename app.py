@@ -487,80 +487,96 @@ def render_console(df_data):
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                with st.spinner("正在从云端下载全量真实数据并生成 Excel..."):
-                    import pandas as pd
-                    import requests
-                    import io
+                st.info("正在下载真实数据包...")
+                import pandas as pd
+                import requests
+                import io
+                import zipfile
+                import json
+                
+                try:
+                    zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
+                    res = requests.get(zip_url, timeout=120)
                     
-                    try:
-                        # 使用 Streamlit 云端服务器直接请求，无任何跨域限制
-                        url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
-                        res = requests.get(url, timeout=60)
+                    if res.status_code != 200:
+                        st.error(f"下载失败，状态码: {res.status_code}")
+                        st.stop()
                         
-                        if res.status_code != 200:
-                            st.error(f"下载数据失败，状态码: {res.status_code}")
-                            st.stop()
-                            
-                        raw_data = res.json()
+                    st.info("✅ 下载成功，正在深度解压并查找真实落球顺序...")
+                    desc_rows = []
+                    asc_rows = []
+                    file_count = 0
+                    
+                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                        # 暴力搜索所有 json 文件
+                        json_files = [f for f in z.namelist() if f.endswith('.json')]
+                        st.info(f"📦 压缩包内共找到 {len(json_files)} 个 JSON 文件")
                         
-                        desc_rows = []
-                        asc_rows = []
-                        
-                        # 遍历并提取全量真实数据
-                        for item in raw_data:
-                            draw = item.get("draws", [{}])[0] if item.get("draws") else item
-                            date_str = draw.get("date", "")
-                            raw_id = draw.get("id", "")
-                            nums = draw.get("numbers", []) # 真实落球顺序
-                            special = draw.get("special", 0)
-                            
-                            if len(nums) == 6 and special:
-                                year = date_str[:4] if date_str else "1993"
-                                period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
-                                full_period = f"{year}{period_part}"
+                        for jf in json_files:
+                            try:
+                                with z.open(jf) as f:
+                                    item = json.load(f)
                                 
-                                # 按序表
-                                desc_rows.append([full_period] + nums + [special])
-                                # 升序表
-                                asc_rows.append([full_period] + sorted(nums) + [special])
+                                # 深度兼容：不管套了几层，只要里面有 numbers 和 special 就抓
+                                if isinstance(item, dict) and "numbers" in item:
+                                    nums = item.get("numbers", [])
+                                    special = item.get("special", 0)
+                                    raw_id = item.get("id", "")
+                                    date_str = item.get("date", "")
+                                    
+                                    if len(nums) == 6 and special and raw_id:
+                                        year = date_str[:4] if date_str else "1993"
+                                        period_part = str(raw_id).split('/')[-1].zfill(3)
+                                        full_period = f"{year}{period_part}"
+                                        
+                                        desc_rows.append([full_period] + nums + [special])
+                                        asc_rows.append([full_period] + sorted(nums) + [special])
+                                        file_count += 1
+                            except:
+                                continue
+                                
+                    if not desc_rows:
+                        st.error("❌ 解析完毕，但未能提取到有效数据！请截图此页联系我。")
+                        st.stop()
                         
-                        if not desc_rows:
-                            st.error("未能提取到有效数据，请稍后再试。")
-                            st.stop()
-                            
-                        # 按期数降序（最新在最上面）
-                        cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
-                        df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
-                        df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
-                        
-                        # 打包生成两个 Excel
-                        out_desc = io.BytesIO()
-                        with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
-                            df_desc.to_excel(writer, index=False)
-                        out_desc.seek(0)
-                        
-                        out_asc = io.BytesIO()
-                        with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
-                            df_asc.to_excel(writer, index=False)
-                        out_asc.seek(0)
-                        
-                        st.success(f"✅ 成功提取 {len(df_desc)} 期数据！")
-                        st.download_button(
-                            label="📥 下载【按序源文件.xlsx】",
-                            data=out_desc,
-                            file_name="按序源文件.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                        st.download_button(
-                            label="📥 下载【升序源文件.xlsx】",
-                            data=out_asc,
-                            file_name="升序源文件.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                    except Exception as e:
-                        st.error(f"出错了: {e}")
+                    st.success(f"🎉 成功提取 {file_count} 期真实数据！")
+                    
+                    # 转为 DataFrame
+                    cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+                    df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
+                    df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                    
+                    # 打包导出 Excel
+                    out_desc = io.BytesIO()
+                    with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                        df_desc.to_excel(writer, index=False)
+                    out_desc.seek(0)
+                    
+                    out_asc = io.BytesIO()
+                    with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                        df_asc.to_excel(writer, index=False)
+                    out_asc.seek(0)
+                    
+                    st.download_button(
+                        label="📥 下载【按序源文件.xlsx】",
+                        data=out_desc,
+                        file_name="按序源文件.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                    st.download_button(
+                        label="📥 下载【升序源文件.xlsx】",
+                        data=out_asc,
+                        file_name="升序源文件.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                    
+                except Exception as e:
+                    st.error(f"出错了: {e}")
+# ==========================================
+# 🔥 结束
+# ==========================================
 # ==========================================
 # 🔥 结束
 # ==========================================
