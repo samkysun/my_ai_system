@@ -2453,3 +2453,104 @@ if not st.session_state.logged_in:
     login_page()
 else: 
     main_app()
+#=========获取香港按序资料=========
+# =========================================================================
+# 🔥🔥🔥 独立侧边栏工具：马会官方真实落球数据下载 (方便删除，不影响主系统) 🔥🔥🔥
+# =========================================================================
+if st.sidebar.button("📦 下载马会官方真实落球 Excel", use_container_width=True):
+    with st.sidebar:
+        st.info("正在请求马会官方 GraphQL 接口...")
+        import pandas as pd
+        import requests
+        import io
+        
+        try:
+            url = "https://info.cld.hkjc.com/graphql/base/"
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+            payload = {
+                "query": """
+                query marksixResult($lastNDraw: Int) {
+                  lotteryDraws(lastNDraw: $lastNDraw) {
+                    id
+                    drawDate
+                    drawResult {
+                      drawnNo
+                      xDrawnNo
+                    }
+                  }
+                }
+                """,
+                "variables": {"lastNDraw": 50}
+            }
+            
+            res = requests.post(url, json=payload, headers=headers, timeout=20)
+            
+            if res.status_code != 200:
+                st.error(f"马会接口拒绝访问 (状态码 {res.status_code})。")
+                st.stop()
+                
+            data = res.json()
+            
+            if "data" not in data or not data["data"].get("lotteryDraws"):
+                st.error("官方返回了数据，但里面没有 lotteryDraws 字段。")
+                st.write("🔍 返回的原始内容：", data)
+                st.stop()
+                
+            draws = data["data"]["lotteryDraws"]
+            st.success(f"✅ 成功获取官方最新 {len(draws)} 期数据！")
+            
+            desc_rows, asc_rows = [], []
+            
+            for item in draws:
+                period = str(item.get("id", ""))
+                draw_result = item.get("drawResult", {})
+                drawn_nos = draw_result.get("drawnNo", []) 
+                special_nos = draw_result.get("xDrawnNo", []) 
+                
+                if len(drawn_nos) == 6 and special_nos:
+                    nums = [int(x) for x in drawn_nos]
+                    special = int(special_nos[0])
+                    
+                    desc_rows.append([period] + nums + [special])
+                    asc_rows.append([period] + sorted(nums) + [special])
+
+            if not desc_rows:
+                st.error("解析失败。")
+                st.stop()
+
+            cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+            df_desc = pd.DataFrame(desc_rows, columns=cols)
+            df_asc = pd.DataFrame(asc_rows, columns=cols)
+
+            out_desc, out_asc = io.BytesIO(), io.BytesIO()
+            with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                df_desc.to_excel(writer, index=False)
+            out_desc.seek(0)
+            with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                df_asc.to_excel(writer, index=False)
+            out_asc.seek(0)
+
+            st.info("👇 已生成完美官方数据，请下载：")
+            st.download_button(
+                label="📥 下载【按序源文件.xlsx】",
+                data=out_desc,
+                file_name="按序源文件.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            st.download_button(
+                label="📥 下载【升序源文件.xlsx】",
+                data=out_asc,
+                file_name="升序源文件.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        except Exception as e:
+            st.error(f"出错了: {e}")
+# =========================================================================
+# 🔥🔥🔥 独立工具结束 (以后想删，从这里往上全选删掉即可) 🔥🔥🔥
+# =========================================================================
