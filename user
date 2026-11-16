@@ -1,4 +1,5 @@
 import streamlit as st
+st.write("🔥🔥🔥 如果你看到这行红字，说明新代码绝对生效了！ 🔥🔥🔥")
 import pandas as pd
 import hashlib
 import time
