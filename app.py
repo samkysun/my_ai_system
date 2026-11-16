@@ -483,37 +483,46 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (香港马会官方真序版)
+        # 🔥 终极独立下载工具 (香港马会 GraphQL 官方版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在向香港赛马会官方接口请求真实落球数据...")
+                st.info("正在向香港马会官方 GraphQL 接口请求数据...")
                 import pandas as pd
                 import requests
                 import io
-                import json
                 
                 try:
-                    # 🔥 直接请求香港赛马会官方接口，获取最近30期真实数据
-                    url = "https://bet.hkjc.com/contentserver/jcbw/cmc/last30draw.json"
-                    res = requests.get(url, timeout=15)
+                    # 🔥 香港马会最新官方接口
+                    url = "https://info.cld.hkjc.com/graphql/base/"
+                    headers = {"Content-Type": "application/json"}
+                    
+                    # 请求最近 200 期的真实数据
+                    payload = {
+                        "query": """
+                        query marksixResult($lastNDraw: Int) {
+                          lotteryDraws(lastNDraw: $lastNDraw) {
+                            id
+                            drawDate
+                            drawResult {
+                              drawnNo
+                              xDrawnNo
+                            }
+                          }
+                        }
+                        """,
+                        "variables": {"lastNDraw": 200}
+                    }
+                    
+                    res = requests.post(url, json=payload, headers=headers, timeout=30)
                     
                     if res.status_code != 200:
                         st.error(f"官方接口请求失败，状态码: {res.status_code}")
                         st.stop()
                         
-                    raw_data = res.json()
+                    data = res.json()
+                    draws = data.get("data", {}).get("lotteryDraws", [])
                     
-                    # 兼容官方接口的不同嵌套层级
-                    draws = []
-                    if isinstance(raw_data, dict):
-                        if "draws" in raw_data:
-                            draws = raw_data["draws"]
-                        elif "content" in raw_data:
-                            draws = raw_data["content"]
-                    elif isinstance(raw_data, list):
-                        draws = raw_data
-                        
                     if not draws:
                         st.error("❌ 官方接口返回了数据，但没有找到开奖记录。")
                         st.stop()
@@ -523,30 +532,24 @@ def render_console(df_data):
                     desc_rows, asc_rows = [], []
                     
                     for item in draws:
-                        # 马会官方字段：id是期数，drawnNo是落球顺序，xDrawnNo是特码
-                        raw_id = str(item.get("id", "")) # 如 "24/001"
-                        date_str = str(item.get("date", ""))
+                        period = str(item.get("id", "")) # 格式如 "2024001"
+                        date_str = str(item.get("drawDate", ""))
                         
-                        # 提取平码（有些字段可能是 drawnNoSorted，我们只要 drawnNo）
-                        drawn_nos = item.get("drawnNo", [])
-                        special = item.get("xDrawnNo", 0)
+                        draw_result = item.get("drawResult", {})
+                        drawn_nos = draw_result.get("drawnNo", [])
+                        special = draw_result.get("xDrawnNo", [])
                         
-                        if raw_id and len(drawn_nos) == 6 and special:
+                        if len(drawn_nos) == 6 and special:
                             try:
                                 nums = [int(x) for x in drawn_nos]
-                                special = int(special)
+                                special_num = int(special[0])
                             except:
                                 continue
                                 
-                            # 格式化期数：从 "24/001" 转为 "2024001"
-                            year_short, period = raw_id.split('/')
-                            year = f"20{year_short}"
-                            full_period = f"{year}{period.zfill(3)}"
-                            
                             # 按序：真实落球顺序
-                            desc_rows.append([full_period] + nums + [special])
+                            desc_rows.append([period] + nums + [special_num])
                             # 升序：排序后
-                            asc_rows.append([full_period] + sorted(nums) + [special])
+                            asc_rows.append([period] + sorted(nums) + [special_num])
         
                     if not desc_rows:
                         st.error("❌ 解析失败。")
