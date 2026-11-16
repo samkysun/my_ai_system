@@ -147,7 +147,7 @@ def clean_period(val):
 #============改变页面跳转时的卡顿问题代码👇========================    
 @st.cache_data(ttl=86400, show_spinner=False) # 改成 24 小时
 #============改变页面跳转时的卡顿问题代码👆========================
-def load_real_data(): 
+ 
 def load_real_data():
     import requests
     import io
