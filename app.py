@@ -474,10 +474,14 @@ def render_console(df_data):
 
    
    
+   
     # ==========================================
     # 👇 ============ 开始：管理员专属模块 ============ 👇
     # ==========================================
+    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
     
+    if st.session_state.username == admin_name:
+        
         # ------------------------------------------
         # 子模块 1：生成纯净源文件并下载
         # 作用：拉取全量真实数据，生成方便你手工填写的 Excel
@@ -505,7 +509,6 @@ def render_console(df_data):
                     
                     # 在内存中直接解压
                     with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                        # 提取所有记录 JSON 文件
                         json_files = [f for f in z.namelist() if f.endswith('.json') and 'records' in f]
                         
                         for jf in json_files:
@@ -553,7 +556,7 @@ def render_console(df_data):
                     col_dl1, col_dl2 = st.columns(2)
                     with col_dl1:
                         st.download_button(
-                            label="📥 下载【按序_真实出球.xlsx】",
+                            label="📥 下载【按序源文件.xlsx】",
                             data=out_desc,
                             file_name="按序源文件.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -562,7 +565,7 @@ def render_console(df_data):
                         )
                     with col_dl2:
                         st.download_button(
-                            label="📥 下载【升序_从小到大.xlsx】",
+                            label="📥 下载【升序源文件.xlsx】",
                             data=out_asc,
                             file_name="升序源文件.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -572,7 +575,6 @@ def render_console(df_data):
                 except Exception as e:
                     st.error(f"生成失败: {e}")
 
-        # 分割线，隔开下载模块和手动补录模块
         st.divider()
 
         # ------------------------------------------
@@ -606,18 +608,15 @@ def render_console(df_data):
                     elif len(set(nums)) < 7:
                         st.error("录入的 7 个号码中有重复，请检查！")
                     else:
-                        # 1. 准备数据 (按序 和 升序)
                         raw_nums = nums.copy()
                         asc_nums = sorted(nums[:6]) + [nums[6]]
                         
-                        # 2. 获取 GitHub 配置
                         token = st.secrets.get("GITHUB_TOKEN")
                         repo = st.secrets.get("GITHUB_REPO") 
                         
                         if not token or not repo:
                             st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
                         else:
-                            # 3. 核心函数：拉取 -> 修改 -> 推送 GitHub
                             def update_github_excel(file_path, nums_list, commit_msg):
                                 import requests
                                 import openpyxl
@@ -630,7 +629,6 @@ def render_console(df_data):
                                         "Accept": "application/vnd.github.v3+json"
                                     }
                                     
-                                    # 3.1 获取文件的 SHA 和下载链接
                                     r = requests.get(api_url, headers=headers)
                                     if r.status_code != 200:
                                         return False, f"找不到云端文件或API错误: {r.status_code}"
@@ -638,17 +636,13 @@ def render_console(df_data):
                                     file_info = r.json()
                                     sha = file_info["sha"]
                                     download_url = file_info["download_url"]
-                                    
-                                    # 3.2 从云端下载现有 Excel
                                     file_content = requests.get(download_url).content
                                     
-                                    # 3.3 在内存中操作 openpyxl
                                     wb = openpyxl.load_workbook(io.BytesIO(file_content))
                                     if "数据源" not in wb.sheetnames:
                                         return False, "源文件中找不到“数据源”工作表"
                                     ws = wb["数据源"]
                                     
-                                    # 🔥 拦截重复期号（结合 AA 列年份）
                                     def get_cell_str(r, c):
                                         v = ws.cell(row=r, column=c).value
                                         if v is None: return ""
@@ -665,18 +659,12 @@ def render_console(df_data):
                                         if r_year == current_year and r_p1 == p1 and r_p2 == p2 and r_p3 == p3:
                                             return False, f"{current_year}年的 {p1}-{p2}-{p3} 期已经存在，禁止重复录入！"
                                     
-                                    # 3.4 强制在第 3 行插入空白行
                                     ws.insert_rows(3)
-                                    
-                                    # 3.5 写入期号 (A, B, C 列)
                                     ws.cell(row=3, column=1, value=p1)
                                     ws.cell(row=3, column=2, value=p2)
                                     ws.cell(row=3, column=3, value=p3)
-                                    
-                                    # 3.6 写入年份 (AA列 第27列)
                                     ws.cell(row=3, column=27, value=year_val)
                                     
-                                    # 3.7 写入7个号码
                                     for i, num in enumerate(nums_list):
                                         tens = num // 10
                                         units = num % 10
@@ -685,17 +673,15 @@ def render_console(df_data):
                                         ws.cell(row=3, column=col_tens, value=str(tens))
                                         ws.cell(row=3, column=col_units, value=str(units))
                                     
-                                    # 3.8 保存到内存字节流
                                     output = io.BytesIO()
                                     wb.save(output)
                                     b64_content = base64.b64encode(output.getvalue()).decode('utf-8')
                                     
-                                    # 3.9 推送到 GitHub (覆盖原文件)
                                     payload = {
                                         "message": commit_msg,
                                         "content": b64_content,
                                         "sha": sha,
-                                        "branch": "main" # 如果你的分支叫 master，请改成 master
+                                        "branch": "main"
                                     }
                                     
                                     put_res = requests.put(api_url, headers=headers, json=payload)
@@ -708,11 +694,8 @@ def render_console(df_data):
                                 except Exception as e:
                                     return False, str(e)
     
-                            # 4. 执行双写
                             with st.spinner("正在覆盖更新 GitHub 云端的两个 Excel 文件..."):
-                                # 先更新升序源文件
                                 s1, m1 = update_github_excel("升序源文件.xlsx", asc_nums, f"更新升序数据 {year_val}-{p1}{p2}{p3}")
-                                # 再更新按序源文件
                                 s2, m2 = update_github_excel("按序源文件.xlsx", raw_nums, f"更新按序数据 {year_val}-{p1}{p2}{p3}")
                                 
                                 if s1 and s2:
@@ -722,6 +705,11 @@ def render_console(df_data):
                                 else:
                                     if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
                                     if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
+
+    st.divider()
+    # ==========================================
+    # 👆 ============ 结束：管理员专属模块 ============ 👆
+    # ==========================================
 
     st.divider()
     # ==========================================
