@@ -1992,15 +1992,20 @@ def render_multi_analysis(df_data):
             if not res_lines:
                 st.markdown(
                     """
-                    <div id="auto-dismiss-alert" style="background-color:#fef08a; color:#854d0e; padding:12px; border-radius:6px; text-align:center; font-weight:bold; margin-bottom:10px;">
+                    <style>
+                    @keyframes slideFadeOut {
+                        0% { opacity: 1; max-height: 50px; padding: 12px; margin-bottom: 10px;}
+                        80% { opacity: 1; max-height: 50px; padding: 12px; margin-bottom: 10px;}
+                        100% { opacity: 0; max-height: 0; padding: 0; margin-bottom: 0; border: none; overflow: hidden;}
+                    }
+                    .auto-hide-alert {
+                        background-color: #fef08a; color: #854d0e; border-radius: 6px; text-align: center; font-weight: bold;
+                        animation: slideFadeOut 2s forwards;
+                    }
+                    </style>
+                    <div class="auto-hide-alert">
                         ⚠️ 未找到符合条件的匹配记录
                     </div>
-                    <script>
-                        setTimeout(function(){
-                            var el = document.getElementById('auto-dismiss-alert');
-                            if(el) el.style.display = 'none';
-                        }, 2000);
-                    </script>
                     """, 
                     unsafe_allow_html=True
                 )
