@@ -22,7 +22,7 @@ EXCEL_FILE = "总数据.xlsx"
 SHEET_NAME = "总数据表" 
 DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
 
-# 数据库连接配置
+# 🔥 改为使用你 Secrets 里的原始参数建立客户端
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -31,6 +31,7 @@ def get_supabase_client():
     if not SUPABASE_URL or not SUPABASE_KEY: return None
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# 密码加密
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -44,7 +45,7 @@ if "predicted_nums_single" not in st.session_state: st.session_state.predicted_n
 if "predicted_nums_multi" not in st.session_state: st.session_state.predicted_nums_multi = None
 
 # ==========================================
-# 2. 核心引擎：属性计算器 (原版保留)
+# 2. 核心引擎：28个属性纯代码计算器 (保留原版)
 # ==========================================
 NUM_WUXING = {1: "水", 2: "火", 3: "火", 4: "金", 5: "金", 6: "土", 7: "土", 8: "木", 9: "木", 10: "火", 11: "火", 12: "金", 13: "金", 14: "水", 15: "水", 16: "木", 17: "木", 18: "火", 19: "火", 20: "土", 21: "土", 22: "水", 23: "水", 24: "木", 25: "木", 26: "金", 27: "金", 28: "土", 29: "土", 30: "水", 31: "水", 32: "火", 33: "火", 34: "金", 35: "金", 36: "土", 37: "土", 38: "木", 39: "木", 40: "火", 41: "火", 42: "金", 43: "金", 44: "水", 45: "水", 46: "木", 47: "木", 48: "火", 49: "火"}
 NUM_ZODIAC = {1: "马", 2: "蛇", 3: "龙", 4: "兔", 5: "虎", 6: "牛", 7: "鼠", 8: "猪", 9: "狗", 10: "鸡", 11: "猴", 12: "羊", 13: "马", 14: "蛇", 15: "龙", 16: "兔", 17: "虎", 18: "牛", 19: "鼠", 20: "猪", 21: "狗", 22: "鸡", 23: "猴", 24: "羊", 25: "马", 26: "蛇", 27: "龙", 28: "兔", 29: "虎", 30: "牛", 31: "鼠", 32: "猪", 33: "狗", 34: "鸡", 35: "猴", 36: "羊", 37: "马", 38: "蛇", 39: "龙", 40: "兔", 41: "虎", 42: "牛", 43: "鼠", 44: "猪", 45: "狗", 46: "鸡", 47: "猴", 48: "羊", 49: "马"}
@@ -75,7 +76,7 @@ def calculate_all_attributes(num):
     return [NUM_WUXING.get(n, ""), z, str(tail), NUM_HE.get(n, ""), NUM_MEN.get(n, ""), NUM_DUAN.get(n, ""), NUM_SINGLE_DOUBLE.get(n, ""), "单笔" if z in ["鼠", "龙", "蛇", "马", "鸡", "猪"] else "双笔", "独字" if z in ["鼠", "牛", "虎", "兔", "马", "羊"] else "合字", "单头" if (n // 10) in [1, 3] else "双头", "单数" if n % 2 != 0 else "双数", f"{NUM_BOSE.get(n, '')}{'单数' if n % 2 != 0 else '双数'}", ZODIAC_WUXING.get(z, ""), ZODIAC_COLOR.get(z, ""), ZODIAC_FOUR_TREASURES.get(z, ""), ZODIAC_OBJECT_IMAGE.get(z, ""), NUM_BOSE.get(n, ""), "阳" if z in YANG_ZODIACS else "阴", "家" if z in JIA_ZODIACS else "野", "天" if z in TIAN_ZODIACS else "地", f"{'阳' if z in YANG_ZODIACS else '阴'}{'天' if z in TIAN_ZODIACS else '地'}", "凶" if z in XIONG_ZODIACS else "吉", "男" if z in NAN_ZODIACS else "女", ZODIAC_DIRECTION.get(z, ""), f"3余{tail % 3}", TAIL_WUXING.get(tail, ""), ZODIAC_FU_LU_SHOU.get(z, ""), ZODIAC_SIZE.get(z, "")]
 
 # ==========================================
-# 3. 数据加载逻辑
+# 3. 基础数据加载 (保留原版)
 # ==========================================
 def get_ball_color(num):
     red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46]
@@ -153,7 +154,7 @@ def load_excel_data(file_path, sheet_name=None):
     except: return []
 
 # ==========================================
-# 4. 核心算法引擎
+# 4. 核心算法引擎 (保留原版)
 # ==========================================
 def generate_20_combos(nums):
     combos = list(itertools.combinations(nums, 3))
@@ -235,7 +236,7 @@ def calculate_prize(df_data, target_period, predicted_nums):
     return result, None
 
 # ==========================================
-# 5. 页面渲染函数 (保留原版)
+# 5. 各页面渲染 (保留原版)
 # ==========================================
 def render_trend_chart(df_data):
     st.divider()
@@ -785,7 +786,6 @@ def render_ai(df_data):
         st.download_button(label="📥 保存完整推演报告到本地 (TXT格式)", data=full_result_text.encode('utf-8-sig'), file_name=f"AI推演_{qishu}_{qiu}_{order_type}.txt", mime="text/plain", use_container_width=True)
     else: st.info("👈 请先在上方设置参数，然后点击【开始推演】。")
 
-# 附属函数
 @st.cache_data(ttl=3600, show_spinner=False)
 def build_rule_database():
     try:
@@ -963,13 +963,16 @@ def render_console(df_data):
     else: st.info("暂无中出结果。")
 
 # ==========================================
-# 6. 管理员专属后台管理页
+# 6. 管理员专属后台管理页 (完全体)
 # ==========================================
 def render_admin_panel():
     st.title("⚙️ 系统后台管理中心")
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
-    tab1, tab2 = st.tabs(["👑 用户 VIP 授权", "📝 数据同步与录入"])
+    token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
     
+    tab1, tab2, tab3 = st.tabs(["👑 用户 VIP 授权", "📝 数据录入与同步", "☁️ 云端数据流转"])
+    
+    # --- 标签 1：VIP 授权 ---
     with tab1:
         try:
             client = get_supabase_client()
@@ -987,7 +990,8 @@ def render_admin_panel():
                         st.success("✅ 授权已更新！")
                 else: st.warning("暂无其他注册用户。")
         except Exception as e: st.error(f"读取失败: {e}")
-        
+
+    # --- 标签 2：手动补录 ---
     with tab2:
         st.markdown("### 📝 手动补录开奖数据 (云端同步)")
         with st.form("manual_input_form", clear_on_submit=True):
@@ -1015,8 +1019,6 @@ def render_admin_panel():
                 else:
                     raw_nums = nums.copy()
                     asc_nums = sorted(nums[:6]) + [nums[6]]
-                    token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
-                    
                     if not token or not repo: st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
                     else:
                         def update_github_excel(file_path, nums_list, commit_msg):
@@ -1067,6 +1069,169 @@ def render_admin_panel():
                             else:
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
                                 if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
+
+    # --- 标签 3：云端数据流转 (找回丢失的核心按钮) ---
+    with tab3:
+        st.markdown("### ☁️ 云端数据流转控制台")
+        col_sync1, col_sync2 = st.columns(2)
+        
+        with col_sync1:
+            if st.button("🚀 同步【升序源文件】至【总数据表】", use_container_width=True, type="primary"):
+                with st.spinner("正在合并总表..."):
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                            def get_info(fp):
+                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
+                                return r.json() if r.status_code == 200 else None
+                            
+                            src_info = get_info("升序源文件.xlsx")
+                            if not src_info: st.error("找不到升序源文件"); st.stop()
+                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name="数据源", header=None)
+                            
+                            m_file = "总数据.xlsx" 
+                            m_info = get_info(m_file)
+                            if not m_info: st.error("找不到总数据文件"); st.stop()
+                            
+                            wb = openpyxl.load_workbook(io.BytesIO(requests.get(m_info["download_url"]).content))
+                            ws = wb["总数据表"]
+                            
+                            if ws.max_row > 2: ws.delete_rows(3, ws.max_row)
+                                
+                            def clean_val(v):
+                                if pd.isna(v) or v is None: return ""
+                                try: return str(int(float(v)))
+                                except: return str(v).strip()
+                                
+                            row_idx = 3
+                            for idx, row in df_src.iterrows():
+                                if idx < 2: continue
+                                p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
+                                if not p1 and not p2 and not p3: continue
+                                y_val = clean_val(row[26]) if len(row) > 26 else "2026"
+                                
+                                ws.cell(row=row_idx, column=1, value=p1); ws.cell(row=row_idx, column=2, value=p2); ws.cell(row=row_idx, column=3, value=p3)
+                                
+                                for i in range(7):
+                                    t = clean_val(row[3 + i*2]) if len(row) > 3 + i*2 else ""
+                                    u = clean_val(row[4 + i*2]) if len(row) > 4 + i*2 else ""
+                                    ws.cell(row=row_idx, column=4 + i*2, value=t)
+                                    ws.cell(row=row_idx, column=5 + i*2, value=u)
+                                    
+                                ws.cell(row=row_idx, column=19, value=f"{y_val}{p1}{p2}{p3}")
+                                
+                                for i in range(7):
+                                    t = clean_val(row[3 + i*2]) if len(row) > 3 + i*2 else ""
+                                    u = clean_val(row[4 + i*2]) if len(row) > 4 + i*2 else ""
+                                    num = int(t)*10 + int(u) if t.isdigit() and u.isdigit() else 0
+                                    if i < 6: ws.cell(row=row_idx, column=20 + i, value=num)
+                                    else: ws.cell(row=row_idx, column=26, value=num)
+                                        
+                                ws.cell(row=row_idx, column=27, value=y_val)
+                                row_idx += 1
+                                
+                            out = io.BytesIO(); wb.save(out)
+                            res = requests.put(f"https://api.github.com/repos/{repo}/contents/{m_file}", headers=headers, json={"message": "更新总数据表", "content": base64.b64encode(out.getvalue()).decode('utf-8'), "sha": m_info["sha"], "branch": "main"})
+                            
+                            if res.status_code in [200, 201]:
+                                st.success("✅ 总数据表已完美更新！")
+                                load_real_data.clear()
+                            else: st.error(f"❌ 推送失败: {res.text}")
+                        except Exception as e: st.error(f"异常: {e}")
+                        
+        with col_sync2:
+            if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
+                with st.spinner("正在计算 214 列属性并同步..."):
+                    if not token or not repo:
+                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+                    else:
+                        try:
+                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                            def get_info(fp):
+                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
+                                return r.json() if r.status_code == 200 else None
+                            
+                            def sync_attrs(src_f, dst_f, table_name):
+                                import csv
+                                s_info = get_info(src_f)
+                                if not s_info: return False, f"找不到 {src_f}"
+                                wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
+                                ws_src = wb_src["数据源"]
+                                
+                                def clean_val(cell):
+                                    if cell is None: return ""
+                                    val = str(cell).strip()
+                                    if val.endswith(".0"): val = val[:-2]
+                                    return val
+
+                                p1, p2, p3 = clean_val(ws_src["A3"].value), clean_val(ws_src["B3"].value), clean_val(ws_src["C3"].value)
+                                year_val = clean_val(ws_src["AA3"].value) or "2026"
+                                period_str = f"{year_val}{p1}{p2}{p3}"
+                                
+                                d_info = get_info(dst_f)
+                                if not d_info: return False, f"找不到 {dst_f}"
+                                csv_content = requests.get(d_info["download_url"]).content
+                                
+                                try: text = csv_content.decode("utf-8-sig")
+                                except: text = csv_content.decode("gbk", errors="ignore")
+                                
+                                all_rows = list(csv.reader(io.StringIO(text)))
+                                if not all_rows: return False, f"{dst_f} 数据为空"
+                                
+                                if len(all_rows) > 2:
+                                    exist_row = all_rows[2]
+                                    if len(exist_row) >= 214 and f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}" == period_str:
+                                        return True, f"该期 ({period_str}) 已存在，跳过同步"
+
+                                new_row_dict = {}
+                                for n_idx in range(7):
+                                    tens = clean_val(ws_src.cell(row=3, column=4 + n_idx*2).value)
+                                    units = clean_val(ws_src.cell(row=3, column=5 + n_idx*2).value)
+                                    ball_num = int((tens if tens.isdigit() else "0") + (units if units.isdigit() else "0")) if (tens or units) else 0
+                                    
+                                    base_col = 4 + n_idx * 30
+                                    new_row_dict[str(base_col)] = str(ball_num // 10) if ball_num else ""
+                                    new_row_dict[str(base_col+1)] = str(ball_num % 10) if ball_num else ""
+                                    
+                                    if ball_num:
+                                        attrs = calculate_all_attributes(ball_num)
+                                        for a_idx, attr_val in enumerate(attrs): new_row_dict[str(base_col + 2 + a_idx)] = str(attr_val)
+                                    else:
+                                        for a_idx in range(28): new_row_dict[str(base_col + 2 + a_idx)] = ""
+                                            
+                                new_row_dict["1"], new_row_dict["2"], new_row_dict["3"] = p1, p2, p3
+                                new_row_dict["214"] = year_val
+                                
+                                all_rows.insert(2, [new_row_dict.get(str(i), "") for i in range(1, 215)])
+                                
+                                out_io = io.StringIO()
+                                csv.writer(out_io).writerows(all_rows)
+                                b64_content = base64.b64encode(out_io.getvalue().encode('utf-8-sig')).decode('utf-8')
+                                
+                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", headers=headers, json={"message": f"更新 {dst_f}", "content": b64_content, "sha": d_info["sha"], "branch": "main"})
+                                
+                                if res.status_code not in [200, 201]: return False, res.text
+                                
+                                try:
+                                    client = get_supabase_client()
+                                    if client: client.table(table_name).upsert({"期数": period_str, "data": new_row_dict}, on_conflict="期数").execute()
+                                except: pass
+                                    
+                                return True, "成功"
+
+                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.csv", "full_asc")
+                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.csv", "full_desc")
+                            
+                            if s1 and s2:
+                                st.success(f"✅ 极速同步成功！\n升序：{m1}\n按序：{m2}")
+                                load_excel_data.clear() 
+                            else:
+                                if not s1: st.error(f"❌ 升序失败: {m1}")
+                                if not s2: st.error(f"❌ 按序失败: {m2}")
+                        except Exception as e:
+                            st.error(f"运行异常: {e}")
 
 # ==========================================
 # 7. 登录与系统入口
