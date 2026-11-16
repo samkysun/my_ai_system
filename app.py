@@ -483,84 +483,70 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (香港马会 GraphQL 官方版)
+        # 🔥 终极独立下载工具 (反封锁代理版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在向香港马会官方 GraphQL 接口请求数据...")
+                st.info("正在通过海外节点请求真实落球数据...")
                 import pandas as pd
                 import requests
                 import io
-                
+                import json
+        
                 try:
-                    # 🔥 香港马会最新官方接口
-                    url = "https://info.cld.hkjc.com/graphql/base/"
-                    headers = {"Content-Type": "application/json"}
+                    # 使用公共代理绕过反爬，抓取 6hca 的真实落球数据
+                    target_api = "https://6hca.com/api/history?limit=100"
+                    proxy_url = "https://api.allorigins.win/raw?url=" + requests.utils.quote(target_api)
                     
-                    # 请求最近 200 期的真实数据
-                    payload = {
-                        "query": """
-                        query marksixResult($lastNDraw: Int) {
-                          lotteryDraws(lastNDraw: $lastNDraw) {
-                            id
-                            drawDate
-                            drawResult {
-                              drawnNo
-                              xDrawnNo
-                            }
-                          }
-                        }
-                        """,
-                        "variables": {"lastNDraw": 200}
-                    }
-                    
-                    res = requests.post(url, json=payload, headers=headers, timeout=30)
+                    res = requests.get(proxy_url, timeout=20)
                     
                     if res.status_code != 200:
-                        st.error(f"官方接口请求失败，状态码: {res.status_code}")
+                        st.error(f"代理请求失败，状态码: {res.status_code}")
                         st.stop()
                         
-                    data = res.json()
-                    draws = data.get("data", {}).get("lotteryDraws", [])
+                    raw_data = res.json()
                     
-                    if not draws:
-                        st.error("❌ 官方接口返回了数据，但没有找到开奖记录。")
+                    if isinstance(raw_data, dict) and "data" in raw_data:
+                        draws = raw_data["data"]
+                    elif isinstance(raw_data, list):
+                        draws = raw_data
+                    else:
+                        st.error("❌ 接口返回格式无法识别。")
                         st.stop()
                         
-                    st.info(f"✅ 成功获取官方数据，共 {len(draws)} 期，正在生成...")
+                    if not draws:
+                        st.error("❌ 未找到开奖记录。")
+                        st.stop()
+                        
+                    st.info(f"✅ 成功获取 {len(draws)} 期数据，正在生成...")
                     
                     desc_rows, asc_rows = [], []
                     
                     for item in draws:
-                        period = str(item.get("id", "")) # 格式如 "2024001"
-                        date_str = str(item.get("drawDate", ""))
+                        period = str(item.get("expect", ""))
+                        opencode = str(item.get("opencode", ""))
                         
-                        draw_result = item.get("drawResult", {})
-                        drawn_nos = draw_result.get("drawnNo", [])
-                        special = draw_result.get("xDrawnNo", [])
-                        
-                        if len(drawn_nos) == 6 and special:
-                            try:
-                                nums = [int(x) for x in drawn_nos]
-                                special_num = int(special[0])
-                            except:
-                                continue
-                                
-                            # 按序：真实落球顺序
-                            desc_rows.append([period] + nums + [special_num])
-                            # 升序：排序后
-                            asc_rows.append([period] + sorted(nums) + [special_num])
+                        if not period or not opencode: 
+                            continue
+                            
+                        nums = [int(x) for x in opencode.split(",") if x.isdigit()]
+                        if len(nums) == 7:
+                            flats = nums[:6]
+                            special = nums[6]
+                            
+                            # 按序表（真实出球顺序）
+                            desc_rows.append([period] + flats + [special])
+                            # 升序表（排好序）
+                            asc_rows.append([period] + sorted(flats) + [special])
         
                     if not desc_rows:
                         st.error("❌ 解析失败。")
                         st.stop()
         
-                    # 转为 DataFrame 并降序排列
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
                     df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
                     df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
         
-                    # 导出 Excel
                     out_desc, out_asc = io.BytesIO(), io.BytesIO()
                     with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
                         df_desc.to_excel(writer, index=False)
@@ -569,7 +555,7 @@ def render_console(df_data):
                         df_asc.to_excel(writer, index=False)
                     out_asc.seek(0)
         
-                    st.success(f"🎉 成功提取 {len(df_desc)} 期官方真实数据！")
+                    st.success(f"🎉 成功提取 {len(df_desc)} 期真实落球数据！")
                     st.download_button(
                         label="📥 下载【按序源文件.xlsx】",
                         data=out_desc,
