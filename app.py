@@ -1987,19 +1987,27 @@ def render_multi_analysis(df_data):
             out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
             out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
             
-            if not res_lines: 
-                out_txt += "未找到符合条件的匹配记录。"
+            
+            # 🔥 核心修复：如果没找到任何匹配，在当前页面提示，2秒后自动消失
+            if not res_lines:
+                status_text.warning("⚠️ 未找到符合条件的匹配记录")
+                import time
+                time.sleep(1.5)  # 停顿 1.5 秒
+                status_text.empty() # 自动清空提示
             else:
+                out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
+                out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
+                
                 for line in res_lines: 
                     out_txt += f"{line}\n"
-            
-            # 累积或覆盖逻辑
-            if "全属性" in analysis_mode:
-                st.session_state.full_scan_results.append(out_txt)
-                st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
-            else:
-                st.session_state.full_scan_results = [out_txt]
-                st.session_state.multi_result_text = out_txt
+                
+                # 累积或覆盖逻辑 (只有找到了结果才执行)
+                if "全属性" in analysis_mode:
+                    st.session_state.full_scan_results.append(out_txt)
+                    st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
+                else:
+                    st.session_state.full_scan_results = [out_txt]
+                    st.session_state.multi_result_text = out_txt
             
             # ==== 6.1 触发声音提示 (找回丢失的掉金币声音) ====
             if st.session_state.get("play_alert", False):
