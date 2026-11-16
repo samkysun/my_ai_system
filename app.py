@@ -483,11 +483,11 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (自动拆解成源文件格式版)
+        # 🔥 终极独立下载工具 (精准年份排序版)
         # ==========================================
-        if st.sidebar.button("📦 生成1976-2026升序源文件 (拆分版)", use_container_width=True):
+        if st.sidebar.button("📦 生成1976-2026升序源文件 (精准排序)", use_container_width=True):
             with st.sidebar:
-                st.info("正在下载全量数据并拆解单元格...")
+                st.info("正在下载全量数据并拆解、精准排序...")
                 import pandas as pd
                 import requests
                 import io
@@ -503,73 +503,69 @@ def render_console(df_data):
                     raw_data = res.json()
                     df_raw = pd.DataFrame(raw_data)
                     
-                    rows = []
+                    # 1. 先把所有合法数据提取出来，带上完整期数字符串用于排序
+                    parsed_data = []
                     skipped = 0
                     
                     for _, row in df_raw.iterrows():
                         try:
                             year = str(int(float(row['YEAR'])))
                             period_num = str(int(float(row['TIMES']))).zfill(3)
+                            full_period = f"{year}{period_num}"
                             
-                            # 🔥 核心拆解：期数
-                            p_100 = period_num[0]
-                            p_10 = period_num[1]
-                            p_1 = period_num[2]
-        
-                            # 获取6个平码并升序排列
                             nums = sorted([int(float(row[f'N{i}'])) for i in range(1, 7)])
                             special = int(float(row['S1']))
-                            all_balls = nums + [special] # 前6个平码 + 第7个特码
-        
-                            # 校验合法性
+                            all_balls = nums + [special]
+                            
                             if not all(1 <= n <= 49 for n in all_balls):
                                 skipped += 1
                                 continue
-        
-                            # 构建 27 列的数组 (A 到 AA)
-                            row_data = [""] * 27
-                            
-                            # 填充 A, B, C 列 (期数)
-                            row_data[0] = p_100
-                            row_data[1] = p_10
-                            row_data[2] = p_1
-        
-                            # 填充 7个球的十位和个位 (D 到 Q 列，索引 3 到 16)
-                            col_idx = 3
-                            for ball in all_balls:
-                                row_data[col_idx] = str(ball // 10)
-                                row_data[col_idx + 1] = str(ball % 10)
-                                col_idx += 2
-        
-                            # 填充 AA 列 (年份，索引 26)
-                            row_data[26] = year
-        
-                            rows.append(row_data)
+                                
+                            parsed_data.append({
+                                "full_period": full_period,
+                                "year": year,
+                                "period_num": period_num,
+                                "balls": all_balls
+                            })
                         except (ValueError, TypeError):
                             skipped += 1
                             continue
         
-                    # 定义 27 列的表头
-                    cols = [
-                        "A", "B", "C", 
-                        "1_十", "1_个", "2_十", "2_个", "3_十", "3_个", "4_十", "4_个", 
-                        "5_十", "5_个", "6_十", "6_个", "7_十", "7_个", 
-                        "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA"
-                    ]
-                    df_asc = pd.DataFrame(rows, columns=cols)
-                    
-                    # 按 A列 (期数百位)、B列、C列 降序排列（最新在最上面）
-                    df_asc = df_asc.sort_values(by=["A", "B", "C"], ascending=[False, False, False]).reset_index(drop=True)
+                    # 2. 🔥 核心修复：按完整期数 (如 2024115) 强降序排序！
+                    parsed_data.sort(key=lambda x: x["full_period"], reverse=True)
         
-                    st.success(f"🎉 成功拆解 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
+                    # 3. 排序完毕，开始拆解成 27 列
+                    rows = []
+                    for item in parsed_data:
+                        p_num = item["period_num"]
+                        p_100, p_10, p_1 = p_num[0], p_num[1], p_num[2]
+                        
+                        row_data = [""] * 27
+                        row_data[0], row_data[1], row_data[2] = p_100, p_10, p_1
+                        
+                        # 拆解 7 个球的十位和个位
+                        col_idx = 3
+                        for ball in item["balls"]:
+                            row_data[col_idx] = str(ball // 10)
+                            row_data[col_idx + 1] = str(ball % 10)
+                            col_idx += 2
+                            
+                        row_data[26] = item["year"]
+                        rows.append(row_data)
+        
+                    # 生成最终的 Excel 数据
+                    cols = [f"Col{i}" for i in range(1, 28)]
+                    df_asc = pd.DataFrame(rows, columns=cols)
+        
+                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
                     
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine='openpyxl') as writer:
-                        df_asc.to_excel(writer, index=False, header=False) # 不输出表头，直接纯数据
+                        df_asc.to_excel(writer, index=False, header=False) # 纯数据无表头
                     out.seek(0)
                     
                     st.download_button(
-                        label="📥 下载【升序源文件_完美拆分版.xlsx】",
+                        label="📥 下载【升序源文件.xlsx】",
                         data=out,
                         file_name="升序源文件.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
