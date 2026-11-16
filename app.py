@@ -22,7 +22,7 @@ EXCEL_FILE = "总数据.xlsx"
 SHEET_NAME = "总数据表" 
 DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
 
-# 🔥 改为使用你 Secrets 里的原始参数建立客户端
+# 数据库连接配置
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -31,7 +31,6 @@ def get_supabase_client():
     if not SUPABASE_URL or not SUPABASE_KEY: return None
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 密码加密
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -45,7 +44,7 @@ if "predicted_nums_single" not in st.session_state: st.session_state.predicted_n
 if "predicted_nums_multi" not in st.session_state: st.session_state.predicted_nums_multi = None
 
 # ==========================================
-# 2. 核心引擎：28个属性纯代码计算器 (保留原版)
+# 2. 核心引擎：属性计算器 (原版保留)
 # ==========================================
 NUM_WUXING = {1: "水", 2: "火", 3: "火", 4: "金", 5: "金", 6: "土", 7: "土", 8: "木", 9: "木", 10: "火", 11: "火", 12: "金", 13: "金", 14: "水", 15: "水", 16: "木", 17: "木", 18: "火", 19: "火", 20: "土", 21: "土", 22: "水", 23: "水", 24: "木", 25: "木", 26: "金", 27: "金", 28: "土", 29: "土", 30: "水", 31: "水", 32: "火", 33: "火", 34: "金", 35: "金", 36: "土", 37: "土", 38: "木", 39: "木", 40: "火", 41: "火", 42: "金", 43: "金", 44: "水", 45: "水", 46: "木", 47: "木", 48: "火", 49: "火"}
 NUM_ZODIAC = {1: "马", 2: "蛇", 3: "龙", 4: "兔", 5: "虎", 6: "牛", 7: "鼠", 8: "猪", 9: "狗", 10: "鸡", 11: "猴", 12: "羊", 13: "马", 14: "蛇", 15: "龙", 16: "兔", 17: "虎", 18: "牛", 19: "鼠", 20: "猪", 21: "狗", 22: "鸡", 23: "猴", 24: "羊", 25: "马", 26: "蛇", 27: "龙", 28: "兔", 29: "虎", 30: "牛", 31: "鼠", 32: "猪", 33: "狗", 34: "鸡", 35: "猴", 36: "羊", 37: "马", 38: "蛇", 39: "龙", 40: "兔", 41: "虎", 42: "牛", 43: "鼠", 44: "猪", 45: "狗", 46: "鸡", 47: "猴", 48: "羊", 49: "马"}
@@ -76,7 +75,7 @@ def calculate_all_attributes(num):
     return [NUM_WUXING.get(n, ""), z, str(tail), NUM_HE.get(n, ""), NUM_MEN.get(n, ""), NUM_DUAN.get(n, ""), NUM_SINGLE_DOUBLE.get(n, ""), "单笔" if z in ["鼠", "龙", "蛇", "马", "鸡", "猪"] else "双笔", "独字" if z in ["鼠", "牛", "虎", "兔", "马", "羊"] else "合字", "单头" if (n // 10) in [1, 3] else "双头", "单数" if n % 2 != 0 else "双数", f"{NUM_BOSE.get(n, '')}{'单数' if n % 2 != 0 else '双数'}", ZODIAC_WUXING.get(z, ""), ZODIAC_COLOR.get(z, ""), ZODIAC_FOUR_TREASURES.get(z, ""), ZODIAC_OBJECT_IMAGE.get(z, ""), NUM_BOSE.get(n, ""), "阳" if z in YANG_ZODIACS else "阴", "家" if z in JIA_ZODIACS else "野", "天" if z in TIAN_ZODIACS else "地", f"{'阳' if z in YANG_ZODIACS else '阴'}{'天' if z in TIAN_ZODIACS else '地'}", "凶" if z in XIONG_ZODIACS else "吉", "男" if z in NAN_ZODIACS else "女", ZODIAC_DIRECTION.get(z, ""), f"3余{tail % 3}", TAIL_WUXING.get(tail, ""), ZODIAC_FU_LU_SHOU.get(z, ""), ZODIAC_SIZE.get(z, "")]
 
 # ==========================================
-# 3. 基础数据加载
+# 3. 数据加载逻辑
 # ==========================================
 def get_ball_color(num):
     red = [1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46]
@@ -236,7 +235,7 @@ def calculate_prize(df_data, target_period, predicted_nums):
     return result, None
 
 # ==========================================
-# 5. 各页面渲染 (兼容原版)
+# 5. 页面渲染函数 (保留原版)
 # ==========================================
 def render_trend_chart(df_data):
     st.divider()
@@ -525,8 +524,6 @@ def render_multi_analysis(df_data):
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
 
-# 为节省篇幅，其余函数保持不变 (render_deep_linkage, render_ai, render_console, render_admin_panel, login_page)
-# 核心更新在底部的 main_app 入口
 def render_deep_linkage(df_data):
     st.title("🔗 深度联动分析系统")
     st.info("💡 功能说明：提取基准期开奖号码的属性组合，在全历史数据中寻找相同组合，并统计命中后下一期各球位的属性频次。")
@@ -788,6 +785,7 @@ def render_ai(df_data):
         st.download_button(label="📥 保存完整推演报告到本地 (TXT格式)", data=full_result_text.encode('utf-8-sig'), file_name=f"AI推演_{qishu}_{qiu}_{order_type}.txt", mime="text/plain", use_container_width=True)
     else: st.info("👈 请先在上方设置参数，然后点击【开始推演】。")
 
+# 附属函数
 @st.cache_data(ttl=3600, show_spinner=False)
 def build_rule_database():
     try:
@@ -964,6 +962,9 @@ def render_console(df_data):
     if st.session_state.calc_result_preview is not None: st.dataframe(st.session_state.calc_result_preview, use_container_width=True)
     else: st.info("暂无中出结果。")
 
+# ==========================================
+# 6. 管理员专属后台管理页
+# ==========================================
 def render_admin_panel():
     st.title("⚙️ 系统后台管理中心")
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -980,9 +981,7 @@ def render_admin_panel():
                     current_vips = [u for u, is_vip in user_dict.items() if is_vip]
                     selected_vips = st.multiselect("选择授权用户（允许查看高级页面）：", all_users, default=current_vips)
                     if st.button("💾 保存授权更改", type="primary"):
-                        # 先将所有人降级
                         client.table("users").update({"is_vip": False}).neq("username", admin_name).execute()
-                        # 再将选中的升级
                         if selected_vips:
                             client.table("users").update({"is_vip": True}).in_("username", selected_vips).execute()
                         st.success("✅ 授权已更新！")
@@ -991,7 +990,6 @@ def render_admin_panel():
         
     with tab2:
         st.markdown("### 📝 手动补录开奖数据 (云端同步)")
-        # (这里是补录逻辑，保留原样)
         with st.form("manual_input_form", clear_on_submit=True):
             st.info("💡 提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
             col_year, col_p1, col_p2, col_p3 = st.columns(4)
@@ -1070,6 +1068,9 @@ def render_admin_panel():
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
                                 if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
 
+# ==========================================
+# 7. 登录与系统入口
+# ==========================================
 def login_page():
     st.title("🔐 智能系统客户端登录")
     tab1, tab2 = st.tabs(["已有账号？登录", "没有账号？立即注册"])
@@ -1079,12 +1080,31 @@ def login_page():
         login_pass = st.text_input("密码", type="password", key="login_pass")
         if st.button("登录", use_container_width=True):
             if login_user and login_pass:
+                # 通道 1：优先验证 Secrets 里的超级管理员
+                admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+                admin_pass = st.secrets.get("ADMIN_PASSWORD", "")
+                
+                if login_user == admin_name:
+                    if login_pass == admin_pass or hash_password(login_pass) == admin_pass:
+                        st.session_state.logged_in = True
+                        st.session_state.username = login_user
+                        st.success("👑 管理员登录成功！")
+                        time.sleep(1)
+                        st.rerun()
+                        st.stop()
+                    else:
+                        st.error("管理员密码错误！")
+                        st.stop()
+                
+                # 通道 2：普通用户去数据库验证
                 hashed = hash_password(login_pass)
                 client = get_supabase_client()
-                if not client: st.error("数据库连接失败，请检查 Secrets 配置"); st.stop()
                 
+                if not client: 
+                    st.error("❌ 数据库连接失败！请检查 Streamlit Secrets 里的 SUPABASE_URL 和 SUPABASE_KEY 是否正确。")
+                    st.stop()
+                    
                 try:
-                    # 改用 API 方式查询
                     result = client.table("users").select("username").eq("username", login_user).eq("password", hashed).execute().data
                     if result:
                         st.session_state.logged_in = True
@@ -1092,8 +1112,10 @@ def login_page():
                         st.success("登录成功！正在进入系统...")
                         time.sleep(1)
                         st.rerun()
-                    else: st.error("用户名或密码错误！")
-                except Exception as e: st.error(f"数据库连接出错: {e}")
+                    else: 
+                        st.error("用户名或密码错误！")
+                except Exception as e: 
+                    st.error(f"数据库查询出错，请检查你的 users 表是否存在。详细报错: {e}")
                 
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
@@ -1108,26 +1130,29 @@ def login_page():
                     if not client: st.error("数据库连接失败"); st.stop()
                     
                     try:
-                        # 改用 API 方式插入
                         client.table("users").insert({"username": reg_user, "password": hashed, "is_vip": False}).execute()
                         st.success("🎉 注册成功！请去登录。")
                     except Exception as e: 
-                        if "duplicate key" in str(e): st.error("该用户名已被注册！")
-                        else: st.error(f"注册失败: {e}")
+                        if "duplicate key" in str(e) or "unique constraint" in str(e): 
+                            st.error("该用户名已被注册！")
+                        else: 
+                            st.error(f"注册失败，请确保数据库里有 users 表并且加了 is_vip 列。报错: {e}")
 
 def main_app():
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+    
+    # 判断管理员
     is_admin = (current_user == admin_name)
     
+    # 判断 VIP
     is_vip = False
     if not is_admin:
         client = get_supabase_client()
         if client:
             try:
                 res = client.table("users").select("is_vip").eq("username", current_user).execute().data
-                if res and res[0].get("is_vip") == True:
-                    is_vip = True
+                if res and res[0].get("is_vip") == True: is_vip = True
             except: pass
         
     df_data = load_real_data()
