@@ -483,89 +483,112 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (API 官方直连版)
+        # 🔥 终极独立下载工具 (真实落球顺序多线路版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在向官方接口请求真实落球数据...")
+                st.info("正在向第三方真实落球接口请求数据...")
                 import pandas as pd
                 import requests
                 import io
+                import json
                 
-                try:
-                    # 使用直连 API，获取近 4000 期真实数据
-                    url = "https://api.macaumarksix.com/api/history?limit=4000"
-                    res = requests.get(url, timeout=30)
-                    
-                    if res.status_code != 200:
-                        st.error(f"接口请求失败，状态码: {res.status_code}")
-                        st.stop()
+                # 准备了 3 个保留真实落球顺序的第三方接口（含备用代理）
+                urls = [
+                    "https://kclm.site/api/trial/drawResult?code=hk6&format=json&rows=4000",
+                    "https://6hca.com/api/history?limit=4000",
+                    "https://api.macaumarksix.com/api/history?limit=4000"
+                ]
+                
+                success_data = None
+                last_error = ""
+                
+                for url in urls:
+                    try:
+                        res = requests.get(url, timeout=15)
+                        if res.status_code == 200:
+                            data = res.json()
+                            # 兼容不同 API 的成功返回格式
+                            if isinstance(data, dict) and "data" in data and len(data["data"]) > 0:
+                                success_data = data["data"]
+                                break
+                            elif isinstance(data, list) and len(data) > 0:
+                                success_data = data
+                                break
+                    except Exception as e:
+                        last_error = str(e)
+                        continue
                         
-                    raw_data = res.json().get("data", [])
-                    st.info(f"✅ 请求成功，正在解析 {len(raw_data)} 期数据...")
+                if not success_data:
+                    st.error(f"所有真实落球接口均无法访问，请稍后再试。\n最后错误: {last_error}")
+                    st.stop()
                     
-                    desc_rows = []
-                    asc_rows = []
+                st.info(f"✅ 获取成功，正在解析 {len(success_data)} 期数据...")
+                
+                desc_rows = []
+                asc_rows = []
+                
+                for item in success_data:
+                    # 兼容不同接口的字段名
+                    period = str(item.get("issue", item.get("expect", item.get("period", ""))))
+                    opencode = item.get("code", item.get("opencode", item.get("numbers", "")))
                     
-                    for item in raw_data:
-                        period = str(item.get("expect", ""))
-                        opencode = str(item.get("opencode", "")) # 格式: "13,03,24,11,17,15,09"
+                    # 如果拿到的号码是列表，直接处理
+                    if isinstance(opencode, list):
+                        nums = [int(x) for x in opencode]
+                    # 如果是字符串 "13,03,24,11,17,15,09"，拆分处理
+                    elif isinstance(opencode, str):
+                        nums = [int(x) for x in opencode.replace(" ", "").split(",") if x.isdigit()]
+                    else:
+                        continue
                         
-                        if not period or not opencode: 
-                            continue
-                            
-                        nums = [int(x) for x in opencode.split(",") if x.isdigit()]
-                        if len(nums) == 7:
-                            flats = nums[:6]
-                            special = nums[6]
-                            
-                            # 按序表（绝对真实出球顺序）
-                            desc_rows.append([period] + flats + [special])
-                            # 升序表（对平码排序）
-                            asc_rows.append([period] + sorted(flats) + [special])
-                            
-                    if not desc_rows:
-                        st.error("❌ 未能解析到有效数据，接口可能已变更。")
-                        st.stop()
+                    if len(nums) == 7 and period:
+                        flats = nums[:6]
+                        special = nums[6]
                         
-                    # 按期数降序排列（最新在最上面）
-                    cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
-                    df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
-                    df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                        # 按序表（绝对真实出球顺序）
+                        desc_rows.append([period] + flats + [special])
+                        # 升序表（对平码排序）
+                        asc_rows.append([period] + sorted(flats) + [special])
+                        
+                if not desc_rows:
+                    st.error("❌ 接口返回了数据，但未能解析出号码。")
+                    st.stop()
                     
-                    st.success(f"🎉 成功提取 {len(df_desc)} 期真实数据！")
-                    
-                    # 打包导出 Excel
-                    out_desc = io.BytesIO()
-                    with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
-                        df_desc.to_excel(writer, index=False)
-                    out_desc.seek(0)
-                    
-                    out_asc = io.BytesIO()
-                    with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
-                        df_asc.to_excel(writer, index=False)
-                    out_asc.seek(0)
-                    
-                    st.download_button(
-                        label="📥 下载【按序源文件.xlsx】",
-                        data=out_desc,
-                        file_name="按序源文件.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                    st.download_button(
-                        label="📥 下载【升序源文件.xlsx】",
-                        data=out_asc,
-                        file_name="升序源文件.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                    
-                except Exception as e:
-                    st.error(f"出错了: {e}")
-# ==========================================
-# 🔥 结束
-# ==========================================
+                # 按期数降序排列
+                cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+                df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
+                df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                
+                st.success(f"🎉 成功提取 {len(df_desc)} 期真实数据！")
+                
+                out_desc = io.BytesIO()
+                with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                    df_desc.to_excel(writer, index=False)
+                out_desc.seek(0)
+                
+                out_asc = io.BytesIO()
+                with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                    df_asc.to_excel(writer, index=False)
+                out_asc.seek(0)
+                
+                st.download_button(
+                    label="📥 下载【按序源文件.xlsx】",
+                    data=out_desc,
+                    file_name="按序源文件.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                st.download_button(
+                    label="📥 下载【升序源文件.xlsx】",
+                    data=out_asc,
+                    file_name="升序源文件.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        # ==========================================
+        # 🔥 结束
+        # ==========================================
 
         st.divider()
 
