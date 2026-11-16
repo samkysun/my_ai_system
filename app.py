@@ -483,7 +483,7 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (1976-2026全量升序版)
+        # 🔥 终极独立下载工具 (1976-2026全量升序容错版)
         # ==========================================
         if st.sidebar.button("📦 生成1976-2026升序源文件 Excel", use_container_width=True):
             with st.sidebar:
@@ -494,7 +494,6 @@ def render_console(df_data):
                 import json
         
                 try:
-                    # 直接使用 raw.githubusercontent 链接，获取全量数据
                     url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
                     res = requests.get(url, timeout=60)
         
@@ -505,40 +504,44 @@ def render_console(df_data):
                     raw_data = res.json()
                     st.info("✅ 数据下载成功，正在解析并整理格式...")
         
-                    # 将列式JSON转换为行式列表
                     df_raw = pd.DataFrame(raw_data)
                     
-                    # 确保关键列存在
                     required_cols = ['YEAR', 'TIMES', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'S1']
                     if not all(col in df_raw.columns for col in required_cols):
                         st.error(f"❌ 数据列缺失，现有列: {list(df_raw.columns)}")
                         st.stop()
         
-                    # 构建标准格式
                     rows = []
+                    skipped = 0
+                    
                     for _, row in df_raw.iterrows():
-                        year = str(int(row['YEAR']))
-                        period_num = str(int(row['TIMES'])).zfill(3)
-                        full_period = f"{year}{period_num}"
-                        
-                        nums = [int(row[f'N{i}']) for i in range(1, 7)]
-                        special = int(row['S1'])
-                        
-                        # 确保前6个平码由小到大排列
-                        asc_nums = sorted(nums)
-                        
-                        rows.append([full_period] + asc_nums + [special])
+                        try:
+                            # 🔥 使用 try-except 包裹，遇到疫情备注等脏数据直接跳过
+                            year = str(int(float(row['YEAR'])))
+                            period_num = str(int(float(row['TIMES']))).zfill(3)
+                            full_period = f"{year}{period_num}"
+                            
+                            nums = [int(float(row[f'N{i}'])) for i in range(1, 7)]
+                            special = int(float(row['S1']))
+                            
+                            # 校验号码合法性，防止越界
+                            if not all(1 <= n <= 49 for n in nums) or not (1 <= special <= 49):
+                                skipped += 1
+                                continue
+                                
+                            asc_nums = sorted(nums)
+                            rows.append([full_period] + asc_nums + [special])
+                        except (ValueError, TypeError):
+                            # 捕捉到类似“新冠疫情”的文本，直接跳过
+                            skipped += 1
+                            continue
         
-                    # 转为DataFrame
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
                     df_asc = pd.DataFrame(rows, columns=cols)
-                    
-                    # 按期数降序排列（最新在最上面）
                     df_asc = df_asc.sort_values("期数", ascending=False).reset_index(drop=True)
         
-                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！")
+                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
                     
-                    # 打包为Excel
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine='openpyxl') as writer:
                         df_asc.to_excel(writer, index=False)
