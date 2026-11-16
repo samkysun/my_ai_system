@@ -472,10 +472,95 @@ def render_console(df_data):
     trend_btn = b5.button("📈走势图", use_container_width=True)
     fetch_btn = b6.button("🤏抓取香港数据", use_container_width=True)
 
+   
     # ==========================================
-    # 👇 ============ 开始：手动补录模块 ============ 👇
+    # 👇 ============ 生成纯净源文件模块 ============ 👇
     # ==========================================
     if st.session_state.username == admin_name:
+        st.markdown("### 📦 纯净数据源下载 (手工填写专用)")
+        if st.button("📥 一键生成并下载纯净版【升序】和【按序】Excel", use_container_width=True, type="secondary"):
+            with st.spinner("正在从云端拉取全量历史数据，请稍候..."):
+                import pandas as pd
+                import requests
+                import io
+                
+                try:
+                    # 直接从全球极速 CDN 拉取原始数据，无代理，无 403
+                    url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
+                    res = requests.get(url, timeout=30)
+                    if res.status_code != 200:
+                        st.error("云端数据下载失败，请重试。")
+                        st.stop()
+                        
+                    raw_data = res.json()
+                    
+                    desc_rows = []
+                    asc_rows = []
+                    
+                    for item in raw_data:
+                        # 兼容可能的数据嵌套结构
+                        draw = item.get("draws", [{}])[0] if item.get("draws") else item
+                        
+                        date_str = draw.get("date", "")
+                        raw_id = draw.get("id", "")
+                        nums = draw.get("numbers", []) # 🔥 真实落球顺序
+                        special = draw.get("special", 0)
+                        
+                        if len(nums) == 6 and special:
+                            # 拼接期数：年份 + 3位期号 (如 1993001)
+                            year = date_str[:4] if date_str else "1993"
+                            period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
+                            full_period = f"{year}{period_part}"
+                            
+                            # 按序（绝对真实的落球顺序）
+                            desc_rows.append([full_period] + nums + [special])
+                            
+                            # 升序（前6个球排序，特码不变）
+                            asc_rows.append([full_period] + sorted(nums) + [special])
+                    
+                    # 转为 DataFrame，按期数降序（最新在最上面）
+                    cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+                    df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
+                    df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                    
+                    st.success(f"✅ 成功提取 {len(df_desc)} 期真实数据！请点击下方按钮下载：")
+                    
+                    # 打包为 Excel 供下载
+                    out_desc = io.BytesIO()
+                    with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                        df_desc.to_excel(writer, index=False)
+                    out_desc.seek(0)
+                    
+                    out_asc = io.BytesIO()
+                    with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                        df_asc.to_excel(writer, index=False)
+                    out_asc.seek(0)
+                    
+                    col_dl1, col_dl2 = st.columns(2)
+                    with col_dl1:
+                        st.download_button(
+                            label="📥 下载【按序_真实出球.xlsx】",
+                            data=out_desc,
+                            file_name="按序源文件.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            type="primary"
+                        )
+                    with col_dl2:
+                        st.download_button(
+                            label="📥 下载【升序_从小到大.xlsx】",
+                            data=out_asc,
+                            file_name="升序源文件.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            type="primary"
+                        )
+                except Exception as e:
+                    st.error(f"生成失败: {e}")
+    st.divider()
+    # ==========================================
+    # 👆 ============ 生成纯净源文件模块 ============ 👆
+    # ==========================================    
         with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
                 st.info("💡提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
