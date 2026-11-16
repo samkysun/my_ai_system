@@ -3,3 +3,5 @@ pandas
 openpyxl
 pyxlsb
 supabase
+psycopg2-binary
+SQLAlchemy
