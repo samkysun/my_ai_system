@@ -2455,101 +2455,96 @@ else:
     main_app()
 #=========获取香港按序资料=========
 # =========================================================================
-# 🔥🔥🔥 独立侧边栏工具：真实落球数据下载 (双通道自动切换版) 🔥🔥🔥
+# 🔥🔥🔥 独立侧边栏工具：GitHub源数据下载 (最终备选方案) 🔥🔥🔥
 # =========================================================================
-if st.sidebar.button("📦 下载真实落球 Excel", use_container_width=True):
+if st.sidebar.button("📦 从GitHub获取真实落球数据", use_container_width=True):
     with st.sidebar:
-        st.info("正在向真实数据接口请求...")
         import pandas as pd
         import requests
         import io
+        import zipfile
+        import json
+
+        st.info("正在从GitHub仓库获取数据...")
         
-        success = False
-        draws = []
-        
-        # 通道 1：国内老牌 API 接口 (apiplus)
         try:
-            res = requests.get("http://f.apiplus.net/hk6.json", timeout=10)
-            if res.status_code == 200:
-                data = res.json()
-                if "data" in data:
-                    draws = data["data"]
-                    success = True
-                    st.success("✅ 成功从通道1获取真实落球数据！")
-        except Exception:
-            pass
+            # 尝试从 kitce/marker 仓库下载
+            url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
+            res = requests.get(url, timeout=30)
+
+            if res.status_code != 200:
+                st.error(f"下载失败，状态码: {res.status_code}")
+                st.stop()
+
+            st.info("下载成功，正在解压解析...")
             
-        # 通道 2：备用 API 接口 (macaumarksix)
-        if not success:
-            try:
-                res = requests.get("https://api.macaumarksix.com/api/history?limit=4000", timeout=10)
-                if res.status_code == 200:
-                    data = res.json()
-                    if "data" in data:
-                        draws = data["data"]
-                        success = True
-                        st.success("✅ 成功从通道2获取真实落球数据！")
-            except Exception:
-                pass
-
-        if not success:
-            st.error("❌ 所有真实数据通道均被拦截或失效。")
-            st.stop()
-
-        # 解析数据
-        desc_rows, asc_rows = [], []
-        for item in draws:
-            period = str(item.get("expect", "")) # 期号
-            opencode = str(item.get("opencode", "")) # 真实落球顺序如 "18,12,5,33,21,45,07"
+            desc_rows, asc_rows = [], []
             
-            if not period or not opencode:
-                continue
-                
-            try:
-                # 提取号码，切分逗号
-                nums = [int(x) for x in opencode.split(",") if x.isdigit()]
-                if len(nums) == 7:
-                    flats = nums[:6] # 前6个平码
-                    special = nums[6] # 第7个特码
-                    
-                    # 按序（真实顺序）
-                    desc_rows.append([period] + flats + [special])
-                    # 升序（排序后）
-                    asc_rows.append([period] + sorted(flats) + [special])
-            except Exception:
-                pass
-                
-        if not desc_rows:
-            st.error("❌ 数据抓到了，但解析失败。")
-            st.stop()
+            with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                # 查找所有 JSON 文件
+                json_files = [f for f in z.namelist() if f.endswith('.json')]
+                st.info(f"在压缩包中找到 {len(json_files)} 个JSON文件。")
 
-        cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
-        df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
-        df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                for jf in json_files:
+                    try:
+                        with z.open(jf) as f:
+                            item = json.load(f)
+                        
+                        # 解析 kitce/marker 的数据结构
+                        if isinstance(item, dict) and "numbers" in item:
+                            nums = item.get("numbers", [])
+                            special = item.get("special", 0)
+                            raw_id = item.get("id", "")
+                            date_str = item.get("date", "")
+                            
+                            if len(nums) == 6 and special and raw_id:
+                                # 处理期数格式
+                                year = date_str[:4] if date_str else "1993"
+                                period_part = str(raw_id).split('/')[-1].zfill(3)
+                                full_period = f"{year}{period_part}"
+                                
+                                # 按序: 原始顺序
+                                desc_rows.append([full_period] + nums + [special])
+                                # 升序: 排序后
+                                asc_rows.append([full_period] + sorted(nums) + [special])
+                    except Exception:
+                        continue
 
-        out_desc, out_asc = io.BytesIO(), io.BytesIO()
-        with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
-            df_desc.to_excel(writer, index=False)
-        out_desc.seek(0)
-        with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
-            df_asc.to_excel(writer, index=False)
-        out_asc.seek(0)
+            if not desc_rows:
+                st.error("❌ 未能从仓库中解析出有效数据。")
+                st.stop()
 
-        st.info(f"🎉 成功提取 {len(df_desc)} 期乱序数据！")
-        st.download_button(
-            label="📥 下载【按序源文件.xlsx】",
-            data=out_desc,
-            file_name="按序源文件.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-        st.download_button(
-            label="📥 下载【升序源文件.xlsx】",
-            data=out_asc,
-            file_name="升序源文件.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
+            st.success(f"✅ 成功解析 {len(desc_rows)} 期数据！")
+
+            cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+            df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
+            df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+
+            out_desc, out_asc = io.BytesIO(), io.BytesIO()
+            with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                df_desc.to_excel(writer, index=False)
+            out_desc.seek(0)
+            with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                df_asc.to_excel(writer, index=False)
+            out_asc.seek(0)
+
+            st.download_button(
+                label="📥 下载【按序源文件.xlsx】",
+                data=out_desc,
+                file_name="按序源文件.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            st.download_button(
+                label="📥 下载【升序源文件.xlsx】",
+                data=out_asc,
+                file_name="升序源文件.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        except Exception as e:
+            st.error(f"执行出错: {e}")
 # =========================================================================
-# 🔥🔥🔥 独立工具结束 🔥🔥🔥
+# 🔥🔥🔥 工具结束 🔥🔥🔥
 # =========================================================================
