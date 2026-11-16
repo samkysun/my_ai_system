@@ -425,7 +425,7 @@ def login_page():
                             except Exception as e:
                                 st.error(f"❌ 异常: {e}")            
 
-
+#===========这里的时要配合前面修改页面卡顿的代码==================
 def render_console(df_data):
     # 👇 导入模块
     import requests
