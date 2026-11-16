@@ -2143,7 +2143,7 @@ def render_multi_analysis(df_data):
     
         #=======多维分析第二个文本框调整字体大小代码起始=============
         display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 20px; line-height: 2.2; white-space: pre-wrap; word-wrap: break-word; max-height: 600px; overflow-y: auto; text-align: center;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 20px; line-height: 2.2; white-space: pre-wrap; word-wrap: break-word; max-height: 480px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
