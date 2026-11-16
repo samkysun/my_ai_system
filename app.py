@@ -482,98 +482,88 @@ def render_console(df_data):
     
     if st.session_state.username == admin_name:
         
-        # ------------------------------------------
-        # 子模块 1：生成纯净源文件并下载
-        # 作用：拉取全量真实数据，生成方便你手工填写的 Excel
-        # ------------------------------------------
-        st.markdown("### 📦 纯净数据源下载 (手工填写专用)")
-        if st.button("📥 一键生成并下载纯净版【升序】和【按序】Excel", use_container_width=True, type="secondary"):
-            with st.spinner("正在从云端下载并解压真实数据源，请稍候(约需5秒)..."):
-                import pandas as pd
-                import requests
-                import io
-                import zipfile
-                import json
-                
-                try:
-                    # 下载最稳定的真实落球顺序开源库 ZIP 包
-                    zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
-                    res = requests.get(zip_url, timeout=120)
+        # ==========================================
+        # 🔥 终极独立下载工具 (请严格放在代码最底部，不要缩进)
+        # ==========================================
+        if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
+            with st.sidebar:
+                with st.spinner("正在从云端下载全量真实数据并生成 Excel..."):
+                    import pandas as pd
+                    import requests
+                    import io
                     
-                    if res.status_code != 200:
-                        st.error(f"下载数据源失败，状态码: {res.status_code}")
-                        st.stop()
+                    try:
+                        # 使用 Streamlit 云端服务器直接请求，无任何跨域限制
+                        url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
+                        res = requests.get(url, timeout=60)
                         
-                    desc_rows = []
-                    asc_rows = []
-                    
-                    # 在内存中直接解压
-                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                        json_files = [f for f in z.namelist() if f.endswith('.json') and 'records' in f]
+                        if res.status_code != 200:
+                            st.error(f"下载数据失败，状态码: {res.status_code}")
+                            st.stop()
+                            
+                        raw_data = res.json()
                         
-                        for jf in json_files:
-                            try:
-                                with z.open(jf) as f:
-                                    item = json.load(f)
-                                
-                                date_str = item.get("date", "")
-                                raw_id = item.get("id", "")
-                                nums = item.get("numbers", []) # 真实乱序落球
-                                special = item.get("special", 0)
-                                
-                                if len(nums) == 6 and special and raw_id:
-                                    year = date_str[:4] if date_str else "1993"
-                                    period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
-                                    full_period = f"{year}{period_part}"
-                                    
-                                    desc_rows.append([full_period] + nums + [special])
-                                    asc_rows.append([full_period] + sorted(nums) + [special])
-                            except:
-                                continue
-                                
-                    if not desc_rows:
-                        st.error("未能从数据源中提取到有效数据，请重试。")
-                        st.stop()
+                        desc_rows = []
+                        asc_rows = []
                         
-                    # 转为 DataFrame，按期数降序（最新在最上面）
-                    cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
-                    df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
-                    df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
-                    
-                    st.success(f"✅ 成功提取 {len(df_desc)} 期真实数据！请点击下方按钮下载：")
-                    
-                    # 打包为 Excel 供下载
-                    out_desc = io.BytesIO()
-                    with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
-                        df_desc.to_excel(writer, index=False)
-                    out_desc.seek(0)
-                    
-                    out_asc = io.BytesIO()
-                    with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
-                        df_asc.to_excel(writer, index=False)
-                    out_asc.seek(0)
-                    
-                    col_dl1, col_dl2 = st.columns(2)
-                    with col_dl1:
+                        # 遍历并提取全量真实数据
+                        for item in raw_data:
+                            draw = item.get("draws", [{}])[0] if item.get("draws") else item
+                            date_str = draw.get("date", "")
+                            raw_id = draw.get("id", "")
+                            nums = draw.get("numbers", []) # 真实落球顺序
+                            special = draw.get("special", 0)
+                            
+                            if len(nums) == 6 and special:
+                                year = date_str[:4] if date_str else "1993"
+                                period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
+                                full_period = f"{year}{period_part}"
+                                
+                                # 按序表
+                                desc_rows.append([full_period] + nums + [special])
+                                # 升序表
+                                asc_rows.append([full_period] + sorted(nums) + [special])
+                        
+                        if not desc_rows:
+                            st.error("未能提取到有效数据，请稍后再试。")
+                            st.stop()
+                            
+                        # 按期数降序（最新在最上面）
+                        cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+                        df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
+                        df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                        
+                        # 打包生成两个 Excel
+                        out_desc = io.BytesIO()
+                        with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
+                            df_desc.to_excel(writer, index=False)
+                        out_desc.seek(0)
+                        
+                        out_asc = io.BytesIO()
+                        with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                            df_asc.to_excel(writer, index=False)
+                        out_asc.seek(0)
+                        
+                        st.success(f"✅ 成功提取 {len(df_desc)} 期数据！")
                         st.download_button(
                             label="📥 下载【按序源文件.xlsx】",
                             data=out_desc,
                             file_name="按序源文件.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            type="primary"
+                            use_container_width=True
                         )
-                    with col_dl2:
                         st.download_button(
                             label="📥 下载【升序源文件.xlsx】",
                             data=out_asc,
                             file_name="升序源文件.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            type="primary"
+                            use_container_width=True
                         )
-                except Exception as e:
-                    st.error(f"生成失败: {e}")
+                    except Exception as e:
+                        st.error(f"出错了: {e}")
+# ==========================================
+# 🔥 结束
+# ==========================================
 
         st.divider()
 
