@@ -1923,6 +1923,7 @@ def render_multi_analysis(df_data):
                                 real_l = max_l_hit
                                 sr = valid_data[k][0]; er = valid_data[k + real_l - 1][0]
                                 
+                                
                                 def get_ctx(r_idx):
                                     if r_idx < 0 or r_idx >= len(col_data): return "无"
                                     v = col_data[r_idx][1]
@@ -1932,7 +1933,12 @@ def render_multi_analysis(df_data):
                                         return f"{v}{v_suffix}"
                                     if v in ["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"]: return v + "肖"
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
-                                    return v    
+                                    
+                                    # =====改变这句代码的作用：如果是纯数字且属性包含"尾"，返回值加上"尾"字=====
+                                    if v.isdigit() and wx_suffix == "尾":
+                                        return f"{v}尾"
+                                    return v
+                                        
                                     
                                 w1, w2 = get_ctx(sr-1), get_ctx(er+1)
                                 actual_match_str = "".join([x[1] for x in valid_data[k : k + real_l]])
@@ -1998,12 +2004,20 @@ def render_multi_analysis(df_data):
             base_col_letter = get_column_letter(base_col_num)
             base_col_idx = column_index_from_string(base_col_letter) - 1
             
+            # =====改变这句代码的作用：计算当前选中属性的后缀，用于基准行显示=====
+            wx_suffix_global = "尾" if "尾" in selected_attr else ""
+            
             base_rows = []
             for r in range(target_row_idx, len(all_rows)):
                 val = clean_str(all_rows[r][base_col_idx]) if base_col_idx < len(all_rows[r]) else ""
                 if val:
-                    base_rows.append(f"{base_col_letter}{r+1}:{val}")
+                    # =====改变这句代码的作用：如果属性是尾数且是纯数字，拼上"尾"字=====
+                    if val.isdigit() and wx_suffix_global == "尾":
+                        base_rows.append(f"{base_col_letter}{r+1}:{val}尾")
+                    else:
+                        base_rows.append(f"{base_col_letter}{r+1}:{val}")
                 if len(base_rows) >= max_len: break
+                
             
             # =====没找到匹配结果的提示拦截=====
             if not res_lines:
