@@ -2141,13 +2141,13 @@ def render_multi_analysis(df_data):
             '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
         ).replace("[[/HIGHLIGHT]]", '</span>')
     
-        #=======多维分析第二个文本框调整字体大小代码起始=============
+        #=======多维分析第二个文本框调整字体大小，固定大小代码起始=============
         display_html = f"""
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 20px; line-height: 2.2; white-space: pre-wrap; word-wrap: break-word; max-height: 480px; overflow-y: auto; text-align: center;">
             {highlighted_display}
         </div>
         """
-        #=======多维分析第二个文本框调整字体大小代码结尾=============
+        #=======多维分析第二个文本框调整字体大小，固定大小代码结尾=============
         print_html = f"""
         <html><head><meta charset="utf-8"><style>
         body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
