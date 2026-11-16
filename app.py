@@ -1777,12 +1777,22 @@ def render_multi_analysis(df_data):
     # ==========================================
     # ==== 5. 核心计算引擎 (生克/匹配/高亮)
     # ==========================================
+    
     if run_btn:
+        # =====防重复计算：生成当前参数唯一签名（包含期数、属性、球号、分析模式等）=====
+        current_signature = f"{selected_file_type}_{selected_period}_{selected_attr}_{ball_str}_{min_len}_{max_len}_{analysis_mode}"
+        
+        # =====防重复计算：如果与上次参数完全一致，且不是全属性遍历，直接拦截不计算=====
+        if st.session_state.get("last_multi_signature") == current_signature and "全属性" not in analysis_mode:
+            st.warning("⚠️ 检测到条件与上次完全一样，已跳过重复计算。如需重算，请修改任意条件或清空结果。")
+            st.stop()
+            
+        # =====防重复计算：记录本次计算条件签名=====
+        st.session_state.last_multi_signature = current_signature
+        
         st.session_state.play_alert = False
-        #===target_file = "升序全套.xlsx" if selected_file_type == "升序全套" else "按序全套.xlsx"
-        #===sheet_name = "升序全套分析" if selected_file_type == "升序全套" else "按序全套分析"
         target_file = "升序全套.csv" if selected_file_type == "升序全套" else "按序全套.csv"
-        sheet_name = None # CSV 不需要 Sheet 名    
+        sheet_name = None 
         progress_bar = st.progress(0)
         status_text = st.empty()
         
@@ -1924,7 +1934,6 @@ def render_multi_analysis(df_data):
                                     if v in ["金", "木", "水", "火", "土"]: return v + wx_suffix 
                                     return v    
                                     
-                                # ==== 5.1 组装匹配结果与杀号 (统一放末尾) ====
                                 w1, w2 = get_ctx(sr-1), get_ctx(er+1)
                                 actual_match_str = "".join([x[1] for x in valid_data[k : k + real_l]])
                                 display_w1 = w1
@@ -1964,7 +1973,6 @@ def render_multi_analysis(df_data):
                                 
                                 w1_str = str(w1).strip()
                                 if w1_str not in ["空", "无", "", "0", "0.0", "None", "nan"]:
-                                    # ==== 5.2 高亮逻辑 (5-9期且25行内) ====
                                     if er + 1 <= 25:
                                         line_txt = f"触发行：{disp_name} 行{sr+1}-{er+1}({real_l}行)近{real_l}期一致: {detail_txt}"
                                         if 5 <= real_l <= 9:
@@ -1997,11 +2005,7 @@ def render_multi_analysis(df_data):
                     base_rows.append(f"{base_col_letter}{r+1}:{val}")
                 if len(base_rows) >= max_len: break
             
-            out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
-            out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
-            
-            #============多维分析找不到匹配记录就提示不写入的代码起点===========
-            # 🔥 终极优化：利用前端 CSS 实现2秒自动消失，绝不卡顿后台进度条
+            # =====没找到匹配结果的提示拦截=====
             if not res_lines:
                 st.markdown(
                     """
@@ -2029,14 +2033,22 @@ def render_multi_analysis(df_data):
                 for line in res_lines: 
                     out_txt += f"{line}\n"
                 
-                # 累积或覆盖逻辑 (只有找到了结果才执行)
+                # =====防重复写入：检查生成的内容是否与历史内容或当前报告完全一致=====
                 if "全属性" in analysis_mode:
-                    st.session_state.full_scan_results.append(out_txt)
-                    st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
+                    # 如果是全属性模式，检查这个完整结果是否已经存在于列表中
+                    if out_txt not in st.session_state.full_scan_results:
+                        st.session_state.full_scan_results.append(out_txt)
+                        st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
+                    else:
+                        st.toast("ℹ️ 计算结果与历史记录完全一致，已忽略重复写入。")
                 else:
-                    st.session_state.full_scan_results = [out_txt]
-                    st.session_state.multi_result_text = out_txt
-            #============多维分析找不到匹配记录就提示不写入的代码终点===========
+                    # 如果是单属性模式，检查是否与上一次完全一样
+                    if st.session_state.multi_result_text != out_txt:
+                        st.session_state.full_scan_results = [out_txt]
+                        st.session_state.multi_result_text = out_txt
+                    else:
+                        st.toast("ℹ️ 计算结果未发生变化，已忽略写入。")
+            
             # ==== 6.1 触发声音提示 (找回丢失的掉金币声音) ====
             if st.session_state.get("play_alert", False):
                 import streamlit.components.v1 as components
@@ -2069,12 +2081,11 @@ def render_multi_analysis(df_data):
                 st.session_state.play_alert = False
             
             progress_bar.progress(100)
-            progress_bar.progress(100)
-            # 🔥 核心修改：把文件类型、期数、属性、球号全拼上去
             status_text.success(f"✅ 计算完成：{selected_file_type} | {selected_period}期 | 属性：{selected_attr} | {ball_str}")
             
         except Exception as e:
-            st.error(f"计算报错: {e}")
+            st.error(f"计算报错: {e}")    
+            
 
     # ==========================================
     # ==== 7. 页面底部展示与高亮渲染区
