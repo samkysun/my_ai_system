@@ -483,81 +483,79 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (无视键名暴力提取版)
+        # 🔥 终极独立下载工具 (香港马会官方真序版)
         # ==========================================
-        if st.sidebar.button("📦 获取纯净版源文件 Excel (CDN版)", use_container_width=True):
+        if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在从 CDN 请求数据...")
+                st.info("正在向香港赛马会官方接口请求真实落球数据...")
                 import pandas as pd
                 import requests
                 import io
-        
+                import json
+                
                 try:
-                    url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
-                    res = requests.get(url, timeout=30)
-        
+                    # 🔥 直接请求香港赛马会官方接口，获取最近30期真实数据
+                    url = "https://bet.hkjc.com/contentserver/jcbw/cmc/last30draw.json"
+                    res = requests.get(url, timeout=15)
+                    
                     if res.status_code != 200:
-                        st.error(f"CDN 请求失败，状态码: {res.status_code}")
+                        st.error(f"官方接口请求失败，状态码: {res.status_code}")
                         st.stop()
-        
+                        
                     raw_data = res.json()
-                    st.info(f"✅ 获取成功，共 {len(raw_data)} 条记录，正在解析...")
-        
+                    
+                    # 兼容官方接口的不同嵌套层级
+                    draws = []
+                    if isinstance(raw_data, dict):
+                        if "draws" in raw_data:
+                            draws = raw_data["draws"]
+                        elif "content" in raw_data:
+                            draws = raw_data["content"]
+                    elif isinstance(raw_data, list):
+                        draws = raw_data
+                        
+                    if not draws:
+                        st.error("❌ 官方接口返回了数据，但没有找到开奖记录。")
+                        st.stop()
+                        
+                    st.info(f"✅ 成功获取官方数据，共 {len(draws)} 期，正在生成...")
+                    
                     desc_rows, asc_rows = [], []
-        
-                    for item in raw_data:
-                        # 兼容可能存在的 draws 嵌套
-                        draw = item.get("draws", [{}])[0] if isinstance(item.get("draws"), list) and len(item.get("draws")) > 0 else item
+                    
+                    for item in draws:
+                        # 马会官方字段：id是期数，drawnNo是落球顺序，xDrawnNo是特码
+                        raw_id = str(item.get("id", "")) # 如 "24/001"
+                        date_str = str(item.get("date", ""))
                         
-                        nums = []
-                        special = 0
-                        year = ""
-                        period_part = ""
+                        # 提取平码（有些字段可能是 drawnNoSorted，我们只要 drawnNo）
+                        drawn_nos = item.get("drawnNo", [])
+                        special = item.get("xDrawnNo", 0)
                         
-                        # 🔥 暴力遍历所有值，无视键名！
-                        for k, v in draw.items():
-                            # 1. 抓平码：只要是一个长度为 6 的列表
-                            if isinstance(v, list) and len(v) == 6:
-                                try: nums = [int(str(x).strip()) for x in v]
-                                except: pass
-                            elif isinstance(v, dict) and len(v) == 6:
-                                try: nums = [int(str(x).strip()) for x in v.values()]
-                                except: pass
+                        if raw_id and len(drawn_nos) == 6 and special:
+                            try:
+                                nums = [int(x) for x in drawn_nos]
+                                special = int(special)
+                            except:
+                                continue
+                                
+                            # 格式化期数：从 "24/001" 转为 "2024001"
+                            year_short, period = raw_id.split('/')
+                            year = f"20{year_short}"
+                            full_period = f"{year}{period.zfill(3)}"
                             
-                            # 2. 抓特码：只要是 1~49 的数字（排除掉期号和年份）
-                            if isinstance(v, (int, str)) and str(v).isdigit():
-                                val = int(v)
-                                if 1 <= val <= 49 and "/" not in str(v) and "-" not in str(v):
-                                    special = val
-                                    
-                            # 3. 抓日期 (年份)：只要带有 "-" 且看起来像日期
-                            if isinstance(v, str) and "-" in v and len(v) >= 10:
-                                year = v[:4]
-                                
-                            # 4. 抓期号：只要带有 "/"
-                            if isinstance(v, str) and "/" in v:
-                                period_part = v.split("/")[-1].zfill(3)
-                                
-                        if len(nums) == 6 and special > 0:
-                            if not year: year = "1993"
-                            if not period_part: period_part = "001"
-                            full_period = f"{year}{period_part}"
-        
                             # 按序：真实落球顺序
                             desc_rows.append([full_period] + nums + [special])
-                            # 升序：前6个球排序
+                            # 升序：排序后
                             asc_rows.append([full_period] + sorted(nums) + [special])
         
                     if not desc_rows:
-                        st.error("❌ 依然未能解析出有效数据。")
+                        st.error("❌ 解析失败。")
                         st.stop()
         
                     # 转为 DataFrame 并降序排列
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
                     df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
                     df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
-        
-                    st.success(f"🎉 成功提取 {len(df_desc)} 期数据！")
         
                     # 导出 Excel
                     out_desc, out_asc = io.BytesIO(), io.BytesIO()
@@ -568,6 +566,7 @@ def render_console(df_data):
                         df_asc.to_excel(writer, index=False)
                     out_asc.seek(0)
         
+                    st.success(f"🎉 成功提取 {len(df_desc)} 期官方真实数据！")
                     st.download_button(
                         label="📥 下载【按序源文件.xlsx】",
                         data=out_desc,
