@@ -473,10 +473,20 @@ def render_console(df_data):
     fetch_btn = b6.button("🤏抓取香港数据", use_container_width=True)
 
    
+   
     # ==========================================
-    # 👇 ============ 生成纯净源文件模块 ============ 👇
+    # 👇 ============ 开始：管理员专属模块 ============ 👇
     # ==========================================
+    
+    # 读取 Secrets 里的管理员用户名
+    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+    
     if st.session_state.username == admin_name:
+        
+        # ------------------------------------------
+        # 子模块 1：生成纯净源文件并下载
+        # 作用：拉取全量真实数据，生成方便你手工填写的 Excel
+        # ------------------------------------------
         st.markdown("### 📦 纯净数据源下载 (手工填写专用)")
         if st.button("📥 一键生成并下载纯净版【升序】和【按序】Excel", use_container_width=True, type="secondary"):
             with st.spinner("正在从云端拉取全量历史数据，请稍候..."):
@@ -498,7 +508,6 @@ def render_console(df_data):
                     asc_rows = []
                     
                     for item in raw_data:
-                        # 兼容可能的数据嵌套结构
                         draw = item.get("draws", [{}])[0] if item.get("draws") else item
                         
                         date_str = draw.get("date", "")
@@ -557,10 +566,14 @@ def render_console(df_data):
                         )
                 except Exception as e:
                     st.error(f"生成失败: {e}")
-    st.divider()
-    # ==========================================
-    # 👆 ============ 生成纯净源文件模块 ============ 👆
-    # ==========================================    
+
+        # 分割线，隔开下载模块和手动补录模块
+        st.divider()
+
+        # ------------------------------------------
+        # 子模块 2：手动补录开奖数据 (云端同步)
+        # 作用：在网页上输入最新号码，自动更新 GitHub 的 Excel
+        # ------------------------------------------
         with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
                 st.info("💡提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
@@ -706,6 +719,9 @@ def render_console(df_data):
                                     if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
 
     st.divider()
+    # ==========================================
+    # 👆 ============ 结束：管理员专属模块 ============ 👆
+    # ==========================================
     # ==========================================
     # 👆 ============ 结束：手动补录模块 ============ 👆
     # ==========================================
