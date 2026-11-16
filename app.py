@@ -483,15 +483,14 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (1976-2026全量升序容错版)
+        # 🔥 终极独立下载工具 (自动拆解成源文件格式版)
         # ==========================================
-        if st.sidebar.button("📦 生成1976-2026升序源文件 Excel", use_container_width=True):
+        if st.sidebar.button("📦 生成1976-2026升序源文件 (拆分版)", use_container_width=True):
             with st.sidebar:
-                st.info("正在从云端拉取1976年至今的全量数据，请稍候...")
+                st.info("正在下载全量数据并拆解单元格...")
                 import pandas as pd
                 import requests
                 import io
-                import json
         
                 try:
                     url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
@@ -502,53 +501,75 @@ def render_console(df_data):
                         st.stop()
         
                     raw_data = res.json()
-                    st.info("✅ 数据下载成功，正在解析并整理格式...")
-        
                     df_raw = pd.DataFrame(raw_data)
                     
-                    required_cols = ['YEAR', 'TIMES', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'S1']
-                    if not all(col in df_raw.columns for col in required_cols):
-                        st.error(f"❌ 数据列缺失，现有列: {list(df_raw.columns)}")
-                        st.stop()
-        
                     rows = []
                     skipped = 0
                     
                     for _, row in df_raw.iterrows():
                         try:
-                            # 🔥 使用 try-except 包裹，遇到疫情备注等脏数据直接跳过
                             year = str(int(float(row['YEAR'])))
                             period_num = str(int(float(row['TIMES']))).zfill(3)
-                            full_period = f"{year}{period_num}"
                             
-                            nums = [int(float(row[f'N{i}'])) for i in range(1, 7)]
+                            # 🔥 核心拆解：期数
+                            p_100 = period_num[0]
+                            p_10 = period_num[1]
+                            p_1 = period_num[2]
+        
+                            # 获取6个平码并升序排列
+                            nums = sorted([int(float(row[f'N{i}'])) for i in range(1, 7)])
                             special = int(float(row['S1']))
-                            
-                            # 校验号码合法性，防止越界
-                            if not all(1 <= n <= 49 for n in nums) or not (1 <= special <= 49):
+                            all_balls = nums + [special] # 前6个平码 + 第7个特码
+        
+                            # 校验合法性
+                            if not all(1 <= n <= 49 for n in all_balls):
                                 skipped += 1
                                 continue
-                                
-                            asc_nums = sorted(nums)
-                            rows.append([full_period] + asc_nums + [special])
+        
+                            # 构建 27 列的数组 (A 到 AA)
+                            row_data = [""] * 27
+                            
+                            # 填充 A, B, C 列 (期数)
+                            row_data[0] = p_100
+                            row_data[1] = p_10
+                            row_data[2] = p_1
+        
+                            # 填充 7个球的十位和个位 (D 到 Q 列，索引 3 到 16)
+                            col_idx = 3
+                            for ball in all_balls:
+                                row_data[col_idx] = str(ball // 10)
+                                row_data[col_idx + 1] = str(ball % 10)
+                                col_idx += 2
+        
+                            # 填充 AA 列 (年份，索引 26)
+                            row_data[26] = year
+        
+                            rows.append(row_data)
                         except (ValueError, TypeError):
-                            # 捕捉到类似“新冠疫情”的文本，直接跳过
                             skipped += 1
                             continue
         
-                    cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
+                    # 定义 27 列的表头
+                    cols = [
+                        "A", "B", "C", 
+                        "1_十", "1_个", "2_十", "2_个", "3_十", "3_个", "4_十", "4_个", 
+                        "5_十", "5_个", "6_十", "6_个", "7_十", "7_个", 
+                        "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA"
+                    ]
                     df_asc = pd.DataFrame(rows, columns=cols)
-                    df_asc = df_asc.sort_values("期数", ascending=False).reset_index(drop=True)
+                    
+                    # 按 A列 (期数百位)、B列、C列 降序排列（最新在最上面）
+                    df_asc = df_asc.sort_values(by=["A", "B", "C"], ascending=[False, False, False]).reset_index(drop=True)
         
-                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
+                    st.success(f"🎉 成功拆解 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
                     
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine='openpyxl') as writer:
-                        df_asc.to_excel(writer, index=False)
+                        df_asc.to_excel(writer, index=False, header=False) # 不输出表头，直接纯数据
                     out.seek(0)
                     
                     st.download_button(
-                        label="📥 下载【升序源文件.xlsx】",
+                        label="📥 下载【升序源文件_完美拆分版.xlsx】",
                         data=out,
                         file_name="升序源文件.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
