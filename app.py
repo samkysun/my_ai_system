@@ -483,17 +483,18 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (精准年份排序版)
+        # 🔥 终极独立下载工具 (icelam干净升序版)
         # ==========================================
-        if st.sidebar.button("📦 生成1976-2026升序源文件 (精准排序)", use_container_width=True):
+        if st.sidebar.button("📦 生成1993-2026升序源文件 (干净无重复)", use_container_width=True):
             with st.sidebar:
-                st.info("正在下载全量数据并拆解、精准排序...")
+                st.info("正在从云端拉取最干净的升序数据并拆解...")
                 import pandas as pd
                 import requests
                 import io
         
                 try:
-                    url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
+                    # 使用 CDN 拉取每天自动更新的干净库
+                    url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
                     res = requests.get(url, timeout=60)
         
                     if res.status_code != 200:
@@ -501,49 +502,72 @@ def render_console(df_data):
                         st.stop()
         
                     raw_data = res.json()
-                    df_raw = pd.DataFrame(raw_data)
                     
-                    # 1. 先把所有合法数据提取出来，带上完整期数字符串用于排序
-                    parsed_data = []
+                    parsed_dict = {}
                     skipped = 0
                     
-                    for _, row in df_raw.iterrows():
+                    for item in raw_data:
                         try:
-                            year = str(int(float(row['YEAR'])))
-                            period_num = str(int(float(row['TIMES']))).zfill(3)
+                            # 兼容英文原版和可能被机翻的中文字段
+                            draw = item.get("draws", [{}])[0] if item.get("draws") else item
+                            
+                            raw_id = str(draw.get("id", draw.get("身份证", "")))
+                            date_str = str(draw.get("date", draw.get("日期", "")))
+                            nums = draw.get("numbers", draw.get("不", []))
+                            special_val = draw.get("special", draw.get("斯诺", 0))
+        
+                            if not raw_id or len(nums) != 6 or not special_val:
+                                continue
+        
+                            # 提取年份和期号
+                            if "-" in date_str:
+                                year = date_str[:4]
+                            elif "/" in raw_id:
+                                year = "20" + raw_id.split("/")[0]
+                            else:
+                                year = "1993"
+                                
+                            if "/" in raw_id:
+                                period_num = raw_id.split("/")[-1].zfill(3)
+                            else:
+                                period_num = str(raw_id)[-3:].zfill(3)
+        
                             full_period = f"{year}{period_num}"
-                            
-                            nums = sorted([int(float(row[f'N{i}'])) for i in range(1, 7)])
-                            special = int(float(row['S1']))
+        
+                            # 转换号码类型，并对平码强制升序排序
+                            nums = sorted([int(float(x)) for x in nums])
+                            special = int(float(special_val))
                             all_balls = nums + [special]
-                            
+        
                             if not all(1 <= n <= 49 for n in all_balls):
                                 skipped += 1
                                 continue
+        
+                            # 自动去重，确保期数唯一
+                            if full_period in parsed_dict:
+                                continue
                                 
-                            parsed_data.append({
-                                "full_period": full_period,
+                            parsed_dict[full_period] = {
                                 "year": year,
                                 "period_num": period_num,
                                 "balls": all_balls
-                            })
-                        except (ValueError, TypeError):
+                            }
+                        except Exception:
                             skipped += 1
                             continue
         
-                    # 2. 🔥 核心修复：按完整期数 (如 2024115) 强降序排序！
-                    parsed_data.sort(key=lambda x: x["full_period"], reverse=True)
+                    # 按期数强降序排序（最新在最上面）
+                    sorted_periods = sorted(parsed_dict.keys(), reverse=True)
         
-                    # 3. 排序完毕，开始拆解成 27 列
+                    # 开始拆解成 27 列标准格式
                     rows = []
-                    for item in parsed_data:
+                    for period in sorted_periods:
+                        item = parsed_dict[period]
                         p_num = item["period_num"]
-                        p_100, p_10, p_1 = p_num[0], p_num[1], p_num[2]
                         
                         row_data = [""] * 27
-                        row_data[0], row_data[1], row_data[2] = p_100, p_10, p_1
+                        row_data[0], row_data[1], row_data[2] = p_num[0], p_num[1], p_num[2]
                         
-                        # 拆解 7 个球的十位和个位
                         col_idx = 3
                         for ball in item["balls"]:
                             row_data[col_idx] = str(ball // 10)
@@ -553,15 +577,15 @@ def render_console(df_data):
                         row_data[26] = item["year"]
                         rows.append(row_data)
         
-                    # 生成最终的 Excel 数据
+                    # 生成最终的 Excel
                     cols = [f"Col{i}" for i in range(1, 28)]
                     df_asc = pd.DataFrame(rows, columns=cols)
         
-                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！(已过滤 {skipped} 条脏数据)")
+                    st.success(f"🎉 成功生成 {len(df_asc)} 期干净数据！(已剔除重复)")
                     
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine='openpyxl') as writer:
-                        df_asc.to_excel(writer, index=False, header=False) # 纯数据无表头
+                        df_asc.to_excel(writer, index=False, header=False)
                     out.seek(0)
                     
                     st.download_button(
