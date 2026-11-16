@@ -1987,13 +1987,23 @@ def render_multi_analysis(df_data):
             out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
             out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
             
-            
-            # 🔥 核心修复：如果没找到任何匹配，在当前页面提示，2秒后自动消失
+            #============多维分析找不到匹配记录就提示不写入的代码起点===========
+            # 🔥 终极优化：利用前端 CSS 实现2秒自动消失，绝不卡顿后台进度条
             if not res_lines:
-                status_text.warning("⚠️ 未找到符合条件的匹配记录")
-                import time
-                time.sleep(1.5)  # 停顿 1.5 秒
-                status_text.empty() # 自动清空提示
+                st.markdown(
+                    """
+                    <div id="auto-dismiss-alert" style="background-color:#fef08a; color:#854d0e; padding:12px; border-radius:6px; text-align:center; font-weight:bold; margin-bottom:10px;">
+                        ⚠️ 未找到符合条件的匹配记录
+                    </div>
+                    <script>
+                        setTimeout(function(){
+                            var el = document.getElementById('auto-dismiss-alert');
+                            if(el) el.style.display = 'none';
+                        }, 2000);
+                    </script>
+                    """, 
+                    unsafe_allow_html=True
+                )
             else:
                 out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
                 out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
@@ -2008,7 +2018,7 @@ def render_multi_analysis(df_data):
                 else:
                     st.session_state.full_scan_results = [out_txt]
                     st.session_state.multi_result_text = out_txt
-            
+            #============多维分析找不到匹配记录就提示不写入的代码终点===========
             # ==== 6.1 触发声音提示 (找回丢失的掉金币声音) ====
             if st.session_state.get("play_alert", False):
                 import streamlit.components.v1 as components
