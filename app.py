@@ -1579,7 +1579,7 @@ def render_ai(df_data):
             }}
             </script>
             """,
-            height=600,
+            height=620,
             scrolling=False
         )
         
