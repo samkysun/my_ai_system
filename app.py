@@ -483,7 +483,7 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (icelam CDN 版)
+        # 🔥 终极独立下载工具 (暴力无死角解析版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel (CDN版)", use_container_width=True):
             with st.sidebar:
@@ -491,10 +491,8 @@ def render_console(df_data):
                 import pandas as pd
                 import requests
                 import io
-                import json
         
                 try:
-                    # 使用 jsDelivr CDN 加速，并请求 all.json (通常包含全量数据)
                     url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
                     res = requests.get(url, timeout=30)
         
@@ -506,19 +504,49 @@ def render_console(df_data):
                     st.info(f"✅ 获取成功，共 {len(raw_data)} 条记录，正在解析...")
         
                     desc_rows, asc_rows = [], []
+                    
+                    # 👇 调试用：打印第一条数据长什么样，方便排查
+                    if len(raw_data) > 0:
+                        st.write("🔍 第一条数据格式：", raw_data[0])
         
                     for item in raw_data:
-                        # 兼容可能的数据结构
-                        draw = item.get("draws", [{}])[0] if item.get("draws") else item
-        
-                        date_str = draw.get("date", "")
-                        raw_id = draw.get("id", "")
+                        # 兼容最外层的 draws 结构
+                        draw = item.get("draws", [{}])[0] if isinstance(item.get("draws"), list) and len(item.get("draws")) > 0 else item
+                        
+                        date_str = str(draw.get("date", ""))
+                        raw_id = str(draw.get("id", draw.get("no", "")))
+                        
+                        # 1. 暴力找平码
                         nums = draw.get("numbers", [])
-                        special = draw.get("special", 0)
-        
+                        if isinstance(nums, str):
+                            nums = [x for x in nums.replace(" ", "").split(",") if x.isdigit()]
+                        elif not isinstance(nums, list):
+                            nums = []
+                            
+                        # 如果没找到 numbers，尝试找 n1~n6
+                        if len(nums) == 0:
+                            for i in range(1, 7):
+                                val = draw.get(f"n{i}", draw.get(f"N{i}", None))
+                                if val is not None:
+                                    nums.append(val)
+                                    
+                        # 2. 暴力找特码
+                        special = draw.get("special", draw.get("s1", draw.get("S1", 0)))
+                        
+                        # 3. 校验并转换类型
                         if len(nums) == 6 and special:
+                            try:
+                                nums = [int(x) for x in nums]
+                                special = int(special)
+                            except:
+                                continue
+                                
+                            # 提取年份和期号
                             year = date_str[:4] if date_str else "1993"
-                            period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
+                            if '/' in raw_id:
+                                period_part = raw_id.split('/')[-1].zfill(3)
+                            else:
+                                period_part = str(raw_id)[-3:].zfill(3)
                             full_period = f"{year}{period_part}"
         
                             # 按序：真实落球顺序
@@ -527,7 +555,7 @@ def render_console(df_data):
                             asc_rows.append([full_period] + sorted(nums) + [special])
         
                     if not desc_rows:
-                        st.error("❌ 未能解析到有效数据。")
+                        st.error("❌ 仍然未能解析到有效数据。请把上面打印的【第一条数据格式】截图发我，我一眼就能看出字段名！")
                         st.stop()
         
                     # 转为 DataFrame 并降序排列
