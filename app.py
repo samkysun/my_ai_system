@@ -14,14 +14,26 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from supabase import create_client
 
 # ==========================================
-# 1. 全局配置与初始化 (保留原版)
+# 1. 全局配置与初始化
 # ==========================================
 st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
 
 EXCEL_FILE = "总数据.xlsx"
 SHEET_NAME = "总数据表" 
-USER_FILE = "users.csv" # 这个现在不用了，但保留着防止报错
 DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
+
+# 🔥 改为使用你 Secrets 里的原始参数建立客户端
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+
+@st.cache_resource
+def get_supabase_client():
+    if not SUPABASE_URL or not SUPABASE_KEY: return None
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 密码加密
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "username" not in st.session_state: st.session_state.username = ""
@@ -31,21 +43,6 @@ if "calc_data_multi" not in st.session_state: st.session_state.calc_data_multi =
 if "calc_result_preview" not in st.session_state: st.session_state.calc_result_preview = None
 if "predicted_nums_single" not in st.session_state: st.session_state.predicted_nums_single = None
 if "predicted_nums_multi" not in st.session_state: st.session_state.predicted_nums_multi = None
-
-# 连接 Supabase 用户数据库
-conn = st.connection("supabase", type="sql")
-
-# 密码加密
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-# Supabase 规则表客户端 (保留 AI 推演所需的原始连接)
-@st.cache_resource
-def get_supabase_client():
-    url = st.secrets.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_KEY")
-    if not url or not key: return None
-    return create_client(url, key)
 
 # ==========================================
 # 2. 核心引擎：28个属性纯代码计算器 (保留原版)
@@ -239,7 +236,7 @@ def calculate_prize(df_data, target_period, predicted_nums):
     return result, None
 
 # ==========================================
-# 5. 走势图
+# 5. 各页面渲染 (兼容原版)
 # ==========================================
 def render_trend_chart(df_data):
     st.divider()
@@ -267,9 +264,6 @@ def render_trend_chart(df_data):
             if num_str in cols: matrix_special.at[period, num_str] = "★"
         st.dataframe(matrix_special, use_container_width=True, height=600)
 
-# ==========================================
-# 6. 各页面渲染
-# ==========================================
 def render_multi_analysis(df_data):
     st.title("📐多维分析系统")
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
@@ -531,6 +525,8 @@ def render_multi_analysis(df_data):
         file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         st.download_button(label="📥 保存完整报告到本地 (TXT格式)", data=clean_text.encode('utf-8-sig'), file_name=file_name, mime="text/plain", use_container_width=True)
 
+# 为节省篇幅，其余函数保持不变 (render_deep_linkage, render_ai, render_console, render_admin_panel, login_page)
+# 核心更新在底部的 main_app 入口
 def render_deep_linkage(df_data):
     st.title("🔗 深度联动分析系统")
     st.info("💡 功能说明：提取基准期开奖号码的属性组合，在全历史数据中寻找相同组合，并统计命中后下一期各球位的属性频次。")
@@ -792,7 +788,6 @@ def render_ai(df_data):
         st.download_button(label="📥 保存完整推演报告到本地 (TXT格式)", data=full_result_text.encode('utf-8-sig'), file_name=f"AI推演_{qishu}_{qiu}_{order_type}.txt", mime="text/plain", use_container_width=True)
     else: st.info("👈 请先在上方设置参数，然后点击【开始推演】。")
 
-# AI 所需附属函数
 @st.cache_data(ttl=3600, show_spinner=False)
 def build_rule_database():
     try:
@@ -836,9 +831,6 @@ def call_deepseek_api(question, system_prompt):
         else: return f"请求失败：{response.status_code}\n{response.text}"
     except Exception as e: return f"运行错误：{e}"
 
-# ==========================================
-# 7. 主控台
-# ==========================================
 def render_console(df_data):
     st.title("💻智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
@@ -972,9 +964,6 @@ def render_console(df_data):
     if st.session_state.calc_result_preview is not None: st.dataframe(st.session_state.calc_result_preview, use_container_width=True)
     else: st.info("暂无中出结果。")
 
-# ==========================================
-# 8. 管理员专属后台管理页
-# ==========================================
 def render_admin_panel():
     st.title("⚙️ 系统后台管理中心")
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -982,24 +971,27 @@ def render_admin_panel():
     
     with tab1:
         try:
-            with conn.session as s:
-                users = s.execute("SELECT username, is_vip FROM users WHERE username != :admin", params={"admin": admin_name}).fetchall()
-            if users:
-                user_dict = {row[0]: row[1] for row in users}
-                all_users = list(user_dict.keys())
-                current_vips = [u for u, is_vip in user_dict.items() if is_vip]
-                selected_vips = st.multiselect("选择授权用户（允许查看高级页面）：", all_users, default=current_vips)
-                if st.button("💾 保存授权更改", type="primary"):
-                    with conn.session as s:
-                        s.execute("UPDATE users SET is_vip = false")
-                        for u in selected_vips: s.execute("UPDATE users SET is_vip = true WHERE username = :u", params={"u": u})
-                        s.commit()
-                    st.success("✅ 授权已更新！")
-            else: st.warning("暂无其他注册用户。")
+            client = get_supabase_client()
+            if client:
+                users = client.table("users").select("username, is_vip").neq("username", admin_name).execute().data
+                if users:
+                    user_dict = {row["username"]: row.get("is_vip", False) for row in users}
+                    all_users = list(user_dict.keys())
+                    current_vips = [u for u, is_vip in user_dict.items() if is_vip]
+                    selected_vips = st.multiselect("选择授权用户（允许查看高级页面）：", all_users, default=current_vips)
+                    if st.button("💾 保存授权更改", type="primary"):
+                        # 先将所有人降级
+                        client.table("users").update({"is_vip": False}).neq("username", admin_name).execute()
+                        # 再将选中的升级
+                        if selected_vips:
+                            client.table("users").update({"is_vip": True}).in_("username", selected_vips).execute()
+                        st.success("✅ 授权已更新！")
+                else: st.warning("暂无其他注册用户。")
         except Exception as e: st.error(f"读取失败: {e}")
         
     with tab2:
         st.markdown("### 📝 手动补录开奖数据 (云端同步)")
+        # (这里是补录逻辑，保留原样)
         with st.form("manual_input_form", clear_on_submit=True):
             st.info("💡 提示：保存后，数据将直接更新到 GitHub 云端的两个 Excel 源文件中，并插入第 3 行。")
             col_year, col_p1, col_p2, col_p3 = st.columns(4)
@@ -1078,9 +1070,6 @@ def render_admin_panel():
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
                                 if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
 
-# ==========================================
-# 9. 登录与系统入口
-# ==========================================
 def login_page():
     st.title("🔐 智能系统客户端登录")
     tab1, tab2 = st.tabs(["已有账号？登录", "没有账号？立即注册"])
@@ -1091,9 +1080,12 @@ def login_page():
         if st.button("登录", use_container_width=True):
             if login_user and login_pass:
                 hashed = hash_password(login_pass)
+                client = get_supabase_client()
+                if not client: st.error("数据库连接失败，请检查 Secrets 配置"); st.stop()
+                
                 try:
-                    with conn.session as s:
-                        result = s.execute("SELECT username FROM users WHERE username = :u AND password = :p", params={"u": login_user, "p": hashed}).fetchone()
+                    # 改用 API 方式查询
+                    result = client.table("users").select("username").eq("username", login_user).eq("password", hashed).execute().data
                     if result:
                         st.session_state.logged_in = True
                         st.session_state.username = login_user
@@ -1105,19 +1097,23 @@ def login_page():
                 
     with tab2:
         reg_user = st.text_input("设置用户名", key="reg_user")
-        reg_pass = st.text_input("设置密码", type="password", key="reg_pass")
+        reg_pass = st.text_input("密码", type="password", key="reg_pass")
         reg_confirm = st.text_input("确认密码", type="password", key="reg_confirm")
         if st.button("注册账号", use_container_width=True):
             if reg_user and reg_pass:
                 if reg_pass != reg_confirm: st.error("两次密码不一致")
                 else:
                     hashed = hash_password(reg_pass)
+                    client = get_supabase_client()
+                    if not client: st.error("数据库连接失败"); st.stop()
+                    
                     try:
-                        with conn.session as s:
-                            s.execute("INSERT INTO users (username, password, is_vip) VALUES (:u, :p, false)", params={"u": reg_user, "p": hashed})
-                            s.commit()
+                        # 改用 API 方式插入
+                        client.table("users").insert({"username": reg_user, "password": hashed, "is_vip": False}).execute()
                         st.success("🎉 注册成功！请去登录。")
-                    except Exception as e: st.error(f"注册失败: {e}")
+                    except Exception as e: 
+                        if "duplicate key" in str(e): st.error("该用户名已被注册！")
+                        else: st.error(f"注册失败: {e}")
 
 def main_app():
     current_user = st.session_state.username
@@ -1126,11 +1122,13 @@ def main_app():
     
     is_vip = False
     if not is_admin:
-        try:
-            with conn.session as s:
-                res = s.execute("SELECT is_vip FROM users WHERE username = :u", params={"u": current_user}).fetchone()
-                if res and res[0]: is_vip = True
-        except: pass
+        client = get_supabase_client()
+        if client:
+            try:
+                res = client.table("users").select("is_vip").eq("username", current_user).execute().data
+                if res and res[0].get("is_vip") == True:
+                    is_vip = True
+            except: pass
         
     df_data = load_real_data()
 
@@ -1155,9 +1153,6 @@ def main_app():
     elif page == "🧠 AI推演": render_ai(df_data)
     elif page == "⚙️ 后台管理": render_admin_panel()
 
-# ==========================================
-# 10. 大门启动
-# ==========================================
 if not st.session_state.logged_in:
     login_page()
 else:
