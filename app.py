@@ -483,7 +483,7 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (精准匹配字段版)
+        # 🔥 终极独立下载工具 (无视键名暴力提取版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel (CDN版)", use_container_width=True):
             with st.sidebar:
@@ -506,29 +506,41 @@ def render_console(df_data):
                     desc_rows, asc_rows = [], []
         
                     for item in raw_data:
-                        # 兼容最外层的 draws 结构
+                        # 兼容可能存在的 draws 嵌套
                         draw = item.get("draws", [{}])[0] if isinstance(item.get("draws"), list) and len(item.get("draws")) > 0 else item
                         
-                        # 🔥 精准匹配它那个奇葩翻译的字段名
-                        date_str = str(draw.get("日期", ""))
-                        raw_id = str(draw.get("身份证", draw.get("id", "")))
-                        nums = draw.get("不", draw.get("numbers", []))
-                        special = draw.get("斯诺", draw.get("special", 0))
+                        nums = []
+                        special = 0
+                        year = ""
+                        period_part = ""
                         
-                        # 校验并转换类型
-                        if isinstance(nums, list) and len(nums) == 6 and special:
-                            try:
-                                nums = [int(x) for x in nums]
-                                special = int(special)
-                            except:
-                                continue
+                        # 🔥 暴力遍历所有值，无视键名！
+                        for k, v in draw.items():
+                            # 1. 抓平码：只要是一个长度为 6 的列表
+                            if isinstance(v, list) and len(v) == 6:
+                                try: nums = [int(str(x).strip()) for x in v]
+                                except: pass
+                            elif isinstance(v, dict) and len(v) == 6:
+                                try: nums = [int(str(x).strip()) for x in v.values()]
+                                except: pass
+                            
+                            # 2. 抓特码：只要是 1~49 的数字（排除掉期号和年份）
+                            if isinstance(v, (int, str)) and str(v).isdigit():
+                                val = int(v)
+                                if 1 <= val <= 49 and "/" not in str(v) and "-" not in str(v):
+                                    special = val
+                                    
+                            # 3. 抓日期 (年份)：只要带有 "-" 且看起来像日期
+                            if isinstance(v, str) and "-" in v and len(v) >= 10:
+                                year = v[:4]
                                 
-                            # 提取年份和期号
-                            year = date_str[:4] if date_str else "1993"
-                            if '/' in raw_id:
-                                period_part = raw_id.split('/')[-1].zfill(3)
-                            else:
-                                period_part = str(raw_id)[-3:].zfill(3)
+                            # 4. 抓期号：只要带有 "/"
+                            if isinstance(v, str) and "/" in v:
+                                period_part = v.split("/")[-1].zfill(3)
+                                
+                        if len(nums) == 6 and special > 0:
+                            if not year: year = "1993"
+                            if not period_part: period_part = "001"
                             full_period = f"{year}{period_part}"
         
                             # 按序：真实落球顺序
@@ -537,7 +549,7 @@ def render_console(df_data):
                             asc_rows.append([full_period] + sorted(nums) + [special])
         
                     if not desc_rows:
-                        st.error("❌ 依然未能解析出有效数据，请检查。")
+                        st.error("❌ 依然未能解析出有效数据。")
                         st.stop()
         
                     # 转为 DataFrame 并降序排列
