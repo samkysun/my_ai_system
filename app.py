@@ -483,89 +483,70 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (反封锁代理版)
+        # 🔥 终极独立下载工具 (1976-2026全量升序版)
         # ==========================================
-        if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
+        if st.sidebar.button("📦 生成1976-2026升序源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在通过海外节点请求真实落球数据...")
+                st.info("正在从云端拉取1976年至今的全量数据，请稍候...")
                 import pandas as pd
                 import requests
                 import io
                 import json
         
                 try:
-                    # 使用公共代理绕过反爬，抓取 6hca 的真实落球数据
-                    target_api = "https://6hca.com/api/history?limit=100"
-                    proxy_url = "https://api.allorigins.win/raw?url=" + requests.utils.quote(target_api)
-                    
-                    res = requests.get(proxy_url, timeout=20)
-                    
+                    # 直接使用 raw.githubusercontent 链接，获取全量数据
+                    url = "https://raw.githubusercontent.com/kenchudigital/ML-SixMark-Lab/main/data/data.json"
+                    res = requests.get(url, timeout=60)
+        
                     if res.status_code != 200:
-                        st.error(f"代理请求失败，状态码: {res.status_code}")
+                        st.error(f"数据源请求失败，状态码: {res.status_code}")
                         st.stop()
-                        
+        
                     raw_data = res.json()
-                    
-                    if isinstance(raw_data, dict) and "data" in raw_data:
-                        draws = raw_data["data"]
-                    elif isinstance(raw_data, list):
-                        draws = raw_data
-                    else:
-                        st.error("❌ 接口返回格式无法识别。")
-                        st.stop()
-                        
-                    if not draws:
-                        st.error("❌ 未找到开奖记录。")
-                        st.stop()
-                        
-                    st.info(f"✅ 成功获取 {len(draws)} 期数据，正在生成...")
-                    
-                    desc_rows, asc_rows = [], []
-                    
-                    for item in draws:
-                        period = str(item.get("expect", ""))
-                        opencode = str(item.get("opencode", ""))
-                        
-                        if not period or not opencode: 
-                            continue
-                            
-                        nums = [int(x) for x in opencode.split(",") if x.isdigit()]
-                        if len(nums) == 7:
-                            flats = nums[:6]
-                            special = nums[6]
-                            
-                            # 按序表（真实出球顺序）
-                            desc_rows.append([period] + flats + [special])
-                            # 升序表（排好序）
-                            asc_rows.append([period] + sorted(flats) + [special])
+                    st.info("✅ 数据下载成功，正在解析并整理格式...")
         
-                    if not desc_rows:
-                        st.error("❌ 解析失败。")
+                    # 将列式JSON转换为行式列表
+                    df_raw = pd.DataFrame(raw_data)
+                    
+                    # 确保关键列存在
+                    required_cols = ['YEAR', 'TIMES', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'S1']
+                    if not all(col in df_raw.columns for col in required_cols):
+                        st.error(f"❌ 数据列缺失，现有列: {list(df_raw.columns)}")
                         st.stop()
         
+                    # 构建标准格式
+                    rows = []
+                    for _, row in df_raw.iterrows():
+                        year = str(int(row['YEAR']))
+                        period_num = str(int(row['TIMES'])).zfill(3)
+                        full_period = f"{year}{period_num}"
+                        
+                        nums = [int(row[f'N{i}']) for i in range(1, 7)]
+                        special = int(row['S1'])
+                        
+                        # 确保前6个平码由小到大排列
+                        asc_nums = sorted(nums)
+                        
+                        rows.append([full_period] + asc_nums + [special])
+        
+                    # 转为DataFrame
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
-                    df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
-                    df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                    df_asc = pd.DataFrame(rows, columns=cols)
+                    
+                    # 按期数降序排列（最新在最上面）
+                    df_asc = df_asc.sort_values("期数", ascending=False).reset_index(drop=True)
         
-                    out_desc, out_asc = io.BytesIO(), io.BytesIO()
-                    with pd.ExcelWriter(out_desc, engine='openpyxl') as writer:
-                        df_desc.to_excel(writer, index=False)
-                    out_desc.seek(0)
-                    with pd.ExcelWriter(out_asc, engine='openpyxl') as writer:
+                    st.success(f"🎉 成功生成 {len(df_asc)} 期升序数据！")
+                    
+                    # 打包为Excel
+                    out = io.BytesIO()
+                    with pd.ExcelWriter(out, engine='openpyxl') as writer:
                         df_asc.to_excel(writer, index=False)
-                    out_asc.seek(0)
-        
-                    st.success(f"🎉 成功提取 {len(df_desc)} 期真实落球数据！")
-                    st.download_button(
-                        label="📥 下载【按序源文件.xlsx】",
-                        data=out_desc,
-                        file_name="按序源文件.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
+                    out.seek(0)
+                    
                     st.download_button(
                         label="📥 下载【升序源文件.xlsx】",
-                        data=out_asc,
+                        data=out,
                         file_name="升序源文件.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
