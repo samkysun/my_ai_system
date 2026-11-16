@@ -144,8 +144,10 @@ def clean_period(val):
     s = str(val).strip()
     if s.endswith(".0"): s = s[:-2]
     return s
-    
-@st.cache_data(ttl=60, show_spinner=False) 
+#============改变页面跳转时的卡顿问题代码👇========================    
+@st.cache_data(ttl=86400, show_spinner=False) # 改成 24 小时
+#============改变页面跳转时的卡顿问题代码👆========================
+def load_real_data(): 
 def load_real_data():
     import requests
     import io
@@ -423,6 +425,7 @@ def login_page():
                             except Exception as e:
                                 st.error(f"❌ 异常: {e}")            
 
+
 def render_console(df_data):
     # 👇 导入模块
     import requests
@@ -430,8 +433,17 @@ def render_console(df_data):
     import io
     import base64
     
-    # 只保留一个标题
-    st.title("💻智能数据分析总控台")
+    # 🔥 核心修复：标题和刷新按钮并排
+    col_title, col_refresh = st.columns([8, 2])
+    with col_title:
+        st.title("💻智能数据分析总控台")
+    with col_refresh:
+        st.write("") # 占位对齐
+        st.write("")
+        if st.button("🔄 强制刷新最新数据", use_container_width=True, type="primary"):
+            load_real_data.clear()
+            st.success("✅ 缓存已清空，正在重新加载...")
+            st.rerun()
     
     if df_data is None or isinstance(df_data, str):
         st.error("数据读取失败：" + str(EXCEL_FILE))
@@ -440,6 +452,7 @@ def render_console(df_data):
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
     except: unique_periods.sort(reverse=True)
+    
     
     # 自动推算下一期并置顶
     if unique_periods:
