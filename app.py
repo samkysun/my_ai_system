@@ -478,55 +478,60 @@ def render_console(df_data):
     # 👇 ============ 开始：管理员专属模块 ============ 👇
     # ==========================================
     
-    # 读取 Secrets 里的管理员用户名
-    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
-    
-    if st.session_state.username == admin_name:
-        
         # ------------------------------------------
         # 子模块 1：生成纯净源文件并下载
         # 作用：拉取全量真实数据，生成方便你手工填写的 Excel
         # ------------------------------------------
         st.markdown("### 📦 纯净数据源下载 (手工填写专用)")
         if st.button("📥 一键生成并下载纯净版【升序】和【按序】Excel", use_container_width=True, type="secondary"):
-            with st.spinner("正在从云端拉取全量历史数据，请稍候..."):
+            with st.spinner("正在从云端下载并解压真实数据源，请稍候(约需5秒)..."):
                 import pandas as pd
                 import requests
                 import io
+                import zipfile
+                import json
                 
                 try:
-                    # 直接从全球极速 CDN 拉取原始数据，无代理，无 403
-                    url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
-                    res = requests.get(url, timeout=30)
+                    # 下载最稳定的真实落球顺序开源库 ZIP 包
+                    zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
+                    res = requests.get(zip_url, timeout=120)
+                    
                     if res.status_code != 200:
-                        st.error("云端数据下载失败，请重试。")
+                        st.error(f"下载数据源失败，状态码: {res.status_code}")
                         st.stop()
                         
-                    raw_data = res.json()
-                    
                     desc_rows = []
                     asc_rows = []
                     
-                    for item in raw_data:
-                        draw = item.get("draws", [{}])[0] if item.get("draws") else item
+                    # 在内存中直接解压
+                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
+                        # 提取所有记录 JSON 文件
+                        json_files = [f for f in z.namelist() if f.endswith('.json') and 'records' in f]
                         
-                        date_str = draw.get("date", "")
-                        raw_id = draw.get("id", "")
-                        nums = draw.get("numbers", []) # 🔥 真实落球顺序
-                        special = draw.get("special", 0)
+                        for jf in json_files:
+                            try:
+                                with z.open(jf) as f:
+                                    item = json.load(f)
+                                
+                                date_str = item.get("date", "")
+                                raw_id = item.get("id", "")
+                                nums = item.get("numbers", []) # 真实乱序落球
+                                special = item.get("special", 0)
+                                
+                                if len(nums) == 6 and special and raw_id:
+                                    year = date_str[:4] if date_str else "1993"
+                                    period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
+                                    full_period = f"{year}{period_part}"
+                                    
+                                    desc_rows.append([full_period] + nums + [special])
+                                    asc_rows.append([full_period] + sorted(nums) + [special])
+                            except:
+                                continue
+                                
+                    if not desc_rows:
+                        st.error("未能从数据源中提取到有效数据，请重试。")
+                        st.stop()
                         
-                        if len(nums) == 6 and special:
-                            # 拼接期数：年份 + 3位期号 (如 1993001)
-                            year = date_str[:4] if date_str else "1993"
-                            period_part = raw_id.split('/')[-1].zfill(3) if raw_id else "001"
-                            full_period = f"{year}{period_part}"
-                            
-                            # 按序（绝对真实的落球顺序）
-                            desc_rows.append([full_period] + nums + [special])
-                            
-                            # 升序（前6个球排序，特码不变）
-                            asc_rows.append([full_period] + sorted(nums) + [special])
-                    
                     # 转为 DataFrame，按期数降序（最新在最上面）
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
                     df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
