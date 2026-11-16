@@ -483,17 +483,16 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (icelam干净升序版)
+        # 🔥 终极独立下载工具 (暴力无视结构版)
         # ==========================================
-        if st.sidebar.button("📦 生成1993-2026升序源文件 (干净无重复)", use_container_width=True):
+        if st.sidebar.button("📦 生成升序源文件 (暴力抓取版)", use_container_width=True):
             with st.sidebar:
-                st.info("正在从云端拉取最干净的升序数据并拆解...")
+                st.info("正在深度解压并暴力抓取数据，请稍候...")
                 import pandas as pd
                 import requests
                 import io
         
                 try:
-                    # 使用 CDN 拉取每天自动更新的干净库
                     url = "https://cdn.jsdelivr.net/gh/icelam/mark-six-data-visualization@master/data/all.json"
                     res = requests.get(url, timeout=60)
         
@@ -508,58 +507,75 @@ def render_console(df_data):
                     
                     for item in raw_data:
                         try:
-                            # 兼容英文原版和可能被机翻的中文字段
                             draw = item.get("draws", [{}])[0] if item.get("draws") else item
+                            if not isinstance(draw, dict): continue
                             
-                            raw_id = str(draw.get("id", draw.get("身份证", "")))
-                            date_str = str(draw.get("date", draw.get("日期", "")))
-                            nums = draw.get("numbers", draw.get("不", []))
-                            special_val = draw.get("special", draw.get("斯诺", 0))
+                            year = ""
+                            raw_id = ""
+                            nums = []
+                            special = 0
+                            
+                            # 🔥 暴力遍历所有值，无视键名！
+                            for k, v in draw.items():
+                                # 1. 抓平码：只要是一个长度为 6 的列表或字典
+                                if isinstance(v, (list, dict)) and len(v) == 6:
+                                    try:
+                                        # 强行转换里面的值为数字
+                                        vals = v.values() if isinstance(v, dict) else v
+                                        nums = sorted([int(float(str(x))) for x in vals])
+                                    except: pass
+                                    
+                                # 2. 抓特码：只要是一个 1~49 的纯数字
+                                if isinstance(v, (int, str)) and str(v).isdigit():
+                                    val = int(v)
+                                    if 1 <= val <= 49:
+                                        # 排除可能被识别为特码的年份或期号
+                                        if len(str(v)) <= 2: 
+                                            special = val
+                                            
+                                # 3. 抓日期或期号
+                                if isinstance(v, str):
+                                    if "-" in v and len(v) >= 8: # 类似 2025-12-28
+                                        year = v[:4]
+                                    elif "/" in v: # 类似 25/134
+                                        raw_id = v
+                            
+                            if len(nums) == 6 and special > 0:
+                                if not year and "/" in raw_id:
+                                    year = "20" + raw_id.split("/")[0]
+                                if not year:
+                                    year = "1993"
+                                    
+                                if "/" in raw_id:
+                                    period_num = raw_id.split("/")[-1].zfill(3)
+                                elif raw_id.isdigit():
+                                    period_num = raw_id[-3:].zfill(3)
+                                else:
+                                    # 如果没找到期号，用行号代替或跳过
+                                    skipped += 1
+                                    continue
         
-                            if not raw_id or len(nums) != 6 or not special_val:
-                                continue
-        
-                            # 提取年份和期号
-                            if "-" in date_str:
-                                year = date_str[:4]
-                            elif "/" in raw_id:
-                                year = "20" + raw_id.split("/")[0]
-                            else:
-                                year = "1993"
+                                full_period = f"{year}{period_num}"
                                 
-                            if "/" in raw_id:
-                                period_num = raw_id.split("/")[-1].zfill(3)
-                            else:
-                                period_num = str(raw_id)[-3:].zfill(3)
-        
-                            full_period = f"{year}{period_num}"
-        
-                            # 转换号码类型，并对平码强制升序排序
-                            nums = sorted([int(float(x)) for x in nums])
-                            special = int(float(special_val))
-                            all_balls = nums + [special]
-        
-                            if not all(1 <= n <= 49 for n in all_balls):
-                                skipped += 1
-                                continue
-        
-                            # 自动去重，确保期数唯一
-                            if full_period in parsed_dict:
-                                continue
+                                # 去重
+                                if full_period in parsed_dict: continue
                                 
-                            parsed_dict[full_period] = {
-                                "year": year,
-                                "period_num": period_num,
-                                "balls": all_balls
-                            }
+                                parsed_dict[full_period] = {
+                                    "year": year,
+                                    "period_num": period_num,
+                                    "balls": nums + [special]
+                                }
                         except Exception:
                             skipped += 1
                             continue
         
-                    # 按期数强降序排序（最新在最上面）
+                    if not parsed_dict:
+                        st.error("❌ 依然未能解析出有效数据！")
+                        st.stop()
+        
+                    # 按期数强降序排序
                     sorted_periods = sorted(parsed_dict.keys(), reverse=True)
         
-                    # 开始拆解成 27 列标准格式
                     rows = []
                     for period in sorted_periods:
                         item = parsed_dict[period]
@@ -577,11 +593,8 @@ def render_console(df_data):
                         row_data[26] = item["year"]
                         rows.append(row_data)
         
-                    # 生成最终的 Excel
-                    cols = [f"Col{i}" for i in range(1, 28)]
-                    df_asc = pd.DataFrame(rows, columns=cols)
-        
-                    st.success(f"🎉 成功生成 {len(df_asc)} 期干净数据！(已剔除重复)")
+                    df_asc = pd.DataFrame(rows)
+                    st.success(f"🎉 成功生成 {len(df_asc)} 期干净数据！")
                     
                     out = io.BytesIO()
                     with pd.ExcelWriter(out, engine='openpyxl') as writer:
