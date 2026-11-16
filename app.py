@@ -473,12 +473,8 @@ def render_console(df_data):
     fetch_btn = b6.button("🤏抓取香港数据", use_container_width=True)
 
     # ==========================================
-    # ?? 管理员专属：云端数据录入与同步
+    # 👇 ============ 开始：手动补录模块 ============ 👇
     # ==========================================
-    # 读取 Secrets 里的管理员用户名，如果没有配置，默认叫 "admin"
-    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
-    
-    # 只有当前登录的用户名和 Secrets 里一致，才显示录入面板
     if st.session_state.username == admin_name:
         with st.expander("📝管理员专属：手动补录开奖数据 (云端同步)", expanded=False):
             with st.form("manual_input_form", clear_on_submit=True):
@@ -520,7 +516,6 @@ def render_console(df_data):
                         else:
                             # 3. 核心函数：拉取 -> 修改 -> 推送 GitHub
                             def update_github_excel(file_path, nums_list, commit_msg):
-                                # 🔥 核心修复：必须在这里加一遍，打破 Streamlit 的作用域魔咒
                                 import requests
                                 import openpyxl
                                 import io
@@ -550,7 +545,7 @@ def render_console(df_data):
                                         return False, "源文件中找不到“数据源”工作表"
                                     ws = wb["数据源"]
                                     
-                                    # 🔥 新增：拦截重复期号（结合 AA 列年份）
+                                    # 🔥 拦截重复期号（结合 AA 列年份）
                                     def get_cell_str(r, c):
                                         v = ws.cell(row=r, column=c).value
                                         if v is None: return ""
@@ -597,7 +592,7 @@ def render_console(df_data):
                                         "message": commit_msg,
                                         "content": b64_content,
                                         "sha": sha,
-                                        "branch": "main" # ?? 如果你的分支叫 master，请改成 master
+                                        "branch": "main" # 如果你的分支叫 master，请改成 master
                                     }
                                     
                                     put_res = requests.put(api_url, headers=headers, json=payload)
@@ -622,13 +617,13 @@ def render_console(df_data):
                                     st.info("👉云端数据已刷新，请点击上方【同步数据】按钮重新加载。")
                                     load_real_data.clear()
                                 else:
-                                    if not s1: st.error(f"? 升序文件同步失败: {m1}")
-                                    if not s2: st.error(f"? 按序文件同步失败: {m2}")
-    
+                                    if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
+                                    if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
+
     st.divider()
-   
-    
-    
+    # ==========================================
+    # 👆 ============ 结束：手动补录模块 ============ 👆
+    # ==========================================
     # ==========================================
     # 🔥 管理员专属：云端数据流转控制台
     # ==========================================
