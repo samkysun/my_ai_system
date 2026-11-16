@@ -1364,8 +1364,7 @@ def render_ai(df_data):
         "3余0": "杀3余0（尾数0、3、6、9：03、06、09、10、13、16、19、20、23、26、29、30、33、36、39、40、43、46、49），",
         "3余1": "杀3余1（尾数1、4、7：01、04、07、11、14、17、21、24、27、31、34、37、41、44、47），",
         "3余2": "杀3余2（尾数2、5、8：02、05、08、12、15、18、22、25、28、32、35、38、42、45、48），"
-   
- }    
+}    
 
     if "ai_api_result" not in st.session_state: st.session_state.ai_api_result = "等待推演..."
     if "ai_ball_result" not in st.session_state: st.session_state.ai_ball_result = []
@@ -1487,12 +1486,6 @@ def render_ai(df_data):
             for idx, key in enumerate(["双双", "双单", "单单", "单双"]):
                 with cols[idx % 4]: st.checkbox(key, key=f"{v_prefix}{key}")
                 # 🔥 新增：单双组合折叠框
-        with st.expander("单双组合"):
-            cols = st.columns(4)
-            for idx, key in enumerate(["双双", "双单", "单单", "单双"]):
-                with cols[idx % 4]: st.checkbox(key, key=f"{v_prefix}{key}")
-                
-        # 👇 👇 👇 把下面这段加在 "单双组合" 的下面 👇 👇 👇
         # 🔥 新增：阴阳天地 / 3模 折叠框
         with st.expander("阴阳天地 / 3模"):
             cols = st.columns(3)
