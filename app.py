@@ -483,68 +483,57 @@ def render_console(df_data):
     if st.session_state.username == admin_name:
         
         # ==========================================
-        # 🔥 终极独立下载工具 (请严格放在代码最底部，不要缩进)
+        # 🔥 终极独立下载工具 (API 官方直连版)
         # ==========================================
         if st.sidebar.button("📦 获取纯净版源文件 Excel", use_container_width=True):
             with st.sidebar:
-                st.info("正在下载真实数据包...")
+                st.info("正在向官方接口请求真实落球数据...")
                 import pandas as pd
                 import requests
                 import io
-                import zipfile
-                import json
                 
                 try:
-                    zip_url = "https://github.com/kitce/marker/archive/refs/heads/master.zip"
-                    res = requests.get(zip_url, timeout=120)
+                    # 使用直连 API，获取近 4000 期真实数据
+                    url = "https://api.macaumarksix.com/api/history?limit=4000"
+                    res = requests.get(url, timeout=30)
                     
                     if res.status_code != 200:
-                        st.error(f"下载失败，状态码: {res.status_code}")
+                        st.error(f"接口请求失败，状态码: {res.status_code}")
                         st.stop()
                         
-                    st.info("✅ 下载成功，正在深度解压并查找真实落球顺序...")
+                    raw_data = res.json().get("data", [])
+                    st.info(f"✅ 请求成功，正在解析 {len(raw_data)} 期数据...")
+                    
                     desc_rows = []
                     asc_rows = []
-                    file_count = 0
                     
-                    with zipfile.ZipFile(io.BytesIO(res.content)) as z:
-                        # 暴力搜索所有 json 文件
-                        json_files = [f for f in z.namelist() if f.endswith('.json')]
-                        st.info(f"📦 压缩包内共找到 {len(json_files)} 个 JSON 文件")
+                    for item in raw_data:
+                        period = str(item.get("expect", ""))
+                        opencode = str(item.get("opencode", "")) # 格式: "13,03,24,11,17,15,09"
                         
-                        for jf in json_files:
-                            try:
-                                with z.open(jf) as f:
-                                    item = json.load(f)
-                                
-                                # 深度兼容：不管套了几层，只要里面有 numbers 和 special 就抓
-                                if isinstance(item, dict) and "numbers" in item:
-                                    nums = item.get("numbers", [])
-                                    special = item.get("special", 0)
-                                    raw_id = item.get("id", "")
-                                    date_str = item.get("date", "")
-                                    
-                                    if len(nums) == 6 and special and raw_id:
-                                        year = date_str[:4] if date_str else "1993"
-                                        period_part = str(raw_id).split('/')[-1].zfill(3)
-                                        full_period = f"{year}{period_part}"
-                                        
-                                        desc_rows.append([full_period] + nums + [special])
-                                        asc_rows.append([full_period] + sorted(nums) + [special])
-                                        file_count += 1
-                            except:
-                                continue
-                                
+                        if not period or not opencode: 
+                            continue
+                            
+                        nums = [int(x) for x in opencode.split(",") if x.isdigit()]
+                        if len(nums) == 7:
+                            flats = nums[:6]
+                            special = nums[6]
+                            
+                            # 按序表（绝对真实出球顺序）
+                            desc_rows.append([period] + flats + [special])
+                            # 升序表（对平码排序）
+                            asc_rows.append([period] + sorted(flats) + [special])
+                            
                     if not desc_rows:
-                        st.error("❌ 解析完毕，但未能提取到有效数据！请截图此页联系我。")
+                        st.error("❌ 未能解析到有效数据，接口可能已变更。")
                         st.stop()
                         
-                    st.success(f"🎉 成功提取 {file_count} 期真实数据！")
-                    
-                    # 转为 DataFrame
+                    # 按期数降序排列（最新在最上面）
                     cols = ["期数", "平码1", "平码2", "平码3", "平码4", "平码5", "平码6", "特码"]
                     df_desc = pd.DataFrame(desc_rows, columns=cols).sort_values("期数", ascending=False)
                     df_asc = pd.DataFrame(asc_rows, columns=cols).sort_values("期数", ascending=False)
+                    
+                    st.success(f"🎉 成功提取 {len(df_desc)} 期真实数据！")
                     
                     # 打包导出 Excel
                     out_desc = io.BytesIO()
@@ -574,9 +563,6 @@ def render_console(df_data):
                     
                 except Exception as e:
                     st.error(f"出错了: {e}")
-# ==========================================
-# 🔥 结束
-# ==========================================
 # ==========================================
 # 🔥 结束
 # ==========================================
