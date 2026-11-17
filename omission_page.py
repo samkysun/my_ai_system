@@ -1,24 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-各属性遗漏统计页面
-==================
-按「球位 + 属性」定位升序/按序全套 CSV 中的列，计算截至基准期各取值的遗漏期数。
+遗漏核算页
+==========
+按【升序全套.csv / 按序全套.csv】统计各球位各属性的遗漏期数。
 
-列定位规则与 app.py 中 render_multi_analysis 的 ATTR_MAP 保持一致：
-  - 每个球位占 30 列，第 n 球（1-based）的起始列为 4 + (n-1)*30
-  - 属性偏移（1-based，相对球位起始列）：
-      数字五行=6, 生肖=7, 尾数=8, 数字合=9, 门数=10, 段数=11,
-      单双组合=12, 单双笔=13, 独合字=14, 单双头=15, 单双=16, 波单双=17,
-      生肖五行=18, 颜色肖=19, 四宝=20, 物象=21, 波色=22, 阴阳=23,
-      家野=24, 天地=25, 阴阳天地=26, 吉凶=27, 男女=28, 方位=29,
-      3模=30, 尾五行=31, 福禄寿=32, 大小肖=33
-  - 期号列：第 214 列（索引 213）
+列规则（与 app.py 的 ATTR_MAP 一致，CSV 为 0 基索引）：
+  每球占 30 列，第 n 球（n=1..7）的属性基列 = 属性基列 + (n-1)*30
+  属性基列（1 基，来自 app.py ATTR_MAP）：
+    数字五行 6 / 生肖 7 / 尾数 8 / 数字合 9 / 门数 10 / 段数 11 /
+    单双组合 12 / 单双笔 13 / 独合字 14 / 单双头 15 / 单双 16 /
+    波单双 17 / 生肖五行 18 / 颜色肖 19 / 四宝 20 / 物象 21 /
+    波色 22 / 阴阳 23 / 家野 24 / 天地 25 / 阴阳天地 26 /
+    吉凶 27 / 男女 28 / 方位 29 / 3模 30 / 尾五行 31 /
+    福禄寿 32 / 大小肖 33
+
+数据为降序：最新一期在最上面（第 3 行，索引 2）。
+遗漏 = 从最新一期向下逐行扫描，遇到该属性值即停止，计为遗漏期数。
 """
 
 import streamlit as st
+import pandas as pd
 
-# 属性名 -> 相对球位起始列的 1-based 偏移（与 app.py ATTR_MAP 一致）
-ATTR_OFFSET = {
+from app import load_excel_data
+
+
+# 属性名 -> 1 基列号（第 1 球的基列）
+ATTR_BASE_COL = {
     "数字五行": 6,
     "生肖": 7,
     "尾数": 8,
@@ -49,8 +56,8 @@ ATTR_OFFSET = {
     "大小肖": 33,
 }
 
-# 各属性的完整取值集合（用于展示未出现过的取值）
-ATTR_VALUES = {
+# 各属性的完整取值域（用于展示“未出现”的属性）
+ATTR_DOMAIN = {
     "生肖": ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"],
     "尾数": [str(i) for i in range(10)],
     "数字五行": ["金", "木", "水", "火", "土"],
@@ -68,6 +75,7 @@ ATTR_VALUES = {
     "阴阳": ["阴", "阳"],
     "家野": ["家", "野"],
     "天地": ["天", "地"],
+    "阴阳天地": ["阳天", "阳地", "阴天", "阴地"],
     "吉凶": ["吉", "凶"],
     "男女": ["男", "女"],
     "方位": ["东", "南", "西", "北"],
@@ -80,184 +88,129 @@ ATTR_VALUES = {
 }
 
 
-def _clean_cell(v):
-    """与 app.py 中 clean_str 口径一致：去空白、去 .0。"""
+def _clean(v):
     if v is None:
         return ""
     try:
-        return str(int(float(v)))
+        if pd.isna(v):
+            return ""
     except Exception:
-        return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
+        pass
+    s = str(v).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
 
 
-def _row_period(row):
-    """从一行中取期号：年份列(索引213) + A/B/C 列。"""
-    year_val = _clean_cell(row[213]) if len(row) > 213 else "2026"
-    p1 = _clean_cell(row[0]) if len(row) > 0 else ""
-    p2 = _clean_cell(row[1]) if len(row) > 1 else ""
-    p3 = _clean_cell(row[2]) if len(row) > 2 else ""
-    if not p1 and not p2 and not p3:
-        return ""
-    return f"{year_val}{p1}{p2}{p3}"
+def _attr_col_index(attr_name, ball_no):
+    """返回 CSV 中该球该属性的 0 基列索引。"""
+    base_1based = ATTR_BASE_COL[attr_name]
+    return base_1based + (ball_no - 1) * 30 - 1
 
 
-def _attr_col_index(ball_no, attr_name):
-    """返回属性列在行中的 0-based 索引。ball_no 为 1..7。"""
-    offset = ATTR_OFFSET[attr_name]
-    # 球位起始列（1-based）= 4 + (ball_no-1)*30；属性列（1-based）= 起始列 + offset - 1
-    return 4 + (ball_no - 1) * 30 + offset - 1 - 1
-
-
-def _build_period_index(all_rows):
-    """返回 [(period, row_index), ...]，按 CSV 原始顺序（升序全套为最新在前）。"""
-    out = []
-    for idx, row in enumerate(all_rows):
-        p = _row_period(row)
-        if p:
-            out.append((p, idx))
-    return out
-
-
-def _pick_base_index(period_index, selected_period):
-    """
-    选择基准期在 period_index 中的位置。
-    - 所选期号存在：直接用该期（包含该期本身）。
-    - 不存在：取小于等于它的最大期号；若都大于它，取最小期号。
-    返回 (base_pos, base_period, note)。
-    """
-    if not period_index:
-        return None, None, "CSV 中没有可用期号"
-
-    # 精确匹配
-    for pos, (p, _) in enumerate(period_index):
-        if p == selected_period:
-            return pos, p, ""
-
-    # 数值比较（期号是纯数字字符串）
-    try:
-        target = int(selected_period)
-    except Exception:
-        return 0, period_index[0][0], "所选期号非数字，已回退到最新一期"
-
-    best_pos = None
-    best_val = None
-    min_pos = 0
-    min_val = None
-    for pos, (p, _) in enumerate(period_index):
-        try:
-            v = int(p)
-        except Exception:
+def _compute_omission(rows, col_idx, domain):
+    """从索引 2（第 3 行，最新一期）向下扫描，统计每个属性值的遗漏期数。"""
+    # 收集该列从最新到最旧的值序列
+    seq = []
+    for r in range(2, len(rows)):
+        row = rows[r]
+        if col_idx >= len(row):
             continue
-        if min_val is None or v < min_val:
-            min_val = v
-            min_pos = pos
-        if v <= target and (best_val is None or v > best_val):
-            best_val = v
-            best_pos = pos
-
-    if best_pos is not None:
-        return best_pos, period_index[best_pos][0], f"所选期号 {selected_period} 未开奖，已回退到 {period_index[best_pos][0]}"
-    return min_pos, period_index[min_pos][0], f"所选期号 {selected_period} 早于所有期号，已回退到最早一期 {period_index[min_pos][0]}"
-
-
-def _compute_omission(all_rows, period_index, base_pos, col_idx, values):
-    """
-    从 base_pos 开始沿 CSV 顺序（升序全套为最新在前，即向索引增大方向为更早）
-    计算每个取值的连续未出现期数。
-    返回 {value: omission_count}。
-    """
-    result = {v: 0 for v in values}
-    seen = set()
-    for pos in range(base_pos, len(period_index)):
-        _, row_idx = period_index[pos]
-        row = all_rows[row_idx]
-        cell = _clean_cell(row[col_idx]) if col_idx < len(row) else ""
-        if not cell:
+        val = _clean(row[col_idx])
+        if val == "":
             continue
-        if cell in seen:
-            continue
-        if cell in result:
-            result[cell] = pos - base_pos
-            seen.add(cell)
-        else:
-            # 出现未在预置取值集合中的值，也记录一下，避免死循环
-            seen.add(cell)
-        if len(seen) >= len(values):
-            break
-    # 未出现过的取值：遗漏 = 从基准期到 CSV 末尾的期数
-    total = len(period_index) - base_pos
-    for v in values:
-        if v not in seen:
-            result[v] = total
-    return result
+        seq.append(val)
+
+    total = len(seq)
+    result = {}
+    for attr_val in domain:
+        miss = total  # 默认全表未出现
+        for i, v in enumerate(seq):
+            if v == attr_val:
+                miss = i
+                break
+        result[attr_val] = miss
+
+    # 补上域外出现的值（防止属性表与数据不一致时漏项）
+    for v in seq:
+        if v not in result:
+            miss = total
+            for i, x in enumerate(seq):
+                if x == v:
+                    miss = i
+                    break
+            result[v] = miss
+
+    return result, total
 
 
 def render_omission_page():
-    st.title("📉 各属性遗漏统计")
-    st.info("💡 遗漏 = 从基准期往前数，该属性值连续未出现的期数。基准期已开奖时包含该期本身（该期出现则遗漏为 0）。")
-
-    # 延迟导入，避免与 app.py 循环依赖
-    try:
-        from app import load_excel_data
-    except Exception as e:
-        st.error(f"无法导入 load_excel_data：{e}")
-        return
+    st.title("📉 遗漏核算")
+    st.info("💡 基准期为最新一期（降序文件最上面一行）。遗漏 = 从最新一期向下连续未出现的期数。")
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        source = st.selectbox("数据源", ["升序全套", "按序全套"], index=0)
-    target_file = "升序全套.csv" if source == "升序全套" else "按序全套.csv"
-
-    with st.spinner(f"正在读取 {target_file} ..."):
-        all_rows = load_excel_data(target_file, None)
-    if not all_rows:
-        st.error(f"读取 {target_file} 失败或为空")
-        return
-
-    period_index = _build_period_index(all_rows)
-    if not period_index:
-        st.error("CSV 中没有解析出任何期号")
-        return
-
-    # 期号下拉：最新在前，并允许输入未开奖期号
-    period_options = [p for p, _ in period_index]
+        file_type = st.selectbox("选择数据文件", ["升序全套", "按序全套"])
     with col2:
-        selected_period = st.selectbox("选择期号", period_options, index=0)
+        ball_str = st.selectbox("选择球号", [f"第{i}球" for i in range(1, 8)])
     with col3:
-        ball_no = st.selectbox("选择球位", [f"第{i}球" for i in range(1, 8)], index=0)
-        ball_no = int(ball_no.replace("第", "").replace("球", ""))
+        attr_name = st.selectbox("选择属性", list(ATTR_BASE_COL.keys()))
 
-    attr_names = list(ATTR_OFFSET.keys())
-    attr_name = st.selectbox("选择属性", attr_names, index=attr_names.index("生肖"))
+    ball_no = int(ball_str.replace("第", "").replace("球", ""))
 
-    if st.button("🔍 计算遗漏次数", type="primary", use_container_width=True):
-        base_pos, base_period, note = _pick_base_index(period_index, selected_period)
-        if base_pos is None:
-            st.error(note)
+    st.write("")
+    run_btn = st.button("🚀 开始遗漏核算", use_container_width=True, type="primary")
+
+    if not run_btn:
+        return
+
+    target_file = "升序全套.csv" if file_type == "升序全套" else "按序全套.csv"
+    with st.spinner(f"正在读取 {target_file} 并核算…"):
+        try:
+            rows = load_excel_data(target_file, None)
+        except Exception as e:
+            st.error(f"读取失败：{e}")
             return
-        if note:
-            st.warning(note)
 
-        col_idx = _attr_col_index(ball_no, attr_name)
-        values = ATTR_VALUES.get(attr_name)
-        if not values:
-            # 未预置取值集合的属性：从 CSV 中扫描该列所有出现过的值
-            scanned = set()
-            for _, row_idx in period_index:
-                row = all_rows[row_idx]
-                cell = _clean_cell(row[col_idx]) if col_idx < len(row) else ""
-                if cell:
-                    scanned.add(cell)
-            values = sorted(scanned)
+    if not rows:
+        st.error(f"{target_file} 读取为空，请检查云端文件是否存在。")
+        return
 
-        omission = _compute_omission(all_rows, period_index, base_pos, col_idx, values)
+    col_idx = _attr_col_index(attr_name, ball_no)
+    domain = ATTR_DOMAIN.get(attr_name, [])
 
-        st.success(f"基准期：{base_period}｜球位：第{ball_no}球｜属性：{attr_name}｜数据源：{source}")
+    # 若未定义域，则从数据中自动收集
+    if not domain:
+        seen = []
+        for r in range(2, len(rows)):
+            row = rows[r]
+            if col_idx < len(row):
+                v = _clean(row[col_idx])
+                if v and v not in seen:
+                    seen.append(v)
+        domain = seen
 
-        # 按遗漏降序展示
-        rows = sorted(omission.items(), key=lambda x: (-x[1], str(x[0])))
-        st.dataframe(
-            [{"取值": k, "遗漏期数": v} for k, v in rows],
-            use_container_width=True,
-            height=min(600, 40 + 35 * len(rows)),
-        )
+    result, total = _compute_omission(rows, col_idx, domain)
+
+    if total == 0:
+        st.warning("该列没有有效数据，请确认属性列映射是否正确。")
+        return
+
+    # 展示
+    st.subheader(f"{file_type} · {ball_str} · {attr_name} 遗漏统计")
+    st.caption(f"有效期数：{total} 期（从最新一期向下）")
+
+    df = pd.DataFrame(
+        [{"属性值": k, "遗漏期数": v} for k, v in result.items()]
+    ).sort_values("遗漏期数", ascending=False).reset_index(drop=True)
+
+    st.dataframe(df, use_container_width=True, height=min(600, 40 + 35 * len(df)))
+
+    # 高亮遗漏最大的几项
+    if not df.empty:
+        top = df.iloc[0]
+        st.success(f"🔥 当前遗漏最大：**{top['属性值']}**，已遗漏 **{top['遗漏期数']}** 期")
+
+
+if __name__ == "__main__":
+    render_omission_page()
