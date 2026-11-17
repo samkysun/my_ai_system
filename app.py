@@ -868,9 +868,9 @@ def render_miss_analysis(df_data):
         pass
 
     c1, c2, c3 = st.columns(3)
-    with c1: sel_period = st.selectbox("选择期号", periods, key="miss_period")
-    with c2: sel_ball = st.selectbox("选择球位", [f"第{i}球" for i in range(1, 8)], key="miss_ball")
-    with c3: sel_attr = st.selectbox("选择属性", MISS_ATTR_OPTIONS, key="miss_attr")
+    with c1: sel_period = st.selectbox("选择期号", periods, key="miss_period_sel")
+    with c2: sel_ball = st.selectbox("选择球位", [f"第{i}球" for i in range(1, 8)], key="miss_ball_sel")
+    with c3: sel_attr = st.selectbox("选择属性", MISS_ATTR_OPTIONS, key="miss_attr_sel")
 
     if st.button("计算遗漏次数", use_container_width=True, type="primary", key="miss_calc_btn"):
         ball_no = int(sel_ball.replace("第", "").replace("球", ""))
