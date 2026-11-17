@@ -789,6 +789,89 @@ def render_ai(df_data):
             else: interval = "第七球的取值区间为1号至49号之间，"
         return f"这是{qishu}期{order_type}{qiu}的核算条件，{interval}"
 
+    def _fmt_nums(nums):
+        return ",".join(f"{n:02d}" for n in sorted(set(nums)))
+
+    def _nums_by(pred):
+        return [n for n in range(1, 50) if pred(n)]
+
+    def expand_condition(key):
+        """把复选框 key 展开成带具体号码的排杀文本，让 AI 无法自由发挥。"""
+        zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+        wx_zodiac = {"金肖": ["猴", "鸡"], "木肖": ["虎", "兔"], "水肖": ["鼠", "猪"], "火肖": ["蛇", "马"], "土肖": ["牛", "龙", "羊", "狗"]}
+        color_zodiac = {"红肖": ["马", "兔", "鼠", "鸡"], "蓝肖": ["虎", "猴", "蛇", "猪"], "绿肖": ["龙", "狗", "牛", "羊"]}
+        if key in wx_zodiac:
+            zs = wx_zodiac[key]
+            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) in zs)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in color_zodiac:
+            zs = color_zodiac[key]
+            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) in zs)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key.endswith("尾") and key[:-1].isdigit():
+            t = int(key[:-1])
+            nums = _nums_by(lambda n: n % 10 == t)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key.startswith("杀") and key[1:] in zodiacs:
+            z = key[1:]
+            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) == z)
+            return f"杀{z}（{_fmt_nums(nums)}），"
+        if key.endswith("门") and key[:-1].isdigit():
+            m = f"{key[:-1]}门"
+            nums = _nums_by(lambda n: NUM_MEN.get(n) == m)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key.endswith("段") and key[:-1].isdigit():
+            d = f"{key[:-1]}段"
+            nums = _nums_by(lambda n: NUM_DUAN.get(n) == d)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key.endswith("合") and key[:-1].isdigit():
+            h = f"{key}合" if len(key) == 3 else f"{int(key[:-1]):02d}合"
+            nums = _nums_by(lambda n: NUM_HE.get(n) == h)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("红波", "蓝波", "绿波"):
+            nums = _nums_by(lambda n: NUM_BOSE.get(n) == key)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"):
+            color, sd = key[:2], key[2:]
+            nums = _nums_by(lambda n: NUM_BOSE.get(n) == color and (("单" if n % 2 else "双") == sd))
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("金号", "木号", "水号", "火号", "土号"):
+            wx = key[0]
+            nums = _nums_by(lambda n: NUM_WUXING.get(n) == wx)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("金尾", "木尾", "水尾", "火尾", "土尾"):
+            wx = key[0]
+            nums = _nums_by(lambda n: TAIL_WUXING.get(n % 10) == wx)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("大肖", "中肖", "小肖"):
+            nums = _nums_by(lambda n: ZODIAC_SIZE.get(NUM_ZODIAC.get(n)) == key)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("书肖", "琴肖", "棋肖", "画肖"):
+            t = key[0]
+            nums = _nums_by(lambda n: ZODIAC_FOUR_TREASURES.get(NUM_ZODIAC.get(n)) == t)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("福肖", "禄肖", "寿肖"):
+            nums = _nums_by(lambda n: ZODIAC_FU_LU_SHOU.get(NUM_ZODIAC.get(n)) == key)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("家臣", "美女", "君王", "恶人"):
+            nums = _nums_by(lambda n: ZODIAC_OBJECT_IMAGE.get(NUM_ZODIAC.get(n)) == key)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("东", "南", "西", "北"):
+            nums = _nums_by(lambda n: ZODIAC_DIRECTION.get(NUM_ZODIAC.get(n)) == key)
+            return f"杀{key}肖（{_fmt_nums(nums)}），"
+        if key in ("双双", "双单", "单单", "单双"):
+            nums = _nums_by(lambda n: NUM_SINGLE_DOUBLE.get(n) == key)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("阳天", "阳地", "阴天", "阴地"):
+            yy, td = key[0], key[1]
+            nums = _nums_by(lambda n: ("阳" if NUM_ZODIAC.get(n) in YANG_ZODIACS else "阴") == yy and ("天" if NUM_ZODIAC.get(n) in TIAN_ZODIACS else "地") == td)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        if key in ("3余0", "3余1", "3余2"):
+            r = int(key[-1])
+            nums = _nums_by(lambda n: n % 3 == r)
+            return f"杀{key}（{_fmt_nums(nums)}），"
+        return CHECKBOX_MAP.get(key, "")
+
     col1, col2, col3 = st.columns(3)
     with col1: qishu = st.selectbox("选择期数：", unique_periods, index=0)
     with col2: qiu = st.selectbox("选择球数：", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"], index=0)
@@ -797,7 +880,7 @@ def render_ai(df_data):
     st.divider()
     checked_texts = []
     for key in CHECKBOX_MAP.keys():
-        if st.session_state.get(f"{v_prefix}{key}", False): checked_texts.append(CHECKBOX_MAP[key])
+        if st.session_state.get(f"{v_prefix}{key}", False): checked_texts.append(expand_condition(key))
     col_left, col_right = st.columns([1.2, 1])
 
     with col_left:
@@ -810,7 +893,7 @@ def render_ai(df_data):
             if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
                 if not checked_texts: st.warning("请先勾选！")
                 else:
-                    question = full_text + f"\n请严格根据以上文本中的【取值区间】和所有【排杀条件】，一步步详细列出推导过程，最终核算{qiu}剩余什么生肖与号码。如果全杀，请将触犯次数最少的作为后补。"
+                    question = full_text + f"\n请严格根据以上文本中的【取值区间】和所有【排杀条件】（括号内已列出每个条件对应的具体号码，必须逐号核对，不得自行推断），一步步详细列出推导过程，最终核算{qiu}剩余什么生肖与号码。要求：\n1) 对区间内每一个号码，逐一列出它触犯了哪些排杀条件（写清条件名），触犯即剔除；\n2) 若区间内号码被全部杀光，则从触犯次数最少的号码中后补：先取只触犯 1 个条件的号码；若没有只触犯 1 个条件的，再取触犯 2 个条件的号码；触犯 3 个及以上的一律不得进入 FINAL；\n3) 输出必须包含【逐条剔除】【保留结果】【FINAL】三节，FINAL 行只放最终号码。"
                     with st.spinner("正在呼叫 DeepSeek 进行全量推演（最长 180 秒）..."):
                         db, rules_err = build_rule_database(debug=True)
                         if not db:
