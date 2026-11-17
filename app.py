@@ -42,6 +42,10 @@ try:
     from auto_upgrade import render_upgrade_tab
 except Exception:
     render_upgrade_tab = None
+try:
+    from omission_page import render_omission_page
+except Exception:
+    render_omission_page = None
 
 # ==========================================
 # 1. 全局配置与初始化
@@ -1619,6 +1623,7 @@ def main_app():
 
         menu_options = ["📊 主控台"]
         if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演"])
+        if is_admin or is_vip: menu_options.append("📉 各属性遗漏统计")
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -1628,6 +1633,11 @@ def main_app():
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🧠 AI推演": render_ai(df_data)
+    elif page == "📉 各属性遗漏统计":
+        if render_omission_page:
+            render_omission_page()
+        else:
+            st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
     elif page == "⚙️ 后台管理": render_admin_panel()
 
 
