@@ -949,7 +949,7 @@ def render_ai(df_data):
             for i in range(1, 13):
                 with cols[(i+11) % 3]: st.checkbox(f"{i:02d}合", key=f"{v_prefix}{i:02d}合")
             with cols[(13+11) % 3]: st.checkbox("13合", key=f"{v_prefix}13合")
-            with cols[(14+11) % 3]: st.checkbox("04合", key=f"{v_prefix}04合")
+            with cols[(14+11) % 3]: st.checkbox("04合", key=f"{v_prefix}04合_extra")
         with st.expander("波色 / 波单双"):
             cols = st.columns(3)
             for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
