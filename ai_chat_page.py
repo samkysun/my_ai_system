@@ -284,15 +284,18 @@ def render_ai_chat(entry="tab"):
         _send(prompt)
 
     # ---------------- 交接给「自动升级」（两阶段：草稿 → 你确认 → 才发送） ----------------
-    if st.session_state.chat_history:
-        st.markdown("**交接给自动升级**")
-        if st.button("➡️ 把这次对话整理成「改动需求」草稿", use_container_width=True,
-                     help="只生成草稿给你审，不会自动发给自动升级页"):
-            with st.spinner("正在整理需求…"):
-                spec = _summarize_for_upgrade(st.session_state.chat_history, model, int(timeout))
-            st.session_state["_ug_spec_draft"] = spec
-            st.session_state["_spec_ver"] = st.session_state.get("_spec_ver", 0) + 1
-            st.rerun()
+    has_hist = bool(st.session_state.chat_history)
+    st.markdown("**交接给自动升级**")
+    if st.button("➡️ 把这次对话整理成「改动需求」草稿", use_container_width=True,
+                 disabled=not has_hist,
+                 help="只生成草稿给你审，不会自动发给自动升级页"):
+        with st.spinner("正在整理需求…"):
+            spec = _summarize_for_upgrade(st.session_state.chat_history, model, int(timeout))
+        st.session_state["_ug_spec_draft"] = spec
+        st.session_state["_spec_ver"] = st.session_state.get("_spec_ver", 0) + 1
+        st.rerun()
+    if not has_hist:
+        st.caption("先在上面聊两句，这个按钮就会亮。")
 
     draft = st.session_state.get("_ug_spec_draft")
     if draft:
