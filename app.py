@@ -669,6 +669,12 @@ def render_deep_linkage(df_data):
 
                 report_lines = [f"========== {mode} 3码联动分析 ==========", f"【基准期数】: {selected_period}", f"【基准开出】: {', '.join(base_attrs)}", f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合", f"【历史命中】: 共找到 {hit_count} 期包含这些组合\n"]
                 ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+
+                # 回测：取基准期的下一期真实开出值，用于高亮命中
+                next_attrs = None
+                if target_idx + 1 < len(sorted_periods):
+                    next_attrs = grouped_data[sorted_periods[target_idx + 1]]
+
                 for ball_i in range(7):
                     sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
                     top_names = [item[0] for item in sorted_freq[:pick_num]]
@@ -678,9 +684,58 @@ def render_deep_linkage(df_data):
                     report_lines.append(line)
                 report_lines.append("\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
                 st.session_state.deep_linkage_result = "\n".join(report_lines)
+
+                # 生成带高亮的 HTML 报告
+                import html as _html
+                hl_style = "background-color:#fef08a;color:#dc2626;font-weight:bold;padding:1px 4px;border-radius:4px;"
+                html_parts = []
+                html_parts.append(f"<div style='font-family:Consolas,monospace;font-size:16px;line-height:2.0;'>")
+                html_parts.append(f"<div style='font-weight:bold;font-size:18px;margin-bottom:8px;'>{_html.escape(mode)} 3码联动分析</div>")
+                html_parts.append(f"<div>【基准期数】: {_html.escape(str(selected_period))}</div>")
+                html_parts.append(f"<div>【基准开出】: {_html.escape(', '.join(base_attrs))}</div>")
+                html_parts.append(f"<div>【联动组合数】: 共生成 {len(target_combos)} 个三码组合</div>")
+                html_parts.append(f"<div>【历史命中】: 共找到 {hit_count} 期包含这些组合</div>")
+                if next_attrs is not None:
+                    html_parts.append(f"<div style='color:#64748b;'>【回测校对】: 下一期 {_html.escape(str(sorted_periods[target_idx + 1]))} 开出 {_html.escape(', '.join(next_attrs))}</div>")
+                else:
+                    html_parts.append("<div style='color:#64748b;'>【回测校对】: 基准期之后暂无开奖数据，不做高亮</div>")
+                html_parts.append("<hr style='margin:10px 0;'>")
+
+                for ball_i in range(7):
+                    sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
+                    top_names = [item[0] for item in sorted_freq[:pick_num]]
+                    kill_names = [item[0] for item in sorted_freq[pick_num:]]
+                    actual = next_attrs[ball_i] if next_attrs is not None else None
+                    hit = actual is not None and actual in top_names
+
+                    chips = []
+                    for name in top_names:
+                        safe = _html.escape(str(name))
+                        if hit and name == actual:
+                            chips.append(f"<span style='{hl_style}'>{safe} ✔</span>")
+                        else:
+                            chips.append(f"<span>{safe}</span>")
+                    line_html = f"<div style='margin:4px 0;'><b>{ball_names[ball_i]}</b>: " + ", ".join(chips)
+                    if kill_names:
+                        line_html += f"  <span style='color:#94a3b8;'>| 杀({_html.escape(','.join(str(x) for x in kill_names))})</span>"
+                    if hit:
+                        line_html += f"  <span style='color:#16a34a;font-weight:bold;'>[命中 {_html.escape(str(actual))}]</span>"
+                    elif actual is not None:
+                        line_html += f"  <span style='color:#94a3b8;'>[实开 {_html.escape(str(actual))}]</span>"
+                    line_html += "</div>"
+                    html_parts.append(line_html)
+
+                html_parts.append("<div style='color:#64748b;margin-top:10px;'>(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况；红底黄字为回测命中项)</div>")
+                html_parts.append("</div>")
+                st.session_state.deep_linkage_html = "".join(html_parts)
             except Exception as e: st.error(f"分析异常: {e}")
 
-    if st.session_state.get("deep_linkage_result"):
+    if st.session_state.get("deep_linkage_html"):
+        st.markdown("### 深度联动分析报告（回测命中高亮）")
+        st.markdown(st.session_state.deep_linkage_html, unsafe_allow_html=True)
+        with st.expander("📄 查看纯文本版报告", expanded=False):
+            st.text_area("深度联动分析报告", value=st.session_state.get("deep_linkage_result", ""), height=300)
+    elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
 
 
