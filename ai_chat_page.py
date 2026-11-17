@@ -156,6 +156,43 @@ def _ask(messages, model, timeout, max_tokens):
     return f"请求失败：{last}"
 
 
+SUMMARY_SYS = """你是需求整理助手。把一段对话整理成一份可直接交给开发者执行的「改动需求」。
+只输出需求本身：不要写代码，不要客套，不要解释你在做什么，不要复述对话。"""
+
+
+def _summarize_for_upgrade(history, model, timeout=120):
+    """把聊天记录浓缩成一份规范需求，供「自动升级」使用。"""
+    lines = []
+    for m in history[-16:]:
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        who = "我" if m.get("role") == "user" else "助手"
+        lines.append(f"{who}：{content[:800]}")
+    convo = "\n\n".join(lines)
+    if not convo:
+        return ""
+
+    prompt = (f"对话如下：\n\n{convo}\n\n"
+              "请输出一份改动需求，包含：\n"
+              "1. 目标（一句话，说清改成什么样）\n"
+              "2. 涉及文件与函数\n"
+              "3. 具体改动点（分条，写明位置、触发条件、期望效果）\n"
+              "4. 验收方式（怎么确认改好了）\n"
+              "5. 不要做的事（边界，避免误伤其它功能）\n"
+              "6. 待确认问题：对话里没说清、需要主人拍板的地方，逐条列出；没有就写「无」。\n"
+              "严禁自己猜测补全模糊需求——拿不准就放进第 6 条。")
+
+    out = _ask([{"role": "system", "content": SUMMARY_SYS},
+                {"role": "user", "content": prompt}], model, timeout, 1500)
+    if (not out) or out.startswith("请求失败") or out.startswith("运行错误"):
+        # 兜底：把我问过的话拼成一份粗略需求，至少不丢内容
+        return "\n".join(f"- {(m.get('content') or '').strip()}"
+                         for m in history
+                         if m.get("role") == "user" and (m.get("content") or "").strip())
+    return out.strip()
+
+
 # ----------------------------------------------------------------- 页面
 def render_ai_chat(entry="tab"):
     """entry='tab' 嵌在标签页里（紧凑）；'page' 独占一页。"""
@@ -245,6 +282,44 @@ def render_ai_chat(entry="tab"):
     prompt = st.chat_input("问点什么…（Enter 发送，Shift+Enter 换行）")
     if prompt:
         _send(prompt)
+
+    # ---------------- 交接给「自动升级」（两阶段：草稿 → 你确认 → 才发送） ----------------
+    if st.session_state.chat_history:
+        st.markdown("**交接给自动升级**")
+        if st.button("➡️ 把这次对话整理成「改动需求」草稿", use_container_width=True,
+                     help="只生成草稿给你审，不会自动发给自动升级页"):
+            with st.spinner("正在整理需求…"):
+                spec = _summarize_for_upgrade(st.session_state.chat_history, model, int(timeout))
+            st.session_state["_ug_spec_draft"] = spec
+            st.session_state["_spec_ver"] = st.session_state.get("_spec_ver", 0) + 1
+            st.rerun()
+
+    draft = st.session_state.get("_ug_spec_draft")
+    if draft:
+        ver = st.session_state.get("_spec_ver", 0)
+        st.markdown("#### 需求草稿 —— 确认后才会发给「🛠️ 自动升级」")
+        edited = st.text_area("需求草稿（可以直接改）", value=draft, height=280,
+                              key=f"spec_edit_{ver}",
+                              help="这就是将来发送给自动升级的需求原文。哪里不对就在这里改。")
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            if st.button("✅ 确认，发送到自动升级", type="primary", use_container_width=True):
+                st.session_state["ug_req"] = (edited or "").strip()
+                st.session_state["_ug_from_chat"] = True
+                st.session_state.pop("_ug_spec_draft", None)
+                st.success("已发送。切到「🛠️ 自动升级」标签，需求框里就是这份文本。")
+                st.rerun()
+        with b2:
+            if st.button("🔄 重新整理", use_container_width=True):
+                with st.spinner("重新整理中…"):
+                    spec = _summarize_for_upgrade(st.session_state.chat_history, model, int(timeout))
+                st.session_state["_ug_spec_draft"] = spec
+                st.session_state["_spec_ver"] = ver + 1
+                st.rerun()
+        with b3:
+            if st.button("🗑 丢弃草稿", use_container_width=True):
+                st.session_state.pop("_ug_spec_draft", None)
+                st.rerun()
 
     # ---------------- 导出 ----------------
     if st.session_state.chat_history:

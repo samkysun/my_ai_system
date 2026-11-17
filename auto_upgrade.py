@@ -590,7 +590,9 @@ def render_upgrade_tab():
             st.code("\n".join(st.session_state.ug_selftest), language="text")
 
     # ---------- 1. 需求 ----------
-    req = st.text_area("你要做什么？（越具体越好）", height=140,
+    if st.session_state.pop("_ug_from_chat", False):
+        st.success("✅ 需求已从「💬 AI 助手」带入，可以直接生成，也可以先改。")
+    req = st.text_area("你要做什么？（越具体越好）", height=140, key="ug_req",
                        placeholder="例：在多维分析页加一个「导出当前报告为 Excel」的按钮，"
                                    "导出内容包括基准行排列和所有触发行。")
     c1, c2 = st.columns([2, 1])
