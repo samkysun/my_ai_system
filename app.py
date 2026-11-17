@@ -1553,7 +1553,6 @@ def main_app():
     df_data = load_real_data()
 
     with st.sidebar:
-        st.markdown("欢迎你来到精算中心")
         st.write(f"👤 **{current_user}**")
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
