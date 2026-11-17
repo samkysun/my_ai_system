@@ -33,6 +33,16 @@ from datetime import datetime
 from openpyxl.utils import get_column_letter, column_index_from_string
 from supabase import create_client
 
+# 两个可选模块：缺失时只影响对应标签页，不影响主程序启动
+try:
+    from ai_chat_page import render_ai_chat
+except Exception:
+    render_ai_chat = None
+try:
+    from auto_upgrade import render_upgrade_tab
+except Exception:
+    render_upgrade_tab = None
+
 # ==========================================
 # 1. 全局配置与初始化
 # ==========================================
@@ -1143,7 +1153,8 @@ def render_admin_panel():
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
     token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
 
-    tab1, tab2, tab3 = st.tabs(["👑 用户 VIP 授权", "📝 数据录入与同步", "☁️ 云端数据流转"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["👑 用户 VIP 授权", "📝 数据录入与同步",
+                                           "☁️ 云端数据流转", "💬 AI 助手", "🛠️ 自动升级"])
 
     with tab1:
         try:
@@ -1401,6 +1412,20 @@ def render_admin_panel():
                                 if not s2: st.error(f"❌ 按序失败: {m2}")
                         except Exception as e:
                             st.error(f"运行异常: {e}")
+
+    # --- 标签 4：AI 对话助手 ---
+    with tab4:
+        if render_ai_chat:
+            render_ai_chat()
+        else:
+            st.warning("缺少 ai_chat_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
+
+    # --- 标签 5：自动升级 ---
+    with tab5:
+        if render_upgrade_tab:
+            render_upgrade_tab()
+        else:
+            st.warning("缺少 auto_upgrade.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
 
 # ==========================================
 # 9. 登录与系统入口
