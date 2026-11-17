@@ -796,83 +796,10 @@ def render_ai(df_data):
         return [n for n in range(1, 50) if pred(n)]
 
     def expand_condition(key):
-        """把复选框 key 展开成带具体号码的排杀文本，让 AI 无法自由发挥。"""
-        zodiacs = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
-        wx_zodiac = {"金肖": ["猴", "鸡"], "木肖": ["虎", "兔"], "水肖": ["鼠", "猪"], "火肖": ["蛇", "马"], "土肖": ["牛", "龙", "羊", "狗"]}
-        color_zodiac = {"红肖": ["马", "兔", "鼠", "鸡"], "蓝肖": ["虎", "猴", "蛇", "猪"], "绿肖": ["龙", "狗", "牛", "羊"]}
-        if key in wx_zodiac:
-            zs = wx_zodiac[key]
-            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) in zs)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in color_zodiac:
-            zs = color_zodiac[key]
-            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) in zs)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key.endswith("尾") and key[:-1].isdigit():
-            t = int(key[:-1])
-            nums = _nums_by(lambda n: n % 10 == t)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key.startswith("杀") and key[1:] in zodiacs:
-            z = key[1:]
-            nums = _nums_by(lambda n: NUM_ZODIAC.get(n) == z)
-            return f"杀{z}（{_fmt_nums(nums)}），"
-        if key.endswith("门") and key[:-1].isdigit():
-            m = f"{key[:-1]}门"
-            nums = _nums_by(lambda n: NUM_MEN.get(n) == m)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key.endswith("段") and key[:-1].isdigit():
-            d = f"{key[:-1]}段"
-            nums = _nums_by(lambda n: NUM_DUAN.get(n) == d)
-            return f"杀{key}（{_fmt_nums(nums)}），"
+        """恢复原来的直出模式：直接返回 CHECKBOX_MAP 中的文本；仅 04合 额外补上号码范围。"""
         if key == "04合":
             nums = _nums_by(lambda n: NUM_HE.get(n) == "04合")
             return f"杀04合（{_fmt_nums(nums)}），"
-        if key.endswith("合") and key[:-1].isdigit():
-            h = f"{key}合" if len(key) == 3 else f"{int(key[:-1]):02d}合"
-            nums = _nums_by(lambda n: NUM_HE.get(n) == h)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("红波", "蓝波", "绿波"):
-            nums = _nums_by(lambda n: NUM_BOSE.get(n) == key)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"):
-            color, sd = key[:2], key[2:]
-            nums = _nums_by(lambda n: NUM_BOSE.get(n) == color and (("单" if n % 2 else "双") == sd))
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("金号", "木号", "水号", "火号", "土号"):
-            wx = key[0]
-            nums = _nums_by(lambda n: NUM_WUXING.get(n) == wx)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("金尾", "木尾", "水尾", "火尾", "土尾"):
-            wx = key[0]
-            nums = _nums_by(lambda n: TAIL_WUXING.get(n % 10) == wx)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("大肖", "中肖", "小肖"):
-            nums = _nums_by(lambda n: ZODIAC_SIZE.get(NUM_ZODIAC.get(n)) == key)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("书肖", "琴肖", "棋肖", "画肖"):
-            t = key[0]
-            nums = _nums_by(lambda n: ZODIAC_FOUR_TREASURES.get(NUM_ZODIAC.get(n)) == t)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("福肖", "禄肖", "寿肖"):
-            nums = _nums_by(lambda n: ZODIAC_FU_LU_SHOU.get(NUM_ZODIAC.get(n)) == key)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("家臣", "美女", "君王", "恶人"):
-            nums = _nums_by(lambda n: ZODIAC_OBJECT_IMAGE.get(NUM_ZODIAC.get(n)) == key)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("东", "南", "西", "北"):
-            nums = _nums_by(lambda n: ZODIAC_DIRECTION.get(NUM_ZODIAC.get(n)) == key)
-            return f"杀{key}肖（{_fmt_nums(nums)}），"
-        if key in ("双双", "双单", "单单", "单双"):
-            nums = _nums_by(lambda n: NUM_SINGLE_DOUBLE.get(n) == key)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("阳天", "阳地", "阴天", "阴地"):
-            yy, td = key[0], key[1]
-            nums = _nums_by(lambda n: ("阳" if NUM_ZODIAC.get(n) in YANG_ZODIACS else "阴") == yy and ("天" if NUM_ZODIAC.get(n) in TIAN_ZODIACS else "地") == td)
-            return f"杀{key}（{_fmt_nums(nums)}），"
-        if key in ("3余0", "3余1", "3余2"):
-            r = int(key[-1])
-            nums = _nums_by(lambda n: n % 3 == r)
-            return f"杀{key}（{_fmt_nums(nums)}），"
         return CHECKBOX_MAP.get(key, "")
 
     col1, col2, col3 = st.columns(3)
