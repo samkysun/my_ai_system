@@ -1,5 +1,15 @@
 [
   {
+    "ts": "2026-11-17T09:49:31",
+    "request": "## 1. 目标\n\n新增「遗漏分析」页面：用户选择期号、球位、属性后点击计算，展示该属性各取值截至所选期号的遗漏期数；同时修复因按钮 ID 重复导致的 Streamlit 报错。\n\n## 2. 涉及文件与函数\n\n- `app.py`（主应用文件）\n  - 新增页面渲染函数（暂命名 `render_miss_analysis`）\n  - 新增遗漏计算函数（暂命名 `calc_miss_counts`",
+    "summary": "为遗漏分析页的期号/球位/属性选择控件补上唯一 key，避免与其它页面同名控件冲突；其余遗漏计算逻辑与页面渲染保持现状。",
+    "files": [
+      "app.py"
+    ],
+    "commit": "498d81a1302af2a34ec77b4a0d20bba71eb28585",
+    "head_before": "3d9324bb1e09e7bacfc26783d40a54e0ab1ba0fe"
+  },
+  {
     "ts": "2026-11-17T09:46:23",
     "request": "## 1. 目标\n\n新增「遗漏分析」页面：选择期号、球位、属性后，点击按钮计算该属性各取值截至所选期号的遗漏期数；同时修复因按钮 ID 重复导致的 Streamlit 报错。\n\n## 2. 涉及文件与函数\n\n- `app.py`（主应用文件）\n  - 新增页面渲染函数（暂称 `render_miss_analysis`）\n  - 新增遗漏计算函数（暂称 `calculate_miss`，放在 `c",
     "summary": "新增「遗漏分析」页面（render_miss_analysis + calculate_miss），为各页面同名按钮补唯一 key，并把 load_excel_data 的导入包装改为只捕获导入异常。",
