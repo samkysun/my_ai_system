@@ -36,22 +36,12 @@ from supabase import create_client
 # 两个可选模块：缺失时只影响对应标签页，不影响主程序启动
 try:
     from ai_chat_page import render_ai_chat
-except ImportError as _e:
+except Exception:
     render_ai_chat = None
-    _IMPORT_ERRORS = globals().get("_IMPORT_ERRORS", {})
-    _IMPORT_ERRORS["ai_chat_page"] = str(_e)
 try:
     from auto_upgrade import render_upgrade_tab
-except ImportError as _e:
+except Exception:
     render_upgrade_tab = None
-    _IMPORT_ERRORS = globals().get("_IMPORT_ERRORS", {})
-    _IMPORT_ERRORS["auto_upgrade"] = str(_e)
-try:
-    from omission_page import render_omission_page
-except ImportError as _e:
-    render_omission_page = None
-    _IMPORT_ERRORS = globals().get("_IMPORT_ERRORS", {})
-    _IMPORT_ERRORS["omission_page"] = str(_e)
 
 # ==========================================
 # 1. 全局配置与初始化
@@ -369,7 +359,7 @@ def render_multi_analysis(df_data):
     with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=12)
     with row2_col3:
         st.write(""); st.write("")
-        run_btn = st.button("🚀执行分析", use_container_width=True, type="primary", key="multi_calc_btn")
+        run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
     with row2_col4:
         st.write(""); st.write("")
         if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
@@ -614,7 +604,7 @@ def render_deep_linkage(df_data):
         pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5) if "生肖" in mode else st.number_input("预测前N名", min_value=3, max_value=7, value=5)
     with col4:
         st.write(""); st.write("")
-        run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary", key="linkage_calc_btn")
+        run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
 
     if "升序" in mode: target_file = "升序全套.csv"
     else: target_file = "按序全套.csv"
@@ -748,141 +738,6 @@ def render_deep_linkage(df_data):
             st.text_area("深度联动分析报告", value=st.session_state.get("deep_linkage_result", ""), height=300)
     elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
-
-
-MISS_ATTR_OPTIONS = ["生肖", "尾数", "数字五行"]
-MISS_ATTR_VALUES = {
-    "生肖": ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"],
-    "尾数": [str(i) for i in range(10)],
-    "数字五行": ["金", "木", "水", "火", "土"],
-}
-
-
-def _miss_clean(v):
-    if v is None: return ""
-    try: return str(int(float(v)))
-    except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
-
-
-def _miss_period_of(row):
-    year_val = _miss_clean(row[213]) if len(row) > 213 else "2026"
-    p1 = _miss_clean(row[0]) if len(row) > 0 else ""
-    p2 = _miss_clean(row[1]) if len(row) > 1 else ""
-    p3 = _miss_clean(row[2]) if len(row) > 2 else ""
-    if not p1 and not p2 and not p3: return ""
-    return f"{year_val}{p1}{p2}{p3}"
-
-
-def calculate_miss(all_rows, target_period, ball_no, attr_name):
-    """返回 (结果列表, 错误信息)。结果列表元素为 (取值, 遗漏期数)。
-    基准期：所选期存在则含该期；不存在则取 <= 所选期的最大期号。"""
-    if not all_rows:
-        return None, "数据为空"
-    if attr_name not in MISS_ATTR_VALUES:
-        return None, f"不支持的属性：{attr_name}"
-
-    # 表头行（第 1 行）用于在球位 30 列内定位属性列
-    header = all_rows[0] if all_rows else []
-    base_col = 6 + (ball_no - 1) * 30  # 0-based 起始列
-    attr_col = -1
-    for off in range(30):
-        idx = base_col + off
-        if idx >= len(header): break
-        name = _miss_clean(header[idx])
-        if name == attr_name or name.endswith(attr_name):
-            attr_col = idx
-            break
-    if attr_col < 0:
-        return None, f"在 {ball_no} 球的 30 列中找不到属性列「{attr_name}」，请检查 CSV 表头"
-
-    # 收集 (期号, 属性值)，按文件顺序（升序全套为从新到旧）
-    seq = []
-    for r_idx in range(1, len(all_rows)):
-        row = all_rows[r_idx]
-        period = _miss_period_of(row)
-        if not period: continue
-        val = _miss_clean(row[attr_col]) if attr_col < len(row) else ""
-        seq.append((period, val))
-    if not seq:
-        return None, "没有可用的期号数据"
-
-    # 定位基准期下标
-    base_idx = -1
-    for i, (p, _v) in enumerate(seq):
-        if p == target_period:
-            base_idx = i; break
-    if base_idx < 0:
-        try:
-            tp = float(target_period)
-        except Exception:
-            return None, f"期号格式异常：{target_period}"
-        best = -1; best_p = None
-        for i, (p, _v) in enumerate(seq):
-            try: pv = float(p)
-            except Exception: continue
-            if pv <= tp and (best_p is None or pv > best_p):
-                best_p = pv; best = i
-        if best < 0:
-            return None, f"找不到 <= {target_period} 的期号"
-        base_idx = best
-
-    # 从基准期往前数（seq 顺序即从新到旧）
-    values = MISS_ATTR_VALUES[attr_name]
-    miss = {v: 0 for v in values}
-    seen = set()
-    for i in range(base_idx, len(seq)):
-        v = seq[i][1]
-        if v in miss and v not in seen:
-            seen.add(v)
-        for k in values:
-            if k not in seen:
-                miss[k] += 1
-        if len(seen) == len(values):
-            break
-    return [(v, miss[v]) for v in values], None
-
-
-def render_miss_analysis(df_data):
-    st.title("📉 遗漏分析")
-    st.info("💡 数据源：升序全套.csv（第 1 球 = 最小号）。遗漏 = 从基准期往前连续未出现的期数。")
-
-    all_rows = load_excel_data("升序全套.csv", None)
-    if not all_rows:
-        st.error("读取 升序全套.csv 失败，请检查云端文件或 Secrets 配置。")
-        return
-
-    periods = []
-    for r_idx in range(1, len(all_rows)):
-        p = _miss_period_of(all_rows[r_idx])
-        if p: periods.append(p)
-    periods = sorted(set(periods), reverse=True)
-    if not periods:
-        st.error("CSV 中没有解析到期号。")
-        return
-
-    # 允许选到未开奖期：在最新期号基础上 +1 作为候选
-    try:
-        next_p = str(int(float(periods[0])) + 1)
-        if next_p not in periods: periods.insert(0, next_p)
-    except Exception:
-        pass
-
-    c1, c2, c3 = st.columns(3)
-    with c1: sel_period = st.selectbox("选择期号", periods, key="miss_period_sel")
-    with c2: sel_ball = st.selectbox("选择球位", [f"第{i}球" for i in range(1, 8)], key="miss_ball_sel")
-    with c3: sel_attr = st.selectbox("选择属性", MISS_ATTR_OPTIONS, key="miss_attr_sel")
-
-    if st.button("计算遗漏次数", use_container_width=True, type="primary", key="miss_calc_btn"):
-        ball_no = int(sel_ball.replace("第", "").replace("球", ""))
-        with st.spinner("计算中..."):
-            result, err = calculate_miss(all_rows, sel_period, ball_no, sel_attr)
-        if err:
-            st.error(err)
-        else:
-            st.success(f"✅ {sel_period} 期 · {sel_ball} · {sel_attr} 遗漏统计")
-            df_res = pd.DataFrame(result, columns=[sel_attr, "遗漏期数"])
-            df_res = df_res.sort_values("遗漏期数", ascending=False).reset_index(drop=True)
-            st.dataframe(df_res, use_container_width=True, height=420)
 
 
 def render_ai(df_data):
@@ -1764,8 +1619,6 @@ def main_app():
 
         menu_options = ["📊 主控台"]
         if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演"])
-        if is_admin or is_vip: menu_options.append("📉 各属性遗漏统计")
-        if is_admin or is_vip: menu_options.append("📉 遗漏分析")
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -1775,12 +1628,6 @@ def main_app():
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🧠 AI推演": render_ai(df_data)
-    elif page == "📉 各属性遗漏统计":
-        if render_omission_page:
-            render_omission_page()
-        else:
-            st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
-    elif page == "📉 遗漏分析": render_miss_analysis(df_data)
     elif page == "⚙️ 后台管理": render_admin_panel()
 
 
