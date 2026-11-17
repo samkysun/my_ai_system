@@ -1,5 +1,25 @@
 [
  {
+  "ts": "2026-11-17T15:59:08",
+  "request": "streamlit.errors.StreamlitDuplicateElementKey: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).\n\nTraceback:\nFile \"/mount/src/my_ai_system/app.py\", line 1733, in <module>\n    main_app()\n    ~~~~~~~~^^\nFile \"/mount/src/my_ai_system/app.py\", line 1721, in main_app\n    elif page == \"🧠 AI推演\": render_ai(df_data)\n                              ~~~~~~~~~^^^^^^^^^\nFile \"/mount/src/my_ai_system/app.py\", line 951, in render_ai\n    with cols[(14+11) % 3]: st.checkbox(\"04合\", key=f\"{v_prefix}04合\")\n                            ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+  "summary": "修复 render_ai 中「04合」复选框与循环生成的「04合」重复 key 导致的 StreamlitDuplicateElementKey 报错：把循环范围从 1..13 改为 1..12，并单独保留 04合 复选框。",
+  "risk": "仅调整复选框生成范围，不改变任何计算逻辑；04合 仍可勾选，且 expand_condition 对 04合 的处理保持不变。无新增依赖。",
+  "verify": "1) 以管理员或 VIP 账号登录，进入「🧠 AI推演」页；2) 展开「门数 / 段数 / 合数」区域，确认 01合~13合 与 04合 均正常显示且不报错；3) 勾选 04合 后点击「开始推演」，确认条件文本中出现「杀04合（…）」；4) 点击「清理勾选」后再次进入该页，确认无重复 key 报错。",
+  "edits": [
+   {
+    "file": "app.py",
+    "mode": "replace_block",
+    "find": "            for i in range(1, 14):\n                with cols[(i+11) % 3]: st.checkbox(f\"{i:02d}合\", key=f\"{v_prefix}{i:02d}合\")\n            with cols[(14+11) % 3]: st.checkbox(\"04合\", key=f\"{v_prefix}04合\")",
+    "replace": "            for i in range(1, 13):\n                with cols[(i+11) % 3]: st.checkbox(f\"{i:02d}合\", key=f\"{v_prefix}{i:02d}合\")\n            with cols[(13+11) % 3]: st.checkbox(\"13合\", key=f\"{v_prefix}13合\")\n            with cols[(14+11) % 3]: st.checkbox(\"04合\", key=f\"{v_prefix}04合\")"
+   }
+  ],
+  "files": [
+   "app.py"
+  ],
+  "commit": "05a1e6ca9d7838e8b90a61906b1593fd316889a7",
+  "head_before": "20e4877ccff408e63c9247264a2e9a414de115ba"
+ },
+ {
   "ts": "2026-11-17T15:53:45",
   "request": "AI推演页面在选择复选框时，本来所杀的数据都经过点选复选框后同步到第一个文本框里面，比如选土号，文本框里面就出现了属于土号的号码，现在经过你下午的更改，全部没了，这样很容易让AI计算错误，没有在文本框里规定死，它会乱来，所以，必须点选什么复选框，在第一个文明框里面必须出现所属数字，请按下午那样重构，而且要求ai必须详细描述。在没有号码选择时，就选择杀一次的，如果杀一次的也没有，就选杀2次的，",
   "summary": "在 AI 推演页把勾选的排杀条件展开成具体号码写进第一个文本框（如“杀土号”展开为“杀土号（05,06,11,16,17,21,22,27,28,32,33,38,39,43,44,49），”），并强化提示词要求 AI 逐条详细描述剔除过程、全杀时按触犯次数 1→2 依次后补。",
