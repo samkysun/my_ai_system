@@ -744,6 +744,135 @@ def render_deep_linkage(df_data):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
 
 
+OM_ATTR_DEFS = {
+    "生肖": {"col": 7, "values": ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"], "suffix": ""},
+    "尾数": {"col": 8, "values": [str(i) for i in range(10)], "suffix": "尾"},
+    "数字五行": {"col": 6, "values": ["金", "木", "水", "火", "土"], "suffix": ""},
+    "门数": {"col": 10, "values": [f"{i}门" for i in range(1, 6)], "suffix": ""},
+    "段数": {"col": 11, "values": [f"{i}段" for i in range(1, 8)], "suffix": ""},
+    "数字合": {"col": 9, "values": [f"{i:02d}合" for i in range(1, 14)], "suffix": ""},
+    "波色": {"col": 22, "values": ["红波", "蓝波", "绿波"], "suffix": ""},
+    "单双组合": {"col": 12, "values": ["双双", "双单", "单单", "单双"], "suffix": ""},
+    "生肖五行": {"col": 18, "values": ["金", "木", "水", "火", "土"], "suffix": ""},
+    "尾五行": {"col": 31, "values": ["金", "木", "水", "火", "土"], "suffix": ""},
+    "3模": {"col": 30, "values": ["3余0", "3余1", "3余2"], "suffix": ""},
+    "福禄寿": {"col": 32, "values": ["福肖", "禄肖", "寿肖"], "suffix": ""},
+    "大小肖": {"col": 33, "values": ["大肖", "中肖", "小肖"], "suffix": ""},
+}
+
+
+def _om_clean(v):
+    if v is None: return ""
+    try: return str(int(float(v)))
+    except: return str(v).replace("\r", "").replace("\n", "").replace(" ", "").strip()
+
+
+def _om_collect_attr_counts(all_rows, attr_name, ball_num, file_type):
+    """统计某球某属性在历史数据中的出现次数（遗漏=未出现次数，这里按出现次数统计，与示例一致）。"""
+    cfg = OM_ATTR_DEFS[attr_name]
+    base_col = cfg["col"] + (ball_num - 1) * 30
+    col_idx = column_index_from_string(get_column_letter(base_col)) - 1
+    counter = Counter()
+    for r in range(2, len(all_rows)):
+        row = all_rows[r]
+        if col_idx >= len(row): continue
+        val = _om_clean(row[col_idx])
+        if not val: continue
+        if attr_name == "尾数":
+            if val.isdigit(): val = val[-1]
+        counter[val] += 1
+    ordered = []
+    for v in cfg["values"]:
+        ordered.append((v, counter.get(v, 0)))
+    ordered.sort(key=lambda x: -x[1])
+    return ordered
+
+
+def render_omission_attr_report(df_data):
+    st.divider()
+    st.markdown("### 📄 属性遗漏文本报告")
+    st.markdown("<style>div[data-testid='stTextArea'] textarea{font-size:20px !important;line-height:1.9 !important;}</style>", unsafe_allow_html=True)
+
+    if "om_report_text" not in st.session_state: st.session_state.om_report_text = ""
+    if "om_report_keys" not in st.session_state: st.session_state.om_report_keys = []
+    if "om_last_ball" not in st.session_state: st.session_state.om_last_ball = None
+
+    c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 1.4])
+    with c1:
+        ball_str = st.selectbox("选择球号", [f"第{i}球" for i in range(1, 8)], key="om_ball_sel")
+        ball_num = int(ball_str.replace("第", "").replace("球", ""))
+    with c2:
+        attr_name = st.selectbox("选择属性", list(OM_ATTR_DEFS.keys()), key="om_attr_sel")
+    with c3:
+        file_type = st.selectbox("数据文件", ["升序全套", "按序全套"], key="om_file_sel")
+    with c4:
+        total_vals = len(OM_ATTR_DEFS[attr_name]["values"])
+        top_n = st.number_input(f"写入前几（1-{total_vals}）", min_value=1, max_value=total_vals, value=total_vals, step=1, key=f"om_topn_{attr_name}")
+
+    if st.session_state.om_last_ball != ball_num:
+        st.session_state.om_last_ball = ball_num
+        st.session_state.om_report_text = ""
+        st.session_state.om_report_keys = []
+
+    b1, b2, b3 = st.columns(3)
+    with b1:
+        gen_btn = st.button("➕ 生成并追加报告", use_container_width=True, type="primary")
+    with b2:
+        clear_btn = st.button("🗑️ 清除报告", use_container_width=True)
+    with b3:
+        st.write("")
+
+    if clear_btn:
+        st.session_state.om_report_text = ""
+        st.session_state.om_report_keys = []
+        st.rerun()
+
+    if gen_btn:
+        target_file = "升序全套.csv" if file_type == "升序全套" else "按序全套.csv"
+        with st.spinner("统计中..."):
+            try:
+                all_rows = load_excel_data(target_file, None)
+                if not all_rows:
+                    st.error(f"读取 {target_file} 失败")
+                else:
+                    ordered = _om_collect_attr_counts(all_rows, attr_name, ball_num, file_type)
+                    top = ordered[:int(top_n)]
+                    period_str = ""
+                    if df_data is not None and not isinstance(df_data, str) and len(df_data) > 0:
+                        try: period_str = clean_period(df_data.iloc[0, 18])
+                        except: period_str = ""
+                    header = f"===================={period_str}期{file_type}，{ball_str}{attr_name}遗漏====================="
+                    suffix = OM_ATTR_DEFS[attr_name]["suffix"]
+                    lines = [header]
+                    for v, c in top:
+                        lines.append(f"{v}{suffix}：{c}次")
+                    block = "\n".join(lines)
+                    key = f"{ball_num}|{attr_name}|{file_type}|{int(top_n)}"
+                    if key in st.session_state.om_report_keys:
+                        st.info("该配置已追加过，未重复写入。")
+                    else:
+                        st.session_state.om_report_keys.append(key)
+                        if st.session_state.om_report_text:
+                            st.session_state.om_report_text += "\n\n" + block
+                        else:
+                            st.session_state.om_report_text = block
+                        st.success("✅ 已追加")
+            except Exception as e:
+                st.error(f"统计异常: {e}")
+
+    if st.session_state.om_report_text:
+        st.text_area("报告内容（可编辑）", value=st.session_state.om_report_text, height=360, key="om_report_area")
+        import streamlit.components.v1 as _components
+        import html as _html
+        import base64 as _b64
+        _print_html = f"<html><head><meta charset='utf-8'><style>body{{font-family:Consolas,monospace;padding:20px;line-height:1.9;font-size:16px;}}pre{{white-space:pre-wrap;word-wrap:break-word;}}</style></head><body><pre>{_html.escape(st.session_state.om_report_text)}</pre></body></html>"
+        _b64_print = _b64.b64encode(_print_html.encode('utf-8')).decode('utf-8')
+        _components.html(f"""<div style='text-align:center;'><button onclick="printReport()" style='width:100%;padding:12px;background-color:#0284c7;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;font-weight:bold;'>🖨️ 打印当前报告</button></div><script>function b64DecodeUnicode(str){{return decodeURIComponent(Array.prototype.map.call(atob(str),function(c){{return '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2);}}).join(''));}}function printReport(){{var win=window.open('');win.document.write(b64DecodeUnicode("{_b64_print}"));win.document.close();win.focus();setTimeout(function(){{win.print();}},500);}}</script>""", height=80, scrolling=False)
+        st.download_button("📥 下载报告 (TXT)", data=st.session_state.om_report_text.encode('utf-8-sig'), file_name=f"遗漏报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", mime="text/plain", use_container_width=True)
+    else:
+        st.info("尚未生成报告。选择球号与属性后点【生成并追加报告】。")
+
+
 def render_ai(df_data):
     st.title("🧠 AI 严谨推演系统")
     if df_data is not None and not isinstance(df_data, str):
@@ -1637,6 +1766,7 @@ def main_app():
             render_omission_page()
         else:
             st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
+        render_omission_attr_report(df_data)
     elif page == "⚙️ 后台管理": render_admin_panel()
 
 
