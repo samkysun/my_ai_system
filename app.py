@@ -824,6 +824,9 @@ def render_ai(df_data):
             d = f"{key[:-1]}段"
             nums = _nums_by(lambda n: NUM_DUAN.get(n) == d)
             return f"杀{key}（{_fmt_nums(nums)}），"
+        if key == "04合":
+            nums = _nums_by(lambda n: NUM_HE.get(n) == "04合")
+            return f"杀04合（{_fmt_nums(nums)}），"
         if key.endswith("合") and key[:-1].isdigit():
             h = f"{key}合" if len(key) == 3 else f"{int(key[:-1]):02d}合"
             nums = _nums_by(lambda n: NUM_HE.get(n) == h)
@@ -945,6 +948,7 @@ def render_ai(df_data):
                 with cols[(i+4) % 3]: st.checkbox(f"{i}段", key=f"{v_prefix}{i}段")
             for i in range(1, 14):
                 with cols[(i+11) % 3]: st.checkbox(f"{i:02d}合", key=f"{v_prefix}{i:02d}合")
+            with cols[(14+11) % 3]: st.checkbox("04合", key=f"{v_prefix}04合")
         with st.expander("波色 / 波单双"):
             cols = st.columns(3)
             for idx, key in enumerate(["红波", "蓝波", "绿波", "红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"]):
