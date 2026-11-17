@@ -53,7 +53,10 @@ ALLOWED_EXT = (".py",)
 PROTECTED_PREFIX = (".streamlit/", ".github/", ".git/", "_backup/")
 MAX_FILES = 3
 MAX_NEW_LINES = 600
-LOG_FILE = "_upgrade_log.json"
+HISTORY_FILE = "_upgrade_history.json"   # 完整留档：需求原文 + 方案 + 补丁
+LOG_FILE = "_upgrade_log.json"           # 旧版短日志，仅作向后兼容读取
+HISTORY_MAX = 40                         # 最多保留多少条
+HISTORY_MAX_CHARS = 900_000              # 超过这个大小就裁剪最老条目的补丁
 
 # 硬阻断（拒绝提交）
 FORBIDDEN = [
@@ -460,8 +463,8 @@ def gh_selftest(repo, token, branch="main"):
     return log
 
 
-def load_log(repo, token):
-    _, text = gh_read(repo, token, LOG_FILE)
+def _read_json_list(repo, token, path):
+    _, text = gh_read(repo, token, path)
     if not text:
         return []
     try:
@@ -469,6 +472,36 @@ def load_log(repo, token):
         return data if isinstance(data, list) else []
     except Exception:
         return []
+
+
+def load_history(repo, token):
+    """读取完整升级历史。优先新文件，没有则回落到旧日志（字段较少）。"""
+    data = _read_json_list(repo, token, HISTORY_FILE)
+    if data:
+        return data
+    return _read_json_list(repo, token, LOG_FILE)
+
+
+def load_log(repo, token):
+    """兼容旧调用名。"""
+    return load_history(repo, token)
+
+
+def save_history(repo, token, entries, message=None):
+    """写入升级历史。自动裁剪到 HISTORY_MAX 条、并在过大时丢弃最老条目的补丁内容。"""
+    entries = list(entries)[:HISTORY_MAX]
+    payload = json.dumps(entries, ensure_ascii=False, indent=1)
+    if len(payload) > HISTORY_MAX_CHARS:
+        # 从最老的开始削减补丁体积，保留需求原文与摘要（那才是最有用的）
+        for e in reversed(entries):
+            if e.get("edits"):
+                e["edits_note"] = f"补丁内容已裁剪以控制文件体积（原 {len(e['edits'])} 条）"
+                e["edits"] = []
+                payload = json.dumps(entries, ensure_ascii=False, indent=1)
+                if len(payload) <= HISTORY_MAX_CHARS:
+                    break
+    return gh_commit(repo, token, {HISTORY_FILE: payload},
+                     message or "更新升级历史", branch="main")
 
 
 # ================================================================ 模型
@@ -731,10 +764,15 @@ def render_upgrade_tab():
                     else:
                         files = {p: t for p, t in new_src.items() if sources.get(p) != t}
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        entry = {"ts": datetime.now().isoformat(timespec="seconds"),
-                                 "request": req.strip()[:200],
-                                 "summary": patch.get("summary", ""),
-                                 "files": list(files)}
+                        entry = {
+                            "ts": datetime.now().isoformat(timespec="seconds"),
+                            "request": req.strip(),                  # 需求全文，不再截断
+                            "summary": patch.get("summary", ""),
+                            "risk": patch.get("risk", ""),
+                            "verify": patch.get("verify", ""),
+                            "edits": edits,                          # 补丁本体，可重放
+                            "files": list(files),
+                        }
 
                         # 第一步：提交代码本体。只有这一步失败才算提交失败。
                         sha = None
@@ -750,15 +788,13 @@ def render_upgrade_tab():
                             st.error(f"❌ 代码提交失败，仓库未改动：{type(e).__name__}: {e}")
 
                         if sha:
-                            # 第二步：写升级日志。失败只警告，绝不影响已成功的提交。
+                            # 第二步：存档。失败只警告，绝不影响已成功的提交。
                             try:
-                                log = load_log(grepo, gtoken)
-                                log.insert(0, entry)
-                                gh_commit(grepo, gtoken,
-                                          {LOG_FILE: json.dumps(log[:30], ensure_ascii=False, indent=2)},
-                                          f"记录升级日志 {stamp}", branch="main")
+                                hist = load_history(grepo, gtoken)
+                                hist.insert(0, entry)
+                                save_history(grepo, gtoken, hist, f"记录升级历史 {stamp}")
                             except Exception as e2:
-                                st.warning(f"代码已提交成功，但写升级日志失败（不影响使用）："
+                                st.warning(f"代码已提交成功，但存档失败（不影响使用）："
                                            f"{type(e2).__name__}: {str(e2)[:200]}")
 
                             st.session_state.ug_last = entry
@@ -774,41 +810,125 @@ def render_upgrade_tab():
     # ---------- 3. 历史与回滚 ----------
     st.divider()
     with st.expander("🗂️ 升级历史与回滚", expanded=False):
-        log = load_log(grepo, gtoken)
-        if not log:
-            st.info("还没有升级记录。")
-        for i, e in enumerate(log[:10]):
-            cols = st.columns([4, 2, 1])
-            with cols[0]:
-                st.write(f"**{e.get('ts', '')[:19]}** · {e.get('summary', '')[:60]}")
-                st.caption(f"{e.get('commit', '')[:7]} · 文件：{', '.join(e.get('files', []))}")
-            with cols[1]:
-                st.caption(f"回滚点 {str(e.get('head_before', ''))[:7]}")
-            with cols[2]:
-                if st.button("回滚", key=f"rb_{i}"):
-                    try:
-                        restored = {}
-                        for p in e.get("files", []):
-                            _, text = gh_read(grepo, gtoken, p, ref=e.get("head_before"))
-                            if text is not None:
-                                restored[p] = text
-                        if not restored:
-                            st.error("取不回旧版本文件")
+        hist = load_history(grepo, gtoken)
+        if not hist:
+            st.info("还没有升级记录。每次成功应用后，需求原文与补丁都会存档到仓库的 "
+                    f"`{HISTORY_FILE}`。")
+        else:
+            hc1, hc2 = st.columns([1, 3])
+            with hc1:
+                st.download_button(
+                    "📥 导出全部历史 (JSON)",
+                    json.dumps(hist, ensure_ascii=False, indent=2).encode("utf-8-sig"),
+                    file_name=f"升级历史_{datetime.now():%Y%m%d}.json",
+                    mime="application/json", use_container_width=True)
+            with hc2:
+                st.caption(f"共 {len(hist)} 条。每条都保存了需求原文和补丁，回滚后可以直接填回或重放，"
+                           f"不用重新写、不用再花钱生成。")
+
+        for i, e in enumerate(hist[:10]):
+            ts = str(e.get("ts", ""))[:19].replace("T", " ")
+            title = f"{ts} · {str(e.get('summary', ''))[:50] or '（无摘要）'}"
+            with st.expander(title, expanded=False):
+                if e.get("files"):
+                    st.caption(f"文件：{', '.join(e['files'])}　·　提交 "
+                               f"{str(e.get('commit', ''))[:7]}　·　回滚点 "
+                               f"{str(e.get('head_before', ''))[:7]}")
+                st.markdown("**需求原文**")
+                if e.get("request"):
+                    st.text_area("需求", value=e["request"], height=170,
+                                 key=f"hist_req_{i}", label_visibility="collapsed")
+                else:
+                    st.caption("（这条是旧版记录，没有保存需求原文）")
+
+                if e.get("risk") or e.get("verify"):
+                    with st.expander("风险 / 验收", expanded=False):
+                        if e.get("risk"): st.write(f"风险：{e['risk']}")
+                        if e.get("verify"): st.write(f"验收：{e['verify']}")
+
+                if e.get("edits_note"):
+                    st.caption(e["edits_note"])
+
+                a1, a2, a3 = st.columns(3)
+                with a1:
+                    if st.button("📋 填回需求框", key=f"fill_{i}", use_container_width=True):
+                        st.session_state["ug_req"] = e.get("request", "")
+                        st.session_state["_ug_from_chat"] = True
+                        st.success("已填入上方需求框，可直接修改后重新生成。")
+                        st.rerun()
+                with a2:
+                    if st.button("♻️ 重放这份补丁", key=f"replay_{i}", use_container_width=True,
+                                 help="用存档里的补丁直接重新应用，不调用 AI，不花钱"):
+                        ed = e.get("edits") or []
+                        if not ed:
+                            st.error("这条记录没有保存补丁内容，只能填回需求重新生成。")
                         else:
-                            sha, _ = gh_commit(
-                                grepo, gtoken, restored,
-                                f"回滚 {e.get('commit', '')[:7]} → {str(e.get('head_before', ''))[:7]}",
-                                branch="main")
-                            st.success(f"已回滚，新提交 {sha[:7]}")
-                            st.rerun()
-                    except Exception as ex:
-                        st.error(f"回滚失败：{ex}")
+                            src_map = {}
+                            for p in e.get("files", []):
+                                _, t = gh_read(grepo, gtoken, p)
+                                if t is not None:
+                                    src_map[p] = t
+                            ok1, m1 = validate_edits(src_map, ed)
+                            ok2, ns, m2 = (False, {}, m1) if not ok1 else apply_edits(src_map, ed)
+                            if not (ok1 and ok2):
+                                st.error(f"无法重放：{m1 if not ok1 else m2}\n\n"
+                                         "多半是文件已改动，`find` 对不上了。用「填回需求框」重新生成更稳妥。")
+                            else:
+                                ok3, m3 = ast_check(ns)
+                                if not ok3:
+                                    st.error(f"语法检查未通过：{m3}")
+                                else:
+                                    with st.spinner("跑测试集…"):
+                                        ok4, out = run_tests(ns, grepo, gtoken)
+                                    if not ok4:
+                                        st.error("测试未通过，未提交。")
+                                        st.code(out[-1500:])
+                                    else:
+                                        files = {p: t for p, t in ns.items()
+                                                 if src_map.get(p) != t}
+                                        try:
+                                            sha, _ = gh_commit(
+                                                grepo, gtoken, files,
+                                                f"重放升级 {datetime.now():%Y%m%d_%H%M%S}: "
+                                                f"{str(e.get('summary', ''))[:50]}",
+                                                branch="main")
+                                            st.success(f"已重放，提交 {sha[:7]}")
+                                            st.rerun()
+                                        except Exception as ex:
+                                            st.error(f"提交失败：{ex}")
+                with a3:
+                    st.download_button(
+                        "⬇ 导出本条", json.dumps(e, ensure_ascii=False, indent=2).encode("utf-8-sig"),
+                        file_name=f"升级记录_{ts.replace(':', '').replace('-', '').replace(' ', '_')}.json",
+                        mime="application/json", use_container_width=True,
+                        key=f"dl_{i}")
+
+                if e.get("head_before"):
+                    if st.button("↩️ 直接回滚到这次升级之前", key=f"rb_{i}", use_container_width=True):
+                        try:
+                            restored = {}
+                            for p in e.get("files", []):
+                                _, text = gh_read(grepo, gtoken, p, ref=e.get("head_before"))
+                                if text is not None:
+                                    restored[p] = text
+                            if not restored:
+                                st.error("取不回旧版本文件")
+                            else:
+                                sha, _ = gh_commit(
+                                    grepo, gtoken, restored,
+                                    f"回滚 {str(e.get('commit', ''))[:7]} → "
+                                    f"{str(e.get('head_before', ''))[:7]}", branch="main")
+                                st.success(f"已回滚，新提交 {sha[:7]}")
+                                st.rerun()
+                        except Exception as ex:
+                            st.error(f"回滚失败：{ex}")
+
         st.caption("回滚用的是升级前的 commit SHA，取回那些文件的旧内容再提交一次，"
                    "不会改写历史，随时可以再回滚回来。")
 
         st.markdown("---")
-        st.markdown("**最近提交（直接从 GitHub 读，不依赖升级日志）**")
-        st.caption("日志写入失败时，用这里回滚。回滚 = 把该提交改过的文件恢复到它的上一个版本。")
+        st.markdown("**最近提交（直接从 GitHub 读，不依赖存档文件）**")
+        st.caption("存档写失败时，用这里回滚。回滚 = 把该提交改过的文件恢复到它的上一个版本。")
         recent = gh_recent_commits(grepo, gtoken, 8)
         if not recent:
             st.info("读不到提交列表（可能是 token 没有读权限）。")
