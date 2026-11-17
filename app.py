@@ -680,7 +680,8 @@ def render_deep_linkage(df_data):
                     top_names = [item[0] for item in sorted_freq[:pick_num]]
                     kill_names = [item[0] for item in sorted_freq[pick_num:]]
                     line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
-                    if kill_names: line += f"  | 杀({','.join(kill_names)})"
+                    if "数字" not in mode and kill_names:
+                        line += f"  | 杀({','.join(kill_names)})"
                     report_lines.append(line)
                 report_lines.append("\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
                 st.session_state.deep_linkage_result = "\n".join(report_lines)
@@ -716,7 +717,7 @@ def render_deep_linkage(df_data):
                         else:
                             chips.append(f"<span>{safe}</span>")
                     line_html = f"<div style='margin:4px 0;'><b>{ball_names[ball_i]}</b>: " + ", ".join(chips)
-                    if kill_names:
+                    if "数字" not in mode and kill_names:
                         line_html += f"  <span style='color:#94a3b8;'>| 杀({_html.escape(','.join(str(x) for x in kill_names))})</span>"
                     if hit:
                         line_html += f"  <span style='color:#16a34a;font-weight:bold;'>[命中 {_html.escape(str(actual))}]</span>"
