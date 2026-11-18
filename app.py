@@ -1010,8 +1010,9 @@ def render_multi_analysis(df_data):
             with st.spinner("正在核算并筛选…"):
                 try:
                     _ar, _af = _scan_build_runner()
-                    _arows = load_excel_data(target_file, None)
-                    _atext, _astat, _ain = _auto_run(target_file.replace(".csv", ""), _arows,
+                    _tf = "升序全套.csv" if selected_file_type == "升序全套" else "按序全套.csv"
+                    _arows = load_excel_data(_tf, None)
+                    _atext, _astat, _ain = _auto_run(_tf.replace(".csv", ""), _arows,
                                                      ball_str, show_attrs, _ar, _af)
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
