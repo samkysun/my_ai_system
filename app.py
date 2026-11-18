@@ -1489,10 +1489,19 @@ def render_multi_analysis(df_data):
             _b64p = _b64m.b64encode(_ph.encode("utf-8")).decode("utf-8")
             if not _INNER.get("run"):
                 _comp.html(f"""
+            <style>
+              html, body {{ margin:0; padding:0; background:transparent; overflow:hidden; }}
+              .pbtn {{
+                width:100%; height:38px; padding:0; margin:0;
+                background:#ffffff; color:#31333f;
+                border:1px solid rgba(49,51,63,0.2); border-radius:0.5rem;
+                cursor:pointer; font-size:14px; line-height:36px;
+                font-family:inherit; display:block;
+              }}
+              .pbtn:hover {{ border-color:#0284c7; color:#0284c7; }}
+            </style>
             <div style="text-align:center">
-              <button onclick="pr()" style="width:100%;padding:11px;background-color:#0284c7;
-                color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;
-                font-weight:bold;">🖨️ 打印</button>
+              <button class="pbtn" onclick="pr()">🖨️ 打印</button>
             </div>
             <script>
             function d(s) {{
@@ -1509,7 +1518,7 @@ def render_multi_analysis(df_data):
               x.open(); x.write(h); x.close();
               setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
             }}
-            </script>""", height=66, scrolling=False)
+            </script>""", height=40, scrolling=False)
 
         st.divider()
 
