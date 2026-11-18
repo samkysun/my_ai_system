@@ -145,6 +145,54 @@ def clean_period(val):
     return s[:-2] if s.endswith(".0") else s
 
 
+# ==========================================
+# 跨页面汇总看板（各页面结果 → AI推演页固定展示）
+# ==========================================
+def _board_add(source, title, text):
+    """把一段结果放进看板；同一个 source+title 会覆盖，不重复堆积。"""
+    if "ai_board" not in st.session_state:
+        st.session_state.ai_board = []
+    text = (text or "").strip()
+    if not text:
+        return
+    entry = {"source": source, "title": title, "text": text,
+             "ts": datetime.now().strftime("%m-%d %H:%M:%S")}
+    for i, e in enumerate(st.session_state.ai_board):
+        if e.get("source") == source and e.get("title") == title:
+            st.session_state.ai_board[i] = entry
+            return
+    st.session_state.ai_board.append(entry)
+
+
+def _board_render():
+    """在 AI推演 页面顶部渲染看板"""
+    board = st.session_state.get("ai_board") or []
+    if not board:
+        return
+    with st.expander(f"📋 汇总看板（{len(board)} 条结果，来自其它页面）", expanded=True):
+        c1, c2 = st.columns([1, 3])
+        with c1:
+            if st.button("🗑 清空看板", use_container_width=True, key="board_clear"):
+                st.session_state.ai_board = []
+                st.rerun()
+        with c2:
+            _all = "\n\n".join(
+                f"===== {e['source']} | {e['title']} | {e['ts']} =====\n{e['text']}"
+                for e in board)
+            st.download_button("📥 导出全部", _all.encode("utf-8-sig"),
+                               file_name=f"汇总看板_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                               mime="text/plain", use_container_width=True,
+                               key="board_export")
+
+        for i, e in enumerate(board):
+            with st.expander(f"{e['source']} · {e['title']}　({e['ts']})", expanded=False):
+                st.text_area("内容", value=e["text"], height=200,
+                             key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
+                if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
+                    st.session_state.ai_board.pop(i)
+                    st.rerun()
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_real_data():
     token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
@@ -861,6 +909,12 @@ def render_multi_analysis(df_data):
             mime="text/plain",
             use_container_width=True
         )
+
+        if st.button("📌 送到 AI 推演", use_container_width=True, key="multi_to_board"):
+            _board_add("多维分析",
+                       f"{selected_file_type} {selected_period} {selected_attr} {ball_str}",
+                       clean_text)
+            st.success("已送到 AI 推演的汇总看板")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 
@@ -1054,6 +1108,10 @@ def render_deep_linkage(df_data):
 
         _dl_print_and_save(_dl_print_html, _dl_txt, _dl_txt_file, _dl_html_file)
 
+        if st.button("📌 送到 AI 推演", use_container_width=True, key="dl_to_board"):
+            _board_add("深度联动", f"{mode} {selected_period}", _dl_txt)
+            st.success("已送到 AI 推演的汇总看板")
+
     elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
 
@@ -1157,6 +1215,7 @@ def _ai_extract(answer):
 def render_ai(df_data):
     #=========AI页面标题===================
     st.title("🧠 AI 严谨推演系统")
+    _board_render()
 
     if df_data is not None and not isinstance(df_data, str):
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
@@ -2392,6 +2451,33 @@ def render_omission_page():
 
     # 一个按钮，点一下直接弹打印预览（不再需要点两次）
     if edited.strip():
+        if st.button("📌 送到 AI 推演（当前累积报告）", use_container_width=True, key="om_to_board"):
+            _board_add("遗漏核算", f"{file_type} {ball_str} {attr_name} {sel_period}", edited)
+            st.success("已送到 AI 推演的汇总看板")
+
+        if st.button("📌 全部属性一次算完并送到 AI 推演", use_container_width=True,
+                     key="om_all_to_board",
+                     help="把 28 个属性各算一遍，每个取前 N 名，一起送过去"):
+            _rows2 = rows
+            _start2 = start_idx
+            _added = 0
+            for _attr, _base in ATTR_BASE_COL.items():
+                _dom = ATTR_DOMAIN.get(_attr, [])
+                if not _dom:
+                    continue
+                _col = _base + (ball_no - 1) * 30 - 1
+                _res, _tot = _om_compute(_rows2, _col, _dom, _start2)
+                if _tot == 0:
+                    continue
+                _take = min(len(_dom), int(st.session_state.get(f"om_n_{_attr}", min(5, len(_dom)))))
+                _suffix = "尾" if _attr == "尾数" else ""
+                _lines = [f"{v}{_suffix}：{n}次" for v, n in _res[:_take]]
+                _title = f"{_OM_SEP}{sel_period}期{file_type}{ball_no}球{_attr}遗漏{_OM_SEP}"
+                _board_add("遗漏核算", f"{file_type} {ball_no}球 {_attr} {sel_period}",
+                           _title + "\n" + "\n".join(_lines))
+                _added += 1
+            st.success(f"已送出 {_added} 个属性的遗漏结果")
+
         _om_print(edited)
 
 # ==========================================
