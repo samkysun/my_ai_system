@@ -1459,8 +1459,10 @@ def render_multi_analysis(df_data):
             'div[data-testid="stTextArea"] textarea { font-size: 22px !important;'
             ' line-height: 1.75 !important; }'
             '</style>', unsafe_allow_html=True)
+        # key 跟内容走：内容一变，输入框就重建，才能显示新追加的结果
+        _box_key = "multi_box_" + str(abs(hash(clean_text)) % (10 ** 10))
         _edited = st.text_area("详细结果（可直接编辑）", value=clean_text, height=440,
-                               key="multi_one_box", label_visibility="collapsed")
+                               key=_box_key, label_visibility="collapsed")
 
         _b1, _b2, _b3, _b4 = st.columns(4)
         with _b1:
