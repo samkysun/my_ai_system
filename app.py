@@ -720,12 +720,23 @@ def _verify_report(report, rows):
                 if err is None and pos != len(ms):
                     err = "匹配串多出内容"
             if err is None:
-                ru = _v_cell(rows, a - 1, col) if a - 1 >= 1 else ""
-                rd = _v_cell(rows, bb + 1, col) if bb + 1 <= len(rows) else ""
-                if _v_norm(up) != _v_strip(ru):
-                    err = f"上值 {up} != 实际 {ru}"
-                elif _v_norm(down) != _v_strip(rd):
-                    err = f"下值 {down} != 实际 {rd}"
+                up_in = a - 1 >= 1
+                dn_in = bb + 1 <= len(rows)
+                ru = _v_cell(rows, a - 1, col) if up_in else ""
+                rd = _v_cell(rows, bb + 1, col) if dn_in else ""
+
+                def _ctx_ok(reported, real, in_range):
+                    rv = _v_norm(reported)
+                    if rv == "空":
+                        return in_range and real == ""
+                    if rv == "无":
+                        return not in_range
+                    return in_range and rv == _v_strip(real)
+
+                if not _ctx_ok(up, ru, up_in):
+                    err = f"上值 {up} != " + ("越界" if not up_in else repr(ru))
+                elif not _ctx_ok(down, rd, dn_in):
+                    err = f"下值 {down} != " + ("越界" if not dn_in else repr(rd))
             if err:
                 problems.append((attr, f"{ball}球({col})", f"行{a}-{bb}", err))
             else:
@@ -1368,7 +1379,36 @@ def render_multi_analysis(df_data):
                     st.session_state["scan_probs"] = _all_probs
                     st.session_state["scan_total"] = (_tl, _tt)
                     st.session_state["scan_meta"] = _all_meta
-                    st.session_state["scan_cost"] = _tm.time() - _t_start
+                    _cost_v = _tm.time() - _t_start
+                    st.session_state["scan_cost"] = _cost_v
+
+                    # 报告当场生成，保证耗时/指纹一定在
+                    _rp = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
+                           "=" * 60,
+                           "扫描方式：只读。数据从 GitHub 下载到内存比对，未做任何写入。",
+                           f"扫描耗时：{_cost_v:.1f} 秒"]
+                    for _fk3, _mv3 in _all_meta.items():
+                        _rp.append(f"数据源 {_fk3}：{_mv3['rows']} 行，指纹 {_mv3['fp']}")
+                    _rp += ["",
+                            "校验规则（每条触发行都必须同时满足）：",
+                            "  1 基准行排列的每个单元格 = CSV 真实值",
+                            "  2 触发行窗口的值 = 模板前 N 项（相生/相克则必须真的成立）",
+                            "  3 匹配串 = 窗口真实单元格拼接（不得多字或少字）",
+                            "  4 上值/下值 = 真实的前一行/后一行（空值显示为「空」，越界为「无」）",
+                            "", "=" * 60, ""]
+                    for _a3, _b3, _c3, _d3, _e3, _f3 in _all_detail:
+                        _rp.append(f"{_a3} {_b3}: 触发行 {_c3} 条，通过 {_d3} 条，"
+                                   f"基准行单元格 {_e3} 个，异常 {_c3 - _d3 + _f3} 处")
+                    _rp += ["", "-" * 60,
+                            f"合计：触发行 {_tl} 条 / 基准行单元格 {_tt} 个 / "
+                            f"问题 {len(_all_probs)} 处", ""]
+                    if _all_probs:
+                        _rp.append("问题明细：")
+                        for _x3 in _all_probs:
+                            _rp.append(f"  {_x3[0]} {_x3[1]} {_x3[2]} {_x3[3]} → {_x3[4]}")
+                    else:
+                        _rp.append("结论：全部核对通过，未发现任何一处不匹配。")
+                    st.session_state["scan_report"] = "\n".join(_rp)
                 except Exception as _e:
                     st.error(f"扫描失败：{type(_e).__name__}: {_e}")
 
@@ -1394,34 +1434,7 @@ def render_multi_analysis(df_data):
                 st.success(f"✅ 合计 {_tl} 条触发行 / {_tt} 个基准行单元格，"
                            f"全部核对通过，未发现任何不匹配。")
 
-            _meta2 = st.session_state.get("scan_meta") or {}
-            _cost = st.session_state.get("scan_cost") or 0
-            _rep = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
-                    "=" * 60,
-                    "扫描方式：只读。数据从 GitHub 下载到内存比对，未做任何写入。",
-                    f"扫描耗时：{_cost:.1f} 秒"]
-            for _fk2, _mv in _meta2.items():
-                _rep.append(f"数据源 {_fk2}：{_mv['rows']} 行，指纹 {_mv['fp']}")
-            _rep += ["",
-                     "校验规则（每条触发行都必须同时满足）：",
-                     "  1 基准行排列的每个单元格 = CSV 真实值",
-                     "  2 触发行窗口的值 = 模板前 N 项（相生/相克则必须真的成立）",
-                     "  3 匹配串 = 窗口真实单元格拼接（不得多字或少字）",
-                     "  4 上值/下值 = 真实的前一行/后一行（空值显示为「空」，越界为「无」）",
-                     "", "=" * 60, ""]
-            for a, b, c, d, e, f in _det:
-                _rep.append(f"{a} {b}: 触发行 {c} 条，通过 {d} 条，"
-                            f"基准行单元格 {e} 个，异常 {c - d + f} 处")
-            _rep += ["", "-" * 60,
-                     f"合计：触发行 {_tl} 条 / 基准行单元格 {_tt} 个 / "
-                     f"问题 {len(_prb)} 处", ""]
-            if _prb:
-                _rep.append("问题明细：")
-                for x in _prb:
-                    _rep.append(f"  {x[0]} {x[1]} {x[2]} {x[3]} → {x[4]}")
-            else:
-                _rep.append("结论：全部核对通过，未发现任何一处不匹配。")
-            _rep_txt = "\n".join(_rep)
+            _rep_txt = st.session_state.get("scan_report") or "（报告未生成，请重新扫描）"
             st.download_button("💾 保存扫描报告 (TXT)", _rep_txt.encode("utf-8-sig"),
                                file_name=f"多维扫描报告_{datetime.now():%Y%m%d_%H%M%S}.txt",
                                mime="text/plain", use_container_width=True,
