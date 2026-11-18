@@ -1024,6 +1024,7 @@ def render_multi_analysis(df_data):
     if st.session_state.get("auto_doc_ball") != ball_str:
         st.session_state["auto_doc_ball"] = ball_str
         st.session_state["auto_doc"] = ""
+        st.session_state["multi_result_text"] = ""
 
     st.divider()
 
@@ -1053,6 +1054,7 @@ def render_multi_analysis(df_data):
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
+                        st.session_state.multi_result_text = _atext
                         st.session_state["auto_doc"] = _atext
                         st.session_state["auto_doc_ball"] = ball_str
                         _nb = sum(1 for l in _atext.splitlines() if l.startswith("========="))
@@ -1062,30 +1064,6 @@ def render_multi_analysis(df_data):
                         st.warning(f"{ball_str} 按死规则筛选后没有任何触发行达标。")
                 except Exception as _e:
                     st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
-
-        _doc_now = st.session_state.get("auto_doc") or ""
-        if _doc_now:
-            st.markdown(f"#### 📄 {st.session_state.get('auto_doc_ball', ball_str)} 的文档"
-                        f"（{sum(1 for l in _doc_now.splitlines() if l.startswith(chr(61) * 9))} 个属性，"
-                        f"{sum(1 for l in _doc_now.splitlines() if l.startswith('触发行：'))} 条触发行）")
-            _edit = st.text_area("文档内容（可编辑）", value=_doc_now, height=340,
-                                 key="auto_doc_txt")
-            _dc1, _dc2, _dc3 = st.columns(3)
-            with _dc1:
-                if st.button("💾 保存修改", use_container_width=True, key="auto_doc_save"):
-                    st.session_state["auto_doc"] = _edit
-                    st.success("已保存")
-            with _dc2:
-                st.download_button("📥 下载这份 (TXT)", _edit.encode("utf-8-sig"),
-                                   file_name=f"{st.session_state.get('auto_doc_ball', ball_str)}"
-                                             f"_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                                   mime="text/plain", use_container_width=True,
-                                   key="auto_doc_dl")
-            with _dc3:
-                if st.button("🗑 清空", use_container_width=True, key="auto_doc_clear"):
-                    st.session_state["auto_doc"] = ""
-                    st.rerun()
-            st.caption("换球号会自动清空这份，重新开始记录新球的结果。")
 
         if st.session_state.get("auto_stats"):
             import pandas as _pda2
