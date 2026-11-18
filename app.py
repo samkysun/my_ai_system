@@ -476,11 +476,6 @@ def render_multi_analysis(df_data):
             st.toast("✅ 缓存已清空！")
             st.rerun()
 
-    run_all = st.button(f"📌 当前球（{ball_str}）全部属性 一次算完并送到 AI 推演",
-                        use_container_width=True,
-                        help=f"只算 {ball_str} 这一个球的全部属性，算完送到 AI 推演的汇总看板；"
-                             "换球号后再点一次即可逐个球处理")
-
     if selected_file_type != st.session_state.current_file:
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
@@ -493,12 +488,12 @@ def render_multi_analysis(df_data):
     # 5. 核心计算引擎 (生克/匹配/高亮)
     # ==========================================
 
-    if run_btn or run_all:
+    if run_btn:
         # =====防重复计算：生成当前参数唯一签名（包含期数、属性、球号、分析模式等）=====
         current_signature = f"{selected_file_type}_{selected_period}_{selected_attr}_{ball_str}_{min_len}_{max_len}_{analysis_mode}"
 
         # =====防重复计算：如果与上次参数完全一致，且不是全属性遍历，直接拦截不计算=====
-        if run_btn and st.session_state.get("last_multi_signature") == current_signature and "全属性" not in analysis_mode:
+        if st.session_state.get("last_multi_signature") == current_signature and "全属性" not in analysis_mode:
             st.warning("⚠️ 检测到条件与上次完全一样，已跳过重复计算。如需重算，请修改任意条件或清空结果。")
             st.stop()
 
@@ -710,41 +705,6 @@ def render_multi_analysis(df_data):
             # ==========================================
             # 6. 执行分析并组装报告文本
             # ==========================================
-            # ===== 全量模式：7球 × 全部属性，一次算完送到看板 =====
-            if run_all:
-                _blocks, _hit_cnt = [], 0
-                _bar = st.progress(0)
-                _b = ball_num
-                _total = len(show_attrs)
-                _done = 0
-                for _a in show_attrs:
-                    _done += 1
-                    _bar.progress(min(1.0, _done / max(1, _total)))
-                    try:
-                        _lines = do_match(_a, ATTR_MAP[_a], _b, int(min_len), int(max_len))
-                    except Exception:
-                        _lines = []
-                    if not _lines:
-                        continue
-                    _hit_cnt += 1
-                    _head = (f"========== {selected_file_type} - {selected_period} - "
-                             f"{_a} - 第{_b}球 ==========")
-                    _blocks.append(_head + "\n" + "\n".join(_lines))
-                _bar.empty()
-
-                if _blocks:
-                    _all_txt = "\n\n".join(_blocks)
-                    _title = (f"{selected_file_type} {selected_period} "
-                              f"第{ball_num}球×{len(show_attrs)}属性")
-                    _board_add("多维分析（单球全属性）", _title, _all_txt)
-                    st.success(f"✅ 已算完 {ball_str} × {len(show_attrs)} 属性，"
-                               f"有命中的 {_hit_cnt} 组，已送到 AI 推演的汇总看板。")
-                    st.info("切到左侧【🧠 AI推演】即可在看板里查看。")
-                else:
-                    st.warning(f"{ball_str} 的 {len(show_attrs)} 个属性都没有匹配结果"
-                               "（可以调小『最少对比行数』再试）。")
-                st.stop()
-
             attr_map_val = ATTR_MAP[selected_attr]
             res_lines = do_match(selected_attr, attr_map_val, ball_num, min_len, max_len)
 
@@ -950,7 +910,8 @@ def render_multi_analysis(df_data):
             use_container_width=True
         )
 
-        if st.button("📌 送到 AI 推演", use_container_width=True, key="multi_to_board"):
+        if st.button("📌 推送当前文本框内容到 AI 推演", use_container_width=True, key="multi_to_board",
+                     help="推送的就是上面这个文本框里的内容（你手动改过也算）"):
             _board_add("多维分析",
                        f"{selected_file_type} {selected_period} {selected_attr} {ball_str}",
                        clean_text)
