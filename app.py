@@ -1072,9 +1072,11 @@ def render_multi_analysis(df_data):
         if st.session_state.get("auto_stats"):
             import pandas as _pda2
             _st = st.session_state["auto_stats"]
-            st.dataframe(_pda2.DataFrame(
-                [{"属性": a, "原有触发行": b, "录入": c, "剔除": b - c} for a, b, c in _st]),
-                use_container_width=True, hide_index=True)
+            with st.expander("查看筛选统计（不影响结果）", expanded=False):
+                st.dataframe(_pda2.DataFrame(
+                    [{"属性": a, "原有触发行": b, "录入": c, "剔除": b - c}
+                     for a, b, c in _st]),
+                    use_container_width=True, hide_index=True)
             _sum_in = sum(c for _, _, c in _st)
             _sum_all = sum(b for _, b, _ in _st)
             st.caption(f"合计：原有 {_sum_all} 条，录入 {_sum_in} 条，剔除 {_sum_all - _sum_in} 条")
