@@ -1311,94 +1311,96 @@ def render_multi_analysis(df_data):
                 else:
                     st.warning("报告里没有解析到可校验的内容，先执行一次分析再校验。")
 
-        st.divider()
-        with st.expander("🔄 全量扫描（升序 + 按序，7 球 × 全部属性）", expanded=False):
-            st.caption("在后台把页面同一份匹配逻辑跑一遍，逐条核对报告与原始 CSV。"
-                       "**只读，不写入任何数据。** 全量扫描约需 5~15 分钟。")
-            _sc1, _sc2 = st.columns(2)
-            with _sc1:
-                _scan_files = st.multiselect("扫描哪些文件", ["升序全套", "按序全套"],
-                                             default=["升序全套", "按序全套"],
-                                             key="scan_files")
-            with _sc2:
-                _scan_balls = st.multiselect("扫描哪些球位",
-                                             [f"第{i}球" for i in range(1, 8)],
-                                             default=[f"第{i}球" for i in range(1, 8)],
-                                             key="scan_balls")
-
-            if st.button("开始全量扫描", type="primary", use_container_width=True,
-                         key="scan_go"):
-                if not _scan_files or not _scan_balls:
-                    st.warning("至少选一个文件和一个球位")
-                else:
-                    _bar = st.progress(0.0, text="准备中…")
-                    try:
-                        _runner, _fake = _scan_build_runner()
-                        _all_detail, _all_probs = [], []
-                        _tl = _tt = 0
-                        for _fk in _scan_files:
-                            _csv = "升序全套.csv" if _fk == "升序全套" else "按序全套.csv"
-                            _rows = load_excel_data(_csv, None)
-                            _d, _p, _nl, _nt = _scan_one_file(
-                                _fk, _rows, _scan_balls, show_attrs, _runner, _fake,
-                                progress_cb=lambda v, t_: _bar.progress(
-                                    min(1.0, v), text=f"扫描中… {t_}"))
-                            _all_detail += _d
-                            _all_probs += _p
-                            _tl += _nl
-                            _tt += _nt
-                        _bar.progress(1.0, text="扫描完成")
-                        st.session_state["scan_detail"] = _all_detail
-                        st.session_state["scan_probs"] = _all_probs
-                        st.session_state["scan_total"] = (_tl, _tt)
-                    except Exception as _e:
-                        st.error(f"扫描失败：{type(_e).__name__}: {_e}")
-
-            if st.session_state.get("scan_detail"):
-                import pandas as _pdsc
-                _det = st.session_state["scan_detail"]
-                _prb = st.session_state.get("scan_probs") or []
-                _tl, _tt = st.session_state.get("scan_total", (0, 0))
-                _dfa = _pdsc.DataFrame(
-                    [{"文件": a, "球位": b, "触发行": c, "通过": d,
-                      "基准行单元格": e,
-                      "状态": "全部通过" if (c == d and f == 0) else f"异常 {c - d + f} 处"}
-                     for a, b, c, d, e, f in _det])
-                st.dataframe(_dfa, use_container_width=True, hide_index=True)
-                if _prb:
-                    st.error(f"合计 {_tl} 条触发行 / {_tt} 个单元格，"
-                             f"发现 {len(_prb)} 处问题")
-                    st.dataframe(_pdsc.DataFrame(
-                        [{"文件": a, "球位": b, "属性": c, "位置": d, "问题": e}
-                         for a, b, c, d, e in _prb]),
-                        use_container_width=True, hide_index=True)
-                else:
-                    st.success(f"✅ 合计 {_tl} 条触发行 / {_tt} 个基准行单元格，"
-                               f"全部核对通过，未发现任何不匹配。")
-
-                _rep = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
-                        "=" * 60, ""]
-                for a, b, c, d, e, f in _det:
-                    _rep.append(f"{a} {b}: 触发行 {c} 条，通过 {d} 条，"
-                                f"基准行单元格 {e} 个，异常 {c - d + f} 处")
-                _rep += ["", "-" * 60,
-                         f"合计：触发行 {_tl} 条 / 基准行单元格 {_tt} 个 / "
-                         f"问题 {len(_prb)} 处", ""]
-                if _prb:
-                    _rep.append("问题明细：")
-                    for x in _prb:
-                        _rep.append(f"  {x[0]} {x[1]} {x[2]} {x[3]} → {x[4]}")
-                else:
-                    _rep.append("结论：全部核对通过，未发现任何一处不匹配。")
-                _rep_txt = "\n".join(_rep)
-                st.download_button("💾 保存扫描报告 (TXT)", _rep_txt.encode("utf-8-sig"),
-                                   file_name=f"多维扫描报告_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                                   mime="text/plain", use_container_width=True,
-                                   key="scan_dl")
-                with st.expander("查看报告全文", expanded=False):
-                    st.text(_rep_txt)
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
+
+    st.divider()
+    with st.expander("🔄 全量扫描（升序 + 按序，7 球 × 全部属性）", expanded=False):
+        st.caption("在后台把页面同一份匹配逻辑跑一遍，逐条核对报告与原始 CSV。"
+                   "**只读，不写入任何数据。** 全量（两文件×7球×29属性）约需 1 分钟。")
+        _sc1, _sc2 = st.columns(2)
+        with _sc1:
+            _scan_files = st.multiselect("扫描哪些文件", ["升序全套", "按序全套"],
+                                         default=["升序全套", "按序全套"],
+                                         key="scan_files")
+        with _sc2:
+            _scan_balls = st.multiselect("扫描哪些球位",
+                                         [f"第{i}球" for i in range(1, 8)],
+                                         default=[f"第{i}球" for i in range(1, 8)],
+                                         key="scan_balls")
+
+        if st.button("开始全量扫描", type="primary", use_container_width=True,
+                     key="scan_go"):
+            if not _scan_files or not _scan_balls:
+                st.warning("至少选一个文件和一个球位")
+            else:
+                _bar = st.progress(0.0, text="准备中…")
+                try:
+                    _runner, _fake = _scan_build_runner()
+                    _all_detail, _all_probs = [], []
+                    _tl = _tt = 0
+                    for _fk in _scan_files:
+                        _csv = "升序全套.csv" if _fk == "升序全套" else "按序全套.csv"
+                        _rows = load_excel_data(_csv, None)
+                        _d, _p, _nl, _nt = _scan_one_file(
+                            _fk, _rows, _scan_balls, show_attrs, _runner, _fake,
+                            progress_cb=lambda v, t_: _bar.progress(
+                                min(1.0, v), text=f"扫描中… {t_}"))
+                        _all_detail += _d
+                        _all_probs += _p
+                        _tl += _nl
+                        _tt += _nt
+                    _bar.progress(1.0, text="扫描完成")
+                    st.session_state["scan_detail"] = _all_detail
+                    st.session_state["scan_probs"] = _all_probs
+                    st.session_state["scan_total"] = (_tl, _tt)
+                except Exception as _e:
+                    st.error(f"扫描失败：{type(_e).__name__}: {_e}")
+
+        if st.session_state.get("scan_detail"):
+            import pandas as _pdsc
+            _det = st.session_state["scan_detail"]
+            _prb = st.session_state.get("scan_probs") or []
+            _tl, _tt = st.session_state.get("scan_total", (0, 0))
+            _dfa = _pdsc.DataFrame(
+                [{"文件": a, "球位": b, "触发行": c, "通过": d,
+                  "基准行单元格": e,
+                  "状态": "全部通过" if (c == d and f == 0) else f"异常 {c - d + f} 处"}
+                 for a, b, c, d, e, f in _det])
+            st.dataframe(_dfa, use_container_width=True, hide_index=True)
+            if _prb:
+                st.error(f"合计 {_tl} 条触发行 / {_tt} 个单元格，"
+                         f"发现 {len(_prb)} 处问题")
+                st.dataframe(_pdsc.DataFrame(
+                    [{"文件": a, "球位": b, "属性": c, "位置": d, "问题": e}
+                     for a, b, c, d, e in _prb]),
+                    use_container_width=True, hide_index=True)
+            else:
+                st.success(f"✅ 合计 {_tl} 条触发行 / {_tt} 个基准行单元格，"
+                           f"全部核对通过，未发现任何不匹配。")
+
+            _rep = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
+                    "=" * 60, ""]
+            for a, b, c, d, e, f in _det:
+                _rep.append(f"{a} {b}: 触发行 {c} 条，通过 {d} 条，"
+                            f"基准行单元格 {e} 个，异常 {c - d + f} 处")
+            _rep += ["", "-" * 60,
+                     f"合计：触发行 {_tl} 条 / 基准行单元格 {_tt} 个 / "
+                     f"问题 {len(_prb)} 处", ""]
+            if _prb:
+                _rep.append("问题明细：")
+                for x in _prb:
+                    _rep.append(f"  {x[0]} {x[1]} {x[2]} {x[3]} → {x[4]}")
+            else:
+                _rep.append("结论：全部核对通过，未发现任何一处不匹配。")
+            _rep_txt = "\n".join(_rep)
+            st.download_button("💾 保存扫描报告 (TXT)", _rep_txt.encode("utf-8-sig"),
+                               file_name=f"多维扫描报告_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                               mime="text/plain", use_container_width=True,
+                               key="scan_dl")
+            with st.expander("查看报告全文", expanded=False):
+                st.text(_rep_txt)
+
 
 
 #=========深度联动（多套合一核算）=======
