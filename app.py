@@ -2478,17 +2478,19 @@ def render_omission_page():
             _rows2 = rows
             _start2 = start_idx
             _added = 0
-            for _attr, _base in ATTR_BASE_COL.items():
+            for _attr in ATTR_BASE_COL.keys():
                 _dom = ATTR_DOMAIN.get(_attr, [])
                 if not _dom:
                     continue
-                _col = _base + (ball_no - 1) * 30 - 1
+                _col = _om_col_index(_attr, ball_no)
                 _res, _tot = _om_compute(_rows2, _col, _dom, _start2)
                 if _tot == 0:
                     continue
                 _take = min(len(_dom), int(st.session_state.get(f"om_n_{_attr}", min(5, len(_dom)))))
                 _suffix = "尾" if _attr == "尾数" else ""
-                _lines = [f"{v}{_suffix}：{n}次" for v, n in _res[:_take]]
+                # _res 是 {属性值: 遗漏期数} 的字典，按遗漏从多到少取前 _take 个
+                _sorted_res = sorted(_res.items(), key=lambda kv: -kv[1])[:_take]
+                _lines = [f"{v}{_suffix}：{n}次" for v, n in _sorted_res]
                 _title = f"{_OM_SEP}{sel_period}期{file_type}{ball_no}球{_attr}遗漏{_OM_SEP}"
                 _board_add("遗漏核算", f"{file_type} {ball_no}球 {_attr} {sel_period}",
                            _title + "\n" + "\n".join(_lines))
