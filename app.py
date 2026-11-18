@@ -1043,6 +1043,9 @@ def render_multi_analysis(df_data):
                         st.session_state.multi_result_text = _auto_merge(
                             _prev, _atext, ball_str)
                         st.session_state["auto_added"] = True
+                        _nb = _atext.count("==========") // 2
+                        _tb = st.session_state.multi_result_text.count("==========") // 2
+                        st.success(f"本次追加 {_nb} 段，当前文档共 {_tb} 段")
                     else:
                         st.warning("按死规则筛选后没有任何触发行达标，本次未追加内容。")
                 except Exception as _e:
