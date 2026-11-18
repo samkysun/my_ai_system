@@ -586,10 +586,18 @@ def _scan_one_file(file_key, rows, balls, attrs, runner, fake, progress_cb=None)
     except Exception:
         pass
 
+    # 数据指纹：证明这份报告扫的是哪一份数据
+    try:
+        import hashlib as _hl
+        _fp = _hl.sha256("\n".join(",".join(r) for r in rows).encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        _fp = "-"
+
     fake.ctrl["file"] = file_key
     fake.session_state["current_file"] = file_key
 
     detail, problems = [], []
+    detail_meta = {}
     n_lines = n_tpl = 0
     total_steps = max(1, len(balls) * len(attrs))
     step = 0
@@ -632,7 +640,8 @@ def _scan_one_file(file_key, rows, balls, attrs, runner, fake, progress_cb=None)
                 problems.append((file_key, ball, attr, "-",
                                  f"有 {n_decl - parsed} 条触发行未解析"))
         detail.append((file_key, ball, b_lines, b_ok, b_tpl, b_tplbad))
-    return detail, problems, n_lines, n_tpl
+    detail_meta[file_key] = {"rows": len(rows), "fp": _fp}
+    return detail, problems, n_lines, n_tpl, detail_meta
 
 
 def _verify_report(report, rows):
@@ -1339,10 +1348,13 @@ def render_multi_analysis(df_data):
                     _runner, _fake = _scan_build_runner()
                     _all_detail, _all_probs = [], []
                     _tl = _tt = 0
+                    _all_meta = {}
+                    import time as _tm
+                    _t_start = _tm.time()
                     for _fk in _scan_files:
                         _csv = "升序全套.csv" if _fk == "升序全套" else "按序全套.csv"
                         _rows = load_excel_data(_csv, None)
-                        _d, _p, _nl, _nt = _scan_one_file(
+                        _d, _p, _nl, _nt, _meta = _scan_one_file(
                             _fk, _rows, _scan_balls, show_attrs, _runner, _fake,
                             progress_cb=lambda v, t_: _bar.progress(
                                 min(1.0, v), text=f"扫描中… {t_}"))
@@ -1350,10 +1362,13 @@ def render_multi_analysis(df_data):
                         _all_probs += _p
                         _tl += _nl
                         _tt += _nt
+                        _all_meta.update(_meta)
                     _bar.progress(1.0, text="扫描完成")
                     st.session_state["scan_detail"] = _all_detail
                     st.session_state["scan_probs"] = _all_probs
                     st.session_state["scan_total"] = (_tl, _tt)
+                    st.session_state["scan_meta"] = _all_meta
+                    st.session_state["scan_cost"] = _tm.time() - _t_start
                 except Exception as _e:
                     st.error(f"扫描失败：{type(_e).__name__}: {_e}")
 
@@ -1379,8 +1394,21 @@ def render_multi_analysis(df_data):
                 st.success(f"✅ 合计 {_tl} 条触发行 / {_tt} 个基准行单元格，"
                            f"全部核对通过，未发现任何不匹配。")
 
+            _meta2 = st.session_state.get("scan_meta") or {}
+            _cost = st.session_state.get("scan_cost") or 0
             _rep = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
-                    "=" * 60, ""]
+                    "=" * 60,
+                    "扫描方式：只读。数据从 GitHub 下载到内存比对，未做任何写入。",
+                    f"扫描耗时：{_cost:.1f} 秒"]
+            for _fk2, _mv in _meta2.items():
+                _rep.append(f"数据源 {_fk2}：{_mv['rows']} 行，指纹 {_mv['fp']}")
+            _rep += ["",
+                     "校验规则（每条触发行都必须同时满足）：",
+                     "  1 基准行排列的每个单元格 = CSV 真实值",
+                     "  2 触发行窗口的值 = 模板前 N 项（相生/相克则必须真的成立）",
+                     "  3 匹配串 = 窗口真实单元格拼接（不得多字或少字）",
+                     "  4 上值/下值 = 真实的前一行/后一行（空值显示为「空」，越界为「无」）",
+                     "", "=" * 60, ""]
             for a, b, c, d, e, f in _det:
                 _rep.append(f"{a} {b}: 触发行 {c} 条，通过 {d} 条，"
                             f"基准行单元格 {e} 个，异常 {c - d + f} 处")
