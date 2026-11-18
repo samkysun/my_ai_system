@@ -1036,10 +1036,70 @@ def render_deep_linkage(df_data):
     if st.session_state.get("deep_linkage_html"):
         st.markdown("### 深度联动分析报告（回测命中高亮）")
         st.markdown(st.session_state.deep_linkage_html, unsafe_allow_html=True)
+
         with st.expander("📄 查看纯文本版报告", expanded=False):
             st.text_area("深度联动分析报告", value=st.session_state.get("deep_linkage_result", ""), height=300)
+
+        _dl_txt = st.session_state.get("deep_linkage_result", "")
+        _dl_frag = st.session_state.get("deep_linkage_html", "")
+
+        # 打印用：整套 HTML（保留高亮样式）
+        _dl_print_html = ('<html><head><meta charset="utf-8"><title>深度联动分析</title><style>'
+                          '@page { margin: 15mm; } body { font-family: Consolas, monospace; padding: 16px; }'
+                          '</style></head><body>' + _dl_frag + '</body></html>')
+
+        # 下载用：纯文本
+        _dl_txt_file = (f"深度联动_{datetime.now():%Y%m%d_%H%M%S}.txt")
+        _dl_html_file = (f"深度联动_{datetime.now():%Y%m%d_%H%M%S}.html")
+
+        _dl_print_and_save(_dl_print_html, _dl_txt, _dl_txt_file, _dl_html_file)
+
     elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
+
+
+def _dl_print_and_save(print_html_text, plain_text, txt_name, html_name):
+    """打印（隐藏 iframe，不弹窗）+ 导出 TXT / HTML"""
+    import base64 as _b64
+    import html as _html
+    import streamlit.components.v1 as _components
+
+    b64_print = _b64.b64encode(print_html_text.encode("utf-8")).decode("utf-8")
+
+    _components.html(
+        f"""
+        <div style="text-align:center;">
+            <button onclick="printReport()" style="width:100%;padding:12px;background-color:#0284c7;
+                color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;font-weight:bold;">
+                🖨️ 打印当前报告（含高亮）
+            </button>
+        </div>
+        <script>
+        function b64DecodeUnicode(str) {{
+            return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }}).join(''));
+        }}
+        function printReport() {{
+            var html = b64DecodeUnicode("{b64_print}");
+            var f = document.createElement('iframe');
+            f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+            document.body.appendChild(f);
+            var d = f.contentWindow.document;
+            d.open(); d.write(html); d.close();
+            setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
+        }}
+        </script>
+        """, height=90, scrolling=False)
+
+    _c1, _c2 = st.columns(2)
+    with _c1:
+        st.download_button("📥 导出报告 (TXT)", plain_text.encode("utf-8-sig"),
+                           file_name=txt_name, mime="text/plain", use_container_width=True)
+    with _c2:
+        st.download_button("💾 导出可打印 HTML", print_html_text.encode("utf-8"),
+                           file_name=html_name, mime="text/html", use_container_width=True,
+                           help="下载后用浏览器打开，Ctrl+P 打印，红底黄字高亮会保留")
 
 
 def render_ai(df_data):
