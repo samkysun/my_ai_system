@@ -531,7 +531,7 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
         pass
     # 自动核算要用更低的对比行数，否则 4~6 行的匹配根本算不出来
     fake.min_len = 4
-    fake.max_len = 12
+    fake.max_len = 17
     fake.ctrl["file"] = file_key
     fake.session_state["current_file"] = file_key
     fake.ctrl["ball"] = ball_str
@@ -554,6 +554,10 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
         if not report:
             stats.append((attr, 0, 0))
             continue
+        if not period:
+            _pm = re.search(r"-\s*([0-9]{5,8})\s*-", report)
+            if _pm:
+                period = _pm.group(1)
         rule = _auto_rule(attr, ball_no)
         kept, total = [], 0
         for ln in report.splitlines():
@@ -1003,7 +1007,7 @@ def render_multi_analysis(df_data):
 
     row2_col1, row2_col2, row2_col3, row2_col4 = st.columns([1, 1, 1, 1])
     with row2_col1: min_len = st.number_input("最少对比行数", min_value=3, max_value=20, value=7, step=1)
-    with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=12, step=1)
+    with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=17, step=1)
     with row2_col3:
         st.write(""); st.write("")
         run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
