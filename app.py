@@ -1127,25 +1127,9 @@ def render_deep_linkage(df_data):
 
         _dl_print_and_save(_dl_print_html, _dl_txt, _dl_txt_file, _dl_html_file)
 
-        if st.button("📌 送到 AI 推演（按球位分成 7 条）", use_container_width=True,
-                     key="dl_to_board",
-                     help="第1球一条、第2球一条……方便在 AI 推演页逐个球对照勾选"):
-            _dl_lines = _dl_txt.splitlines()
-            _dl_head = [l for l in _dl_lines
-                        if l.startswith(("=====", "【基准期数】", "【基准开出】",
-                                         "【联动组合数】", "【历史命中】", "【回测校对】"))]
-            _sent = 0
-            for _bi in range(1, 8):
-                _bl = next((l for l in _dl_lines if l.startswith(f"第{_bi}球:")), "")
-                if not _bl:
-                    continue
-                _body = "\n".join(_dl_head + ["", _bl])
-                _board_add("深度联动", f"{mode} {selected_period} 第{_bi}球", _body)
-                _sent += 1
-            if _sent:
-                st.success(f"已按球位送出 {_sent} 条到 AI 推演的汇总看板")
-            else:
-                st.warning("没解析到球位结果，请先执行一次联动分析")
+        if st.button("📌 送到 AI 推演", use_container_width=True, key="dl_to_board"):
+            _board_add("深度联动", f"{mode} {selected_period}", _dl_txt)
+            st.success("已送到 AI 推演的汇总看板")
 
     elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
