@@ -532,6 +532,7 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
     # 自动核算要用更低的对比行数，否则 4~6 行的匹配根本算不出来
     fake.min_len = 4
     fake.max_len = 17
+    fake.session_state["_allow_raw_btn"] = True   # 让虚拟界面能触发计算
     fake.ctrl["file"] = file_key
     fake.session_state["current_file"] = file_key
     fake.ctrl["ball"] = ball_str
@@ -1011,7 +1012,8 @@ def render_multi_analysis(df_data):
     with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=17, step=1)
     with row2_col3:
         st.write(""); st.write("")
-        run_btn = st.button("🚀 执行分析（原始·不筛选）", use_container_width=True, type="primary")
+        run_btn = st.button("🚀 执行分析（原始·不筛选）", use_container_width=True,
+                            type="primary")
     with row2_col4:
         st.write(""); st.write("")
         if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
