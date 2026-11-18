@@ -956,6 +956,8 @@ def render_multi_analysis(df_data):
     if "current_file" not in st.session_state: st.session_state.current_file = "升序全套"
     if "multi_results_dict" not in st.session_state: st.session_state.multi_results_dict = {}
     if "multi_result_text" not in st.session_state: st.session_state.multi_result_text = ""
+    if "text_single" not in st.session_state: st.session_state["text_single"] = ""
+    if "text_all" not in st.session_state: st.session_state["text_all"] = ""
     if "full_scan_results" not in st.session_state: st.session_state.full_scan_results = []
 
     # ==========================================
@@ -972,6 +974,8 @@ def render_multi_analysis(df_data):
     # ==========================================
     st.markdown("### 分析参数设置")
     analysis_mode = st.radio("分析模式：", ["单属性透视 (按球查属性)", "单球全属性透视 (按球查全部)"], horizontal=True)
+    _slot_name = "text_all" if "全属性" in analysis_mode else "text_single"
+    st.session_state.multi_result_text = st.session_state.get(_slot_name, "")
 
     row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
 
@@ -1057,6 +1061,8 @@ def render_multi_analysis(df_data):
         st.session_state.current_file = selected_file_type
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
+        st.session_state["text_single"] = ""
+        st.session_state["text_all"] = ""
         # 绝杀：此处绝对不能加 st.rerun()，否则会导致文件切换时无限死循环卡死
 
     # 切换球号 → 自动清空上一球的文档
@@ -1093,6 +1099,9 @@ def render_multi_analysis(df_data):
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
+                        _slot_auto = ("text_all" if "全属性" in analysis_mode
+                                      else "text_single")
+                        st.session_state[_slot_auto] = _atext
                         st.session_state.multi_result_text = _atext
                         st.session_state["auto_doc"] = _atext
                         st.session_state["auto_doc_ball"] = ball_str
@@ -1380,16 +1389,18 @@ def render_multi_analysis(df_data):
 
                 # =====防重复写入：检查生成的内容是否与历史内容或当前报告完全一致=====
                 if "全属性" in analysis_mode:
-                    # 如果是全属性模式，检查这个完整结果是否已经存在于列表中
+                    # 全属性：追加到自己的列表
                     if out_txt not in st.session_state.full_scan_results:
                         st.session_state.full_scan_results.append(out_txt)
-                        st.session_state.multi_result_text = "\n\n".join(st.session_state.full_scan_results)
+                        st.session_state["text_all"] = "\n\n".join(
+                            st.session_state.full_scan_results)
+                        st.session_state.multi_result_text = st.session_state["text_all"]
                     else:
                         st.toast("ℹ️ 计算结果与历史记录完全一致，已忽略重复写入。")
                 else:
-                    # 如果是单属性模式，检查是否与上一次完全一样
-                    if st.session_state.multi_result_text != out_txt:
-                        st.session_state.full_scan_results = [out_txt]
+                    # 单属性：只写自己那一份
+                    if st.session_state.get("text_single") != out_txt:
+                        st.session_state["text_single"] = out_txt
                         st.session_state.multi_result_text = out_txt
                     else:
                         st.toast("ℹ️ 计算结果未发生变化，已忽略写入。")
@@ -1439,10 +1450,12 @@ def render_multi_analysis(df_data):
     col_title, col_btn = st.columns([8, 2])
     with col_title: st.subheader("详细结果 (累积报告)")
     with col_btn:
-        if st.button("🗑️清空所有结果", use_container_width=True):
+        if st.button("🗑️清空当前模式结果", use_container_width=True):
             st.session_state.multi_results_dict = {}
             st.session_state.multi_result_text = ""
-            st.session_state.full_scan_results = []
+            st.session_state[_slot_name] = ""
+            if "全属性" in analysis_mode:
+                st.session_state.full_scan_results = []
             st.rerun()
 
     if st.session_state.multi_result_text != "":
@@ -1468,6 +1481,7 @@ def render_multi_analysis(df_data):
         with _b1:
             if st.button("💾 保存修改", use_container_width=True, key="multi_box_save"):
                 st.session_state.multi_result_text = _edited
+                st.session_state[_slot_name] = _edited
                 st.rerun()
         with _b2:
             st.download_button("📥 下载 TXT", _edited.encode("utf-8-sig"),
