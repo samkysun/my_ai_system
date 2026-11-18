@@ -515,7 +515,7 @@ def _auto_keep(line, rule):
     return n >= rule["normal"]
 
 
-def _auto_run(file_key, rows, ball_str, attrs, runner, fake):
+def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="升序"):
     """对当前球的所有属性跑一遍，按规则筛选。返回 (结果文本, 统计表, 原始行数)"""
     import pandas as _pda
     ball_no = int(str(ball_str).replace("第", "").replace("球", ""))
@@ -565,11 +565,10 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake):
         total_in += len(kept)
         stats.append((attr, total, len(kept)))
         if kept:
-            head = [l for l in report.splitlines() if l.startswith("==========")]
-            base = [l for l in report.splitlines() if l.startswith("【基准行排列】")]
-            blocks.append("\n".join(head + base + [""] + kept))
+            _title = (f"========={period}期{order}-{attr}{ball_no}球=======")
+            blocks.append(_title + "\n" + "\n".join(kept))
 
-    text = ("\n\n".join(blocks) if blocks else "")
+    text = ("\n".join(blocks) if blocks else "")
     return text, stats, total_in
 
 
@@ -1047,18 +1046,18 @@ def render_multi_analysis(df_data):
                     _ar, _af = _scan_build_runner()
                     _tf = "升序全套.csv" if selected_file_type == "升序全套" else "按序全套.csv"
                     _arows = load_excel_data(_tf, None)
-                    _atext, _astat, _ain = _auto_run(_tf.replace(".csv", ""), _arows,
-                                                     ball_str, show_attrs, _ar, _af)
+                    _atext, _astat, _ain = _auto_run(
+                        _tf.replace(".csv", ""), _arows, ball_str, show_attrs, _ar, _af,
+                        period=selected_period,
+                        order=("升序" if selected_file_type == "升序全套" else "按序"))
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
-                        _prev_doc = st.session_state.get("auto_doc") or ""
-                        st.session_state["auto_doc"] = _auto_merge(
-                            _prev_doc, _atext, ball_str)
+                        st.session_state["auto_doc"] = _atext
                         st.session_state["auto_doc_ball"] = ball_str
-                        _nb = _atext.count("==========") // 2
-                        _tb = st.session_state["auto_doc"].count("==========") // 2
-                        st.success(f"{ball_str} 本次录入 {_nb} 段，当前文档共 {_tb} 段")
+                        _nb = sum(1 for l in _atext.splitlines() if l.startswith("========="))
+                        _nl = sum(1 for l in _atext.splitlines() if l.startswith("触发行："))
+                        st.success(f"{ball_str}：{_nb} 个属性、{_nl} 条触发行已写入文档")
                     else:
                         st.warning(f"{ball_str} 按死规则筛选后没有任何触发行达标。")
                 except Exception as _e:
@@ -1067,7 +1066,8 @@ def render_multi_analysis(df_data):
         _doc_now = st.session_state.get("auto_doc") or ""
         if _doc_now:
             st.markdown(f"#### 📄 {st.session_state.get('auto_doc_ball', ball_str)} 的文档"
-                        f"（{_doc_now.count(chr(61) * 10) // 2} 段）")
+                        f"（{sum(1 for l in _doc_now.splitlines() if l.startswith(chr(61) * 9))} 个属性，"
+                        f"{sum(1 for l in _doc_now.splitlines() if l.startswith('触发行：'))} 条触发行）")
             _edit = st.text_area("文档内容（可编辑）", value=_doc_now, height=340,
                                  key="auto_doc_txt")
             _dc1, _dc2, _dc3 = st.columns(3)
