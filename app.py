@@ -388,6 +388,142 @@ def render_trend_chart(df_data):
         st.dataframe(matrix_special, use_container_width=True, height=600)
 
 
+# ==========================================
+# 报告校验（只读：把报告里的匹配拉回原始数据核对）
+# ==========================================
+_V_CHILD = {"金": "水", "水": "木", "木": "火", "火": "土", "土": "金"}
+_V_MOTHER = {v: k for k, v in _V_CHILD.items()}
+_V_KE = {"金": "木", "木": "土", "土": "水", "水": "火", "火": "金"}
+
+
+def _v_cell(rows, row1, col_letter):
+    """CSV 第 row1 行（1 基，含表头）col_letter 列的值"""
+    try:
+        from openpyxl.utils import column_index_from_string
+        idx = column_index_from_string(col_letter) - 1
+    except Exception:
+        return ""
+    if not (1 <= row1 <= len(rows)):
+        return ""
+    r = rows[row1 - 1]
+    return r[idx].strip() if idx < len(r) else ""
+
+
+def _v_strip(s):
+    import re as _re
+    return _re.sub(r"[肖号尾]$", "", str(s).strip())
+
+
+def _v_norm(s):
+    return _v_strip(str(s).split("(")[0].split("（")[0].strip())
+
+
+def _v_wx(s):
+    for w in "金木水火土":
+        if w in str(s):
+            return w
+    return ""
+
+
+def _v_rel(a, b, kind):
+    ca, cb = _v_wx(a), _v_wx(b)
+    if not ca or not cb:
+        return False
+    if kind == "相生":
+        return _V_CHILD.get(ca) == cb or _V_MOTHER.get(ca) == cb
+    return _V_KE.get(ca) == cb or _V_KE.get(cb) == ca
+
+
+def _verify_report(report, rows):
+    """返回 (每属性统计, 问题明细)"""
+    import re as _re
+
+    head_re = _re.compile(r"【基准行排列】\(\d+行\):\s*(.+)")
+    item_re = _re.compile(r"([A-Z]+)(\d+):([^,]+)")
+    title_re = _re.compile(r"={5,}\s*(.+?)\s*-\s*(.+?)\s*-\s*(.+?)\s*-\s*(第\d球)\s*={5,}")
+    line_re = _re.compile(
+        r"触发行：(\d)球\(([A-Z]+)\)\s*行(\d+)-(\d+)\((\d+)行\)"
+        r"[^\n]*?上:(.*?)\s*\(匹配:(.*?)\)\s*下:(.*?)(?:\s*\[|$)")
+
+    # 按块切分
+    blocks, cur = [], None
+    for ln in str(report).splitlines():
+        mt = title_re.search(ln)
+        if mt:
+            cur = {"attr": mt.group(3).strip(), "ball": mt.group(4).strip(),
+                   "template": [], "tpl_cells": [], "lines": []}
+            blocks.append(cur)
+            continue
+        if cur is None:
+            continue
+        mh = head_re.search(ln)
+        if mh:
+            _cells = item_re.findall(mh.group(1))
+            cur["tpl_cells"] = [(c, int(r), v.strip()) for c, r, v in _cells]
+            cur["template"] = [v for _, _, v in cur["tpl_cells"]]
+            continue
+        if "触发行：" in ln:
+            cur["lines"].append(ln)
+
+    stats, problems = [], []
+    for b in blocks:
+        attr, tmpl = b["attr"], b["template"]
+        kind = "相生" if "相生" in attr else ("相克" if "相克" in attr else "等于")
+        n_ok = 0
+        # 基准行排列：每个单元格都必须等于 CSV 真实值
+        n_tpl, tpl_bad = 0, 0
+        for _c, _r, _v in b.get("tpl_cells", []):
+            n_tpl += 1
+            _real = _v_cell(rows, _r, _c)
+            if _v_strip(_v) != _v_strip(_real):
+                tpl_bad += 1
+                problems.append((attr, f"{_c}{_r}", "基准行",
+                                 f"报告={_v} 实际={_real}"))
+        for ln in b["lines"]:
+            mm = line_re.search(ln)
+            if not mm:
+                problems.append((attr, "-", "无法解析", ln[:120]))
+                continue
+            ball, col = mm.group(1), mm.group(2)
+            a, bb = int(mm.group(3)), int(mm.group(4))
+            up, match, down = mm.group(6), mm.group(7), mm.group(8)
+            real = [_v_cell(rows, r, col) for r in range(a, bb + 1)]
+            err = None
+            tpl = tmpl[:len(real)]
+            if tpl:
+                if kind == "等于":
+                    if [_v_strip(v) for v in real] != [_v_strip(v) for v in tpl]:
+                        err = f"值不等：窗口={real} 模板={tpl}"
+                else:
+                    bad = [i for i in range(len(real)) if not _v_rel(tpl[i], real[i], kind)]
+                    if bad:
+                        i0 = bad[0]
+                        err = f"第{i0 + 1}项不满足{kind}：模板={tpl[i0]} 窗口={real[i0]}"
+            if err is None:
+                ms, pos = match.replace(" ", ""), 0
+                for v in real:
+                    k = ms.find(v, pos)
+                    if k < 0:
+                        err = f"匹配串里没有真实值 {v}"
+                        break
+                    pos = k + len(v)
+                if err is None and pos != len(ms):
+                    err = "匹配串多出内容"
+            if err is None:
+                ru = _v_cell(rows, a - 1, col) if a - 1 >= 1 else ""
+                rd = _v_cell(rows, bb + 1, col) if bb + 1 <= len(rows) else ""
+                if _v_norm(up) != _v_strip(ru):
+                    err = f"上值 {up} != 实际 {ru}"
+                elif _v_norm(down) != _v_strip(rd):
+                    err = f"下值 {down} != 实际 {rd}"
+            if err:
+                problems.append((attr, f"{ball}球({col})", f"行{a}-{bb}", err))
+            else:
+                n_ok += 1
+        stats.append((attr, b["ball"], len(b["lines"]), n_ok, n_tpl, tpl_bad))
+    return stats, problems
+
+
 def render_multi_analysis(df_data):
     from openpyxl.utils import get_column_letter, column_index_from_string
 
@@ -934,6 +1070,45 @@ def render_multi_analysis(df_data):
                           f"{selected_file_type} {selected_period} {ball_str}",
                           clean_text)
             st.success(f"已推送到看板：{ball_str}")
+
+        st.divider()
+        with st.expander("🔍 校验当前报告（逐行核对是否真的匹配）", expanded=False):
+            st.caption("把报告里的每条触发行拉回原始 CSV 逐条核对：值是否真的相等、"
+                       "生克是否真的成立、上下值是否真实、匹配串是否由真实数据拼接。"
+                       "**只读，不会修改任何数据。**")
+            if st.button("开始校验", use_container_width=True, key="multi_verify_btn"):
+                with st.spinner("正在逐行核对…"):
+                    try:
+                        _rows = load_excel_data(target_file, None)
+                        _stats, _probs = _verify_report(clean_text, _rows)
+                    except Exception as e:
+                        st.error(f"校验失败：{type(e).__name__}: {e}")
+                        _stats, _probs = [], []
+
+                if _stats:
+                    import pandas as _pdv
+                    _dfv = _pdv.DataFrame(
+                        [{"属性": a, "基准球": b, "触发行": n, "核对通过": k,
+                          "基准行单元格": n_t,
+                          "状态": "全部通过" if (n == k and t_b == 0)
+                                  else f"异常 {n - k + t_b} 处"}
+                         for a, b, n, k, n_t, t_b in _stats])
+                    st.dataframe(_dfv, use_container_width=True, hide_index=True)
+                    _tot = sum(x[2] for x in _stats)
+                    _ok = sum(x[3] for x in _stats)
+                    _tpl_tot = sum(x[4] for x in _stats)
+                    if _probs:
+                        st.error(f"共 {_tot} 条触发行，通过 {_ok} 条，"
+                                 f"发现 {len(_probs)} 处问题")
+                        st.dataframe(_pdv.DataFrame(
+                            [{"属性": a, "球位": b, "行号": c, "问题": d}
+                             for a, b, c, d in _probs]),
+                            use_container_width=True, hide_index=True)
+                    else:
+                        st.success(f"✅ 共 {_tot} 条触发行 + {_tpl_tot} 个基准行单元格，"
+                                   f"全部核对通过，未发现假匹配。")
+                else:
+                    st.warning("报告里没有解析到可校验的内容，先执行一次分析再校验。")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 
