@@ -1102,6 +1102,58 @@ def _dl_print_and_save(print_html_text, plain_text, txt_name, html_name):
                            help="下载后用浏览器打开，Ctrl+P 打印，红底黄字高亮会保留")
 
 
+def _ai_extract(answer):
+    """从 AI 回答里只取「保留」的号码。
+
+    原写法 re.findall(r'\b([0-4][0-9])\b', answer) 会把推导过程里
+    「01号：触犯杀1门，剔除」这些被剔除的号也全部抓出来，
+    导致号码球显示 48 个，与真实保留结果完全不符。
+
+    现在按优先级只看：
+      1) 【严格筛选结果】段
+      2) 【保留结果】/【筛选结果】段
+      3) 【后补筛选结果】段（区间内全被杀时的候补）
+      4) 兜底：全文，但只在前面都没匹配到时使用
+    """
+    import re as _re
+
+    if not answer:
+        return []
+    text = str(answer)
+
+    def _nums(seg):
+        out = []
+        for tok in _re.findall(r"(?<!\d)(\d{1,2})(?!\d)", seg or ""):
+            n = int(tok)
+            if 1 <= n <= 49:
+                out.append(n)
+        return out
+
+    def _section(*keys):
+        for key in keys:
+            m = _re.search(key + r"[】\]]?[\s\S]{0,3000}", text)
+            if not m:
+                continue
+            seg = m.group(0)
+            # 只取到下一个【标题】之前
+            seg = _re.split(r"【", seg)[0]
+            # 去掉标题本身
+            seg = seg.split(keys[0], 1)[-1]
+            got = _nums(seg)
+            if got:
+                return got
+        return []
+
+    got = _section("严格筛选结果")
+    if not got:
+        got = _section("保留结果", "筛选结果")
+    if not got:
+        got = _section("后补筛选结果", "候补")
+    if not got:
+        got = _nums(text)          # 兜底
+    return sorted(set(got))
+
+
 def render_ai(df_data):
     #=========AI页面标题===================
     st.title("🧠 AI 严谨推演系统")
@@ -1214,9 +1266,14 @@ def render_ai(df_data):
                                 st.session_state.ai_ball_result = []
                             else:
                                 st.success("✅ AI 推演成功！")
-                                import re
-                                nums = re.findall(r'\b([0-4][0-9])\b', answer)
-                                st.session_state.ai_ball_result = sorted(list(set(int(n) for n in nums if 1 <= int(n) <= 49)))
+                                _got = _ai_extract(answer)
+                                st.session_state.ai_ball_result = _got
+                                if len(_got) > 30:
+                                    st.warning(
+                                        f"提取到 {len(_got)} 个号码，偏多。"
+                                        "如果 AI 没有按【严格筛选结果】分节输出，"
+                                        "提取就会把推导过程里的号也算进去——"
+                                        "可以展开下面的完整推演结果核对。")
 
         with b2:
             if st.button("🗑️ 清理勾选", use_container_width=True):
