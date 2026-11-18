@@ -440,9 +440,9 @@ def _v_rel(a, b, kind):
 #   normal = 普通匹配的最小行数
 # ==========================================
 _AUTO_RULES = {
-    "生肖": {"near": 4, "self": 4, "normal": 5},
-    "尾数": {"near": 4, "self": 4, "normal": 5},
-    "数字合": {"near": 4, "self": 4, "normal": 5},
+    "生肖": {"near": 4, "self": 4, "normal": 4},
+    "尾数": {"near": 4, "self": 4, "normal": 4},
+    "数字合": {"near": 4, "self": 4, "normal": 4},
     "数字五行": {"near": 6, "self": 6, "normal": 7},
     "单双组合": {"near": 6, "self": 9, "normal": 9},
     "波单双": {"near": 5, "self": 6, "normal": 6},
