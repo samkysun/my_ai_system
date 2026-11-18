@@ -434,6 +434,207 @@ def _v_rel(a, b, kind):
     return _V_KE.get(ca) == cb or _V_KE.get(cb) == ca
 
 
+class _ScanST:
+    """假界面：让页面函数在后台跑，只取计算结果，不碰真实 UI"""
+
+    class _Ctx:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def __getattr__(self, n): return lambda *a, **k: None
+
+    def __init__(self):
+        outer = self
+
+        class _SS(dict):
+            def __getattr__(s, k):
+                try:
+                    return s[k]
+                except KeyError:
+                    return None
+
+            def __setattr__(s, k, v):
+                s[k] = v
+
+        self.session_state = _SS()
+        class _Sec:
+            @staticmethod
+            def get(k, d=None):
+                return d
+
+        self.secrets = _Sec()
+        self.ctrl = {"attr": None, "ball": "第1球", "file": "升序全套"}
+        self.errors = []
+
+    # 装饰器
+    def cache_data(self, *a, **k):
+        if a and callable(a[0]):
+            return a[0]
+        return lambda f: f
+
+    cache_resource = cache_data
+
+    # 控件
+    def button(self, label="", *a, **k):
+        # 只让「执行分析」返回 True，其余按钮当作没点
+        return "执行分析" in str(label)
+
+    def checkbox(self, *a, **k):
+        return False
+
+    def radio(self, label="", options=None, *a, **k):
+        o = list(options or [])
+        return o[0] if o else None
+
+    def selectbox(self, label="", options=None, *a, **k):
+        o = list(options or [])
+        lbl = str(label)
+        if "属性" in lbl:
+            return self.ctrl["attr"] if self.ctrl["attr"] in o else (o[0] if o else None)
+        if "球号" in lbl or "基准球" in lbl:
+            return self.ctrl["ball"] if self.ctrl["ball"] in o else (o[0] if o else None)
+        if "文件" in lbl:
+            return self.ctrl["file"]
+        return o[0] if o else None
+
+    def number_input(self, *a, **k):
+        return k.get("value", 7)
+
+    def multiselect(self, *a, **k):
+        return []
+
+    def text_area(self, *a, **k):
+        return str(k.get("value", ""))
+
+    def text_input(self, *a, **k):
+        return str(k.get("value", ""))
+
+    def columns(self, spec, *a, **k):
+        n = spec if isinstance(spec, int) else len(spec)
+        return [self._Ctx() for _ in range(n)]
+
+    def tabs(self, names, *a, **k):
+        return [self._Ctx() for _ in names]
+
+    def expander(self, *a, **k): return self._Ctx()
+    def form(self, *a, **k): return self._Ctx()
+    def spinner(self, *a, **k): return self._Ctx()
+    def container(self, *a, **k): return self._Ctx()
+    def progress(self, *a, **k): return self._Ctx()
+    def empty(self, *a, **k): return self._Ctx()
+    def chat_message(self, *a, **k): return self._Ctx()
+
+    def chat_input(self, *a, **k): return None
+
+    def error(self, msg, *a, **k):
+        self.errors.append(str(msg)[:200])
+
+    def stop(self, *a, **k):
+        raise _ScanStop()
+
+    def rerun(self, *a, **k):
+        raise _ScanStop()
+
+    def __getattr__(self, name):
+        return lambda *a, **k: None
+
+
+class _ScanStop(Exception):
+    pass
+
+
+def _scan_build_runner():
+    """把页面里的 render_multi_analysis 源码原样抽出来，配虚拟界面"""
+    import ast as _astmod
+    import textwrap
+    src = open(__file__, encoding="utf-8").read()
+    tree = _astmod.parse(src)
+    fn = None
+    for n in tree.body:
+        if isinstance(n, _astmod.FunctionDef) and n.name == "render_multi_analysis":
+            fn = n
+            break
+    if fn is None:
+        raise RuntimeError("找不到 render_multi_analysis")
+    code = textwrap.dedent(_astmod.get_source_segment(src, fn))
+    fake = _ScanST()
+    g = dict(globals())
+    g["st"] = fake
+    exec(compile(code, "<scan-multi>", "exec"), g)
+    return g["render_multi_analysis"], fake
+
+
+def _scan_periods(rows):
+    out = []
+    for r in rows:
+        if len(r) > 213:
+            out.append(f"{r[213]}{r[0]}{r[1]}{r[2]}")
+        else:
+            out.append("")
+    return out
+
+
+def _scan_one_file(file_key, rows, balls, attrs, runner, fake, progress_cb=None):
+    """扫描一个文件，返回 (明细, 问题, 触发行总数, 单元格总数)"""
+    import pandas as _pds
+    periods = _scan_periods(rows)
+    df = _pds.DataFrame({str(i): [""] * len(rows) for i in range(29)})
+    df[str(18)] = periods
+
+    # 让被抽出来的页面函数直接使用我们已经下载好的数据
+    try:
+        runner.__globals__["load_excel_data"] = lambda *a, **k: rows
+    except Exception:
+        pass
+
+    fake.ctrl["file"] = file_key
+    fake.session_state["current_file"] = file_key
+
+    detail, problems = [], []
+    n_lines = n_tpl = 0
+    total_steps = max(1, len(balls) * len(attrs))
+    step = 0
+    for ball in balls:
+        fake.ctrl["ball"] = ball
+        b_lines = b_ok = b_tpl = b_tplbad = 0
+        for attr in attrs:
+            step += 1
+            if progress_cb:
+                progress_cb(step / total_steps, f"{file_key} {ball} {attr}")
+            fake.ctrl["attr"] = attr
+            fake.session_state["multi_result_text"] = ""
+            fake.session_state["multi_results_dict"] = {}
+            fake.session_state["last_multi_signature"] = None
+            fake.errors.clear()
+            try:
+                runner(df)
+            except _ScanStop:
+                pass
+            except Exception as e:
+                problems.append((file_key, ball, attr, "-", f"计算异常 {type(e).__name__}: {e}"))
+                continue
+            report = fake.session_state.get("multi_result_text") or ""
+            if not report:
+                continue
+            import re as _res
+            n_decl = len(_res.findall(r"触发行：", report))
+            stats, probs = _verify_report(report, rows)
+            for a, b, n1, n2, nt, tb in stats:
+                b_lines += n1
+                b_ok += n2
+                b_tpl += nt
+                b_tplbad += tb
+            n_lines += sum(x[2] for x in stats)
+            n_tpl += sum(x[4] for x in stats)
+            for pr in probs:
+                problems.append((file_key, ball, attr, pr[2], pr[3]))
+            parsed = sum(x[2] for x in stats)
+            if parsed != n_decl:
+                problems.append((file_key, ball, attr, "-",
+                                 f"有 {n_decl - parsed} 条触发行未解析"))
+        detail.append((file_key, ball, b_lines, b_ok, b_tpl, b_tplbad))
+    return detail, problems, n_lines, n_tpl
+
+
 def _verify_report(report, rows):
     """返回 (每属性统计, 问题明细)"""
     import re as _re
@@ -1109,6 +1310,93 @@ def render_multi_analysis(df_data):
                                    f"全部核对通过，未发现假匹配。")
                 else:
                     st.warning("报告里没有解析到可校验的内容，先执行一次分析再校验。")
+
+        st.divider()
+        with st.expander("🔄 全量扫描（升序 + 按序，7 球 × 全部属性）", expanded=False):
+            st.caption("在后台把页面同一份匹配逻辑跑一遍，逐条核对报告与原始 CSV。"
+                       "**只读，不写入任何数据。** 全量扫描约需 5~15 分钟。")
+            _sc1, _sc2 = st.columns(2)
+            with _sc1:
+                _scan_files = st.multiselect("扫描哪些文件", ["升序全套", "按序全套"],
+                                             default=["升序全套", "按序全套"],
+                                             key="scan_files")
+            with _sc2:
+                _scan_balls = st.multiselect("扫描哪些球位",
+                                             [f"第{i}球" for i in range(1, 8)],
+                                             default=[f"第{i}球" for i in range(1, 8)],
+                                             key="scan_balls")
+
+            if st.button("开始全量扫描", type="primary", use_container_width=True,
+                         key="scan_go"):
+                if not _scan_files or not _scan_balls:
+                    st.warning("至少选一个文件和一个球位")
+                else:
+                    _bar = st.progress(0.0, text="准备中…")
+                    try:
+                        _runner, _fake = _scan_build_runner()
+                        _all_detail, _all_probs = [], []
+                        _tl = _tt = 0
+                        for _fk in _scan_files:
+                            _csv = "升序全套.csv" if _fk == "升序全套" else "按序全套.csv"
+                            _rows = load_excel_data(_csv, None)
+                            _d, _p, _nl, _nt = _scan_one_file(
+                                _fk, _rows, _scan_balls, show_attrs, _runner, _fake,
+                                progress_cb=lambda v, t_: _bar.progress(
+                                    min(1.0, v), text=f"扫描中… {t_}"))
+                            _all_detail += _d
+                            _all_probs += _p
+                            _tl += _nl
+                            _tt += _nt
+                        _bar.progress(1.0, text="扫描完成")
+                        st.session_state["scan_detail"] = _all_detail
+                        st.session_state["scan_probs"] = _all_probs
+                        st.session_state["scan_total"] = (_tl, _tt)
+                    except Exception as _e:
+                        st.error(f"扫描失败：{type(_e).__name__}: {_e}")
+
+            if st.session_state.get("scan_detail"):
+                import pandas as _pdsc
+                _det = st.session_state["scan_detail"]
+                _prb = st.session_state.get("scan_probs") or []
+                _tl, _tt = st.session_state.get("scan_total", (0, 0))
+                _dfa = _pdsc.DataFrame(
+                    [{"文件": a, "球位": b, "触发行": c, "通过": d,
+                      "基准行单元格": e,
+                      "状态": "全部通过" if (c == d and f == 0) else f"异常 {c - d + f} 处"}
+                     for a, b, c, d, e, f in _det])
+                st.dataframe(_dfa, use_container_width=True, hide_index=True)
+                if _prb:
+                    st.error(f"合计 {_tl} 条触发行 / {_tt} 个单元格，"
+                             f"发现 {len(_prb)} 处问题")
+                    st.dataframe(_pdsc.DataFrame(
+                        [{"文件": a, "球位": b, "属性": c, "位置": d, "问题": e}
+                         for a, b, c, d, e in _prb]),
+                        use_container_width=True, hide_index=True)
+                else:
+                    st.success(f"✅ 合计 {_tl} 条触发行 / {_tt} 个基准行单元格，"
+                               f"全部核对通过，未发现任何不匹配。")
+
+                _rep = [f"多维分析全量扫描报告  生成时间 {datetime.now():%Y-%m-%d %H:%M:%S}",
+                        "=" * 60, ""]
+                for a, b, c, d, e, f in _det:
+                    _rep.append(f"{a} {b}: 触发行 {c} 条，通过 {d} 条，"
+                                f"基准行单元格 {e} 个，异常 {c - d + f} 处")
+                _rep += ["", "-" * 60,
+                         f"合计：触发行 {_tl} 条 / 基准行单元格 {_tt} 个 / "
+                         f"问题 {len(_prb)} 处", ""]
+                if _prb:
+                    _rep.append("问题明细：")
+                    for x in _prb:
+                        _rep.append(f"  {x[0]} {x[1]} {x[2]} {x[3]} → {x[4]}")
+                else:
+                    _rep.append("结论：全部核对通过，未发现任何一处不匹配。")
+                _rep_txt = "\n".join(_rep)
+                st.download_button("💾 保存扫描报告 (TXT)", _rep_txt.encode("utf-8-sig"),
+                                   file_name=f"多维扫描报告_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                                   mime="text/plain", use_container_width=True,
+                                   key="scan_dl")
+                with st.expander("查看报告全文", expanded=False):
+                    st.text(_rep_txt)
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 
