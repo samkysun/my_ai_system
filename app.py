@@ -2156,7 +2156,6 @@ def render_omission_page():
         st.session_state["om_df"] = None
         st.session_state["om_meta"] = None
         st.session_state["om_ver"] = st.session_state.get("om_ver", 0) + 1
-        st.rerun()
 
     # ---------- 计算 ----------
     if run_btn:
@@ -2214,7 +2213,6 @@ def render_omission_page():
                 st.session_state["om_report"] = _om_upsert(
                     st.session_state.get("om_report", ""), title, lines)
                 st.session_state["om_ver"] = st.session_state.get("om_ver", 0) + 1
-                st.rerun()
 
     # ---------- ① 第一个框：原有展示（dataframe，内容不变） ----------
     df_records = st.session_state.get("om_df")
@@ -2255,11 +2253,11 @@ def render_omission_page():
             st.session_state["om_report"] = st.session_state.get(f"om_rep_{ver}", "")
             st.session_state["om_ver"] = ver + 1
             st.success("已保存")
-            st.rerun()
 
+    _ver_now = st.session_state.get("om_ver", 0)
     edited = st.text_area("累积报告（可直接编辑，改完点💾保存）",
                           value=st.session_state.get("om_report", ""), height=380,
-                          key=f"om_rep_{ver}", label_visibility="collapsed")
+                          key=f"om_rep_{_ver_now}", label_visibility="collapsed")
 
     st.caption(f"当前共 {len(_om_blocks(edited))} 段；**只有换属性才追加**，"
                f"换期数/球号/数据文件都在原属性那一块里覆盖更新。")
