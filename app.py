@@ -887,9 +887,9 @@ def render_deep_linkage(df_data):
             pick_num = st.number_input(f"预测前N名（门数可选 {_lo}~{_hi}）",
                                        min_value=_lo, max_value=_hi, value=min(3, _hi))
         elif "生肖" in mode:
-            pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5)
+            pick_num = st.number_input("预测前N名（1~9）", min_value=1, max_value=9, value=5)
         else:
-            pick_num = st.number_input("预测前N名", min_value=3, max_value=7, value=5)
+            pick_num = st.number_input("预测前N名（1~7）", min_value=1, max_value=7, value=5)
     with col4:
         st.write(""); st.write("")
         run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
