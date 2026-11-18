@@ -549,10 +549,26 @@ PROTOCOL = """严格只输出一个 JSON，不要输出 JSON 以外的任何文�
 7. 不要臆造本项目不存在的函数或字段；不确定就在 risk 里写明。"""
 
 SYSTEM = """你是这个 Streamlit 项目的资深开发者，负责出可验证的补丁。
-项目结构：app.py（单文件主程序）、ai_chat_page.py（AI 对话页）、auto_upgrade.py（本引擎）、
-system_tests.py（测试集）、fix_full_csv_attrs.py（CSV 重算脚本）。
+项目结构：app.py（主程序，含主控台/多维分析/深度联动/AI推演/遗漏核算/后台管理）、
+ai_chat_page.py（AI 对话页）、auto_upgrade.py（本引擎）、system_tests.py（测试集）、
+fix_full_csv_attrs.py（CSV 重算脚本）。
 数据在 GitHub 仓库，数据库用 Supabase，AI 用 DeepSeek。
 回答必须是一个 JSON，格式见用户消息中的协议说明。"""
+
+CHAT_SYSTEM = """你是这个 Streamlit 项目的资深开发助手。现在是【需求确认阶段】，还没有开始改代码。
+
+你的任务：和主人把需求聊清楚，避免他描述不完整、你理解偏差。
+
+每次回复必须包含：
+1. **我的理解**：用一两句话复述他想要的结果（具体到页面、按钮、行为）。
+2. **需要你确认**：列出 1~3 个关键问题（例如放在哪个位置、导出什么格式、边界情况怎么处理）。
+3. **我打算怎么改**：说明会动哪个函数、大概改几行、有没有副作用（会不会影响已有功能、要不要清缓存）。
+4. 如果信息已经够清楚，就明确说「需求已清楚，可以生成补丁了」，不要再硬凑问题。
+
+硬性要求：
+- 这一阶段**绝对不要输出代码、不要输出 JSON、不要输出补丁**。
+- 不要臆测他没说的事；不确定就问他。
+- 简体中文，简短，别写客套话，别复述他的原话。"""
 
 
 def _ask_deepseek(messages, key, model="deepseek-chat", timeout=240):
@@ -595,7 +611,8 @@ def _diff_text(old, new, path):
 
 def render_upgrade_tab():
     st.markdown("### 🛠️ 自动升级")
-    st.caption("描述需求 → AI 出补丁 → 四道校验 → 你确认 → 原子提交。任何一步失败都不会改动仓库。")
+    st.caption("先和 AI 聊清楚（可多轮）→ 你确认 → 生成补丁 → 四道校验 → 原子提交。"
+               "任何一步失败都不会改动仓库。")
 
     dkey, gtoken, grepo = _cfg()
     if not dkey or not gtoken or not grepo:
@@ -608,6 +625,7 @@ def render_upgrade_tab():
     st.session_state.setdefault("ug_tests", "")
     st.session_state.setdefault("ug_last", None)
     st.session_state.setdefault("ug_selftest", [])
+    st.session_state.setdefault("ug_chat", [])
 
     # ---------- 0. 连接自检 ----------
     sc1, sc2 = st.columns([1, 4])
@@ -622,24 +640,67 @@ def render_upgrade_tab():
         with st.expander("自检详细日志", expanded=True):
             st.code("\n".join(st.session_state.ug_selftest), language="text")
 
-    # ---------- 1. 需求 ----------
-    if st.session_state.pop("_ug_from_chat", False):
-        st.success("✅ 需求已从「💬 AI 助手」带入，可以直接生成，也可以先改。")
-    req = st.text_area("你要做什么？（越具体越好）", height=140, key="ug_req",
-                       placeholder="例：在多维分析页加一个「导出当前报告为 Excel」的按钮，"
-                                   "导出内容包括基准行排列和所有触发行。")
+    # ---------- 1. 参考文件与模型 ----------
     c1, c2 = st.columns([2, 1])
     with c1:
         targets = st.multiselect("让 AI 参考哪些文件", ["app.py", "ai_chat_page.py", "auto_upgrade.py"],
                                  default=["app.py"])
     with c2:
         model = st.selectbox("模型", ["deepseek-chat", "deepseek-reasoner"])
-    st.caption(f"⚠️ 每次生成会把目标文件全文发给 DeepSeek。app.py 约 9 万字符 ≈ 3 万 token，"
-               f"一次几分到几毛钱。")
+
+    # ---------- 2. 先聊清楚（多轮对话） ----------
+    st.markdown("#### ① 先说清楚（可多轮）")
+    st.caption("它先复述理解、指出歧义、给方案；你说「可以」之后再生成补丁。这样能避免一次做错。")
+
+    for _m in st.session_state.ug_chat:
+        with st.chat_message(_m["role"]):
+            st.markdown(_m["content"])
+
+    cc1, cc2 = st.columns([1, 4])
+    with cc1:
+        if st.button("🗑 清空对话", use_container_width=True):
+            st.session_state.ug_chat = []
+            st.rerun()
+    with cc2:
+        n_chat = len(st.session_state.ug_chat)
+        st.caption(f"当前 {n_chat} 条消息" + ("（可以直接生成补丁了）" if n_chat >= 2 else ""))
+
+    prompt = st.chat_input("说说你想改什么…（Enter 发送）")
+    if prompt:
+        st.session_state.ug_chat.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        _msgs = [{"role": "system", "content": CHAT_SYSTEM}] + \
+                st.session_state.ug_chat[-16:]
+        with st.chat_message("assistant"):
+            with st.spinner("思考中…"):
+                _out, _err = _ask_deepseek(_msgs, dkey, model)
+            if _err:
+                st.error(f"接口报错：{_err}")
+                _out = f"（接口出错：{_err}）"
+            else:
+                st.markdown(_out)
+        st.session_state.ug_chat.append({"role": "assistant", "content": _out})
+        st.rerun()
+
+    # ---------- 3. 生成补丁 ----------
+    st.markdown("#### ② 确认无误，生成补丁")
+    if st.session_state.pop("_ug_from_chat", False):
+        st.success("✅ 需求已从「💬 AI 助手」带入，可以直接生成，也可以先改。")
+
+    req = st.text_area("补充说明（可选；主要需求来自上面的对话）", height=90, key="ug_req",
+                       placeholder="例：另外记得把导出按钮放在表格下方、靠右。")
+
+    _conv = "\n".join(f"{'我' if m['role'] == 'user' else '助手'}：{m['content']}"
+                      for m in st.session_state.ug_chat)
+    full_req = (_conv + (("\n\n补充说明：" + req.strip()) if req.strip() else "")).strip()
+
+    st.caption(f"⚠️ 生成时会把目标文件全文 + 上面的对话一起发给 DeepSeek。"
+               f"app.py 约 13 万字符 ≈ 4 万 token，一次几分到几毛钱。")
 
     if st.button("🧠 生成方案与补丁", type="primary", use_container_width=True):
-        if not req.strip():
-            st.warning("先写需求")
+        if not full_req:
+            st.warning("先在上面聊两句，或在补充说明里写要求")
         elif not targets:
             st.warning("至少选一个参考文件")
         else:
@@ -660,7 +721,8 @@ def render_upgrade_tab():
                                   for p, t in src_map.items())
                 msgs = [
                     {"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": f"{PROTOCOL}\n\n{ctx}\n\n=== 我的需求 ===\n{req.strip()}"},
+                    {"role": "user", "content": f"{PROTOCOL}\n\n{ctx}\n\n"
+                                                f"=== 我和你的沟通记录 ===\n{full_req}"},
                 ]
                 with st.spinner(f"调用 {model} 生成补丁…"):
                     out, err = _ask_deepseek(msgs, dkey, model)
@@ -766,7 +828,7 @@ def render_upgrade_tab():
                         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         entry = {
                             "ts": datetime.now().isoformat(timespec="seconds"),
-                            "request": req.strip(),                  # 需求全文，不再截断
+                            "request": full_req,                  # 对话+补充说明全文
                             "summary": patch.get("summary", ""),
                             "risk": patch.get("risk", ""),
                             "verify": patch.get("verify", ""),
