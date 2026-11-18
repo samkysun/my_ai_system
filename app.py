@@ -185,6 +185,10 @@ def _board_render():
     board = st.session_state.get("ai_board") or []
     if not board:
         return
+    # 看板里的数据字体放大，方便核对
+    st.markdown(
+        '<style>div[data-testid="stTextArea"] textarea { font-size: 21px !important;'
+        ' line-height: 1.75 !important; }</style>', unsafe_allow_html=True)
     with st.expander(f"📋 汇总看板（{len(board)} 条结果，来自其它页面）", expanded=True):
         c1, c2 = st.columns([1, 3])
         with c1:
@@ -202,7 +206,7 @@ def _board_render():
 
         for i, e in enumerate(board):
             with st.expander(f"{e['source']} · {e['title']}　({e['ts']})", expanded=False):
-                st.text_area("内容", value=e["text"], height=200,
+                st.text_area("内容", value=e["text"], height=340,
                              key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
                 if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
                     st.session_state.ai_board.pop(i)
