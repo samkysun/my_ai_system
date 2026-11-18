@@ -2491,34 +2491,7 @@ def render_omission_page():
             _board_append("遗漏核算", f"{file_type} {sel_period} {ball_str}", edited)
             st.success(f"已推送到看板：{ball_str}")
 
-        if st.button(f"📌 把 {ball_str} 全部属性算完并合并推送到 AI 推演",
-                     use_container_width=True, key="om_all_to_board",
-                     help="把 28 个属性各算一遍，每个取前 N 名，合并成一条推送；"
-                          "换球号再点一次，就是另一个球的一条"):
-            _rows2 = rows
-            _start2 = start_idx
-            _added = 0
-            _all_blocks = []
-            for _attr in ATTR_BASE_COL.keys():
-                _dom = ATTR_DOMAIN.get(_attr, [])
-                if not _dom:
-                    continue
-                _col = _om_col_index(_attr, ball_no)
-                _res, _tot = _om_compute(_rows2, _col, _dom, _start2)
-                if _tot == 0:
-                    continue
-                _take = min(len(_dom), int(st.session_state.get(f"om_n_{_attr}", min(5, len(_dom)))))
-                _suffix = "尾" if _attr == "尾数" else ""
-                # _res 是 {属性值: 遗漏期数} 的字典，按遗漏从多到少取前 _take 个
-                _sorted_res = sorted(_res.items(), key=lambda kv: -kv[1])[:_take]
-                _lines = [f"{v}{_suffix}：{n}次" for v, n in _sorted_res]
-                _title = f"{_OM_SEP}{sel_period}期{file_type}{ball_no}球{_attr}遗漏{_OM_SEP}"
-                _all_blocks.append(_title + "\n" + "\n".join(_lines))
-                _added += 1
-            if _all_blocks:
-                _board_append("遗漏核算", f"{file_type} {sel_period} {ball_str}",
-                              "\n\n".join(_all_blocks))
-            st.success(f"已把 {_added} 个属性的遗漏结果合并推送到看板（{ball_str}）")
+
 
         _om_print(edited)
 
