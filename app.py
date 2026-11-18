@@ -442,7 +442,7 @@ def _v_rel(a, b, kind):
 _AUTO_RULES = {
     "生肖": {"near": 5, "self": 4, "normal": 5},
     "尾数": {"near": 5, "self": 4, "normal": 5},
-    "数字合": {"near": 4, "self": 4, "normal": 4},
+    "数字合": {"near": 5, "self": 4, "normal": 5},
     "数字五行": {"near": 6, "self": 6, "normal": 7},
     "单双组合": {"near": 6, "self": 9, "normal": 9},
     "波单双": {"near": 5, "self": 6, "normal": 6},
