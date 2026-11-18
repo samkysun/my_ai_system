@@ -546,7 +546,8 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
         fake.session_state["last_multi_signature"] = None
         fake.errors.clear()
         try:
-            runner(df)
+            with _NoComp():
+                runner(df)
         except _ScanStop:
             pass
         except Exception:
@@ -691,6 +692,30 @@ class _ScanStop(Exception):
     pass
 
 
+class _NoComp:
+    """内部重跑页面时，把 components.html 换成空操作，避免往真实界面插按钮"""
+
+    def __enter__(self):
+        import sys as _s
+        self._saved = {k: _s.modules.get(k) for k in
+                       ("streamlit.components", "streamlit.components.v1")}
+        import types as _t
+        _pkg = _t.ModuleType("streamlit.components")
+        _v1 = _t.ModuleType("streamlit.components.v1")
+        _v1.html = lambda *a, **k: None
+        _pkg.v1 = _v1
+        _s.modules["streamlit.components"] = _pkg
+        _s.modules["streamlit.components.v1"] = _v1
+        return self
+
+    def __exit__(self, *a):
+        import sys as _s
+        for k, v in self._saved.items():
+            if v is not None:
+                _s.modules[k] = v
+        return False
+
+
 def _auto_merge(prev, new, ball_str):
     """把新结果并入同一份文档：同球号的旧段被替换，其它段原样保留。"""
     def blocks(txt):
@@ -785,7 +810,8 @@ def _scan_one_file(file_key, rows, balls, attrs, runner, fake, progress_cb=None)
             fake.session_state["last_multi_signature"] = None
             fake.errors.clear()
             try:
-                runner(df)
+                with _NoComp():
+                    runner(df)
             except _ScanStop:
                 pass
             except Exception as e:
