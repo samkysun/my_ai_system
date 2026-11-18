@@ -1047,17 +1047,46 @@ def render_multi_analysis(df_data):
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
-                        _prev = st.session_state.get("multi_result_text") or ""
-                        st.session_state.multi_result_text = _auto_merge(
-                            _prev, _atext, ball_str)
-                        st.session_state["auto_added"] = True
+                        _docs = st.session_state.get("auto_docs") or {}
+                        _prev_doc = _docs.get(ball_str, "")
+                        _docs[ball_str] = _auto_merge(_prev_doc, _atext, ball_str)
+                        st.session_state["auto_docs"] = _docs
                         _nb = _atext.count("==========") // 2
-                        _tb = st.session_state.multi_result_text.count("==========") // 2
-                        st.success(f"本次追加 {_nb} 段，当前文档共 {_tb} 段")
+                        _tb = _docs[ball_str].count("==========") // 2
+                        st.success(f"{ball_str} 本次录入 {_nb} 段，"
+                                   f"该球文档共 {_tb} 段（已单独保存，不受其它球影响）")
                     else:
-                        st.warning("按死规则筛选后没有任何触发行达标，本次未追加内容。")
+                        st.warning(f"{ball_str} 按死规则筛选后没有任何触发行达标。")
                 except Exception as _e:
                     st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
+
+        _docs_show = st.session_state.get("auto_docs") or {}
+        if _docs_show:
+            _keys = list(_docs_show.keys())
+            _def = _keys.index(ball_str) if ball_str in _keys else 0
+            _pick = st.selectbox("查看哪个球的文档（每个球独立一份）", _keys,
+                                 index=_def, key="auto_doc_pick")
+            _body = _docs_show.get(_pick, "")
+            _edit = st.text_area(f"{_pick} 的文档（可编辑）", value=_body, height=300,
+                                 key=f"auto_doc_txt_{_pick}")
+            _dc1, _dc2, _dc3 = st.columns(3)
+            with _dc1:
+                if st.button("💾 保存这份", use_container_width=True, key="auto_doc_save"):
+                    _docs_show[_pick] = _edit
+                    st.session_state["auto_docs"] = _docs_show
+                    st.success(f"{_pick} 已保存")
+            with _dc2:
+                st.download_button("📥 下载这份 (TXT)", _edit.encode("utf-8-sig"),
+                                   file_name=f"{_pick}_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                                   mime="text/plain", use_container_width=True,
+                                   key="auto_doc_dl")
+            with _dc3:
+                if st.button("🗑 清空这份", use_container_width=True, key="auto_doc_clear"):
+                    _docs_show.pop(_pick, None)
+                    st.session_state["auto_docs"] = _docs_show
+                    st.rerun()
+            st.caption(f"当前共 {len(_docs_show)} 个球的文档："
+                       + "、".join(_keys))
 
         if st.session_state.get("auto_stats"):
             import pandas as _pda2
