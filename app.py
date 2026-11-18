@@ -164,6 +164,22 @@ def _board_add(source, title, text):
     st.session_state.ai_board.append(entry)
 
 
+def _board_append(source, title, text):
+    """按 source+title 追加：同一个球号多次推送合并成一条。"""
+    if "ai_board" not in st.session_state:
+        st.session_state.ai_board = []
+    text = (text or "").strip()
+    if not text:
+        return
+    for i, e in enumerate(st.session_state.ai_board):
+        if e.get("source") == source and e.get("title") == title:
+            if text not in e["text"]:
+                e["text"] = e["text"] + "\n\n" + text
+            e["ts"] = datetime.now().strftime("%m-%d %H:%M:%S")
+            return
+    _board_add(source, title, text)
+
+
 def _board_render():
     """在 AI推演 页面顶部渲染看板"""
     board = st.session_state.get("ai_board") or []
@@ -910,12 +926,14 @@ def render_multi_analysis(df_data):
             use_container_width=True
         )
 
-        if st.button("📌 推送当前文本框内容到 AI 推演", use_container_width=True, key="multi_to_board",
-                     help="推送的就是上面这个文本框里的内容（你手动改过也算）"):
-            _board_add("多维分析",
-                       f"{selected_file_type} {selected_period} {selected_attr} {ball_str}",
-                       clean_text)
-            st.success("已送到 AI 推演的汇总看板")
+        if st.button(f"📌 推送 {ball_str} 的内容到 AI 推演", use_container_width=True,
+                     key="multi_to_board",
+                     help="推送上面文本框里的内容（你手动改过也算）；"
+                          "同一个球号多次推送会合并成一条"):
+            _board_append("多维分析",
+                          f"{selected_file_type} {selected_period} {ball_str}",
+                          clean_text)
+            st.success(f"已推送到看板：{ball_str}")
     else:
         st.info("请选择文件、属性及球号后点击【执行当前球分析】。")
 
@@ -2468,16 +2486,19 @@ def render_omission_page():
 
     # 一个按钮，点一下直接弹打印预览（不再需要点两次）
     if edited.strip():
-        if st.button("📌 送到 AI 推演（当前累积报告）", use_container_width=True, key="om_to_board"):
-            _board_add("遗漏核算", f"{file_type} {ball_str} {attr_name} {sel_period}", edited)
-            st.success("已送到 AI 推演的汇总看板")
+        if st.button(f"📌 推送 {ball_str} 的累积报告到 AI 推演", use_container_width=True,
+                     key="om_to_board"):
+            _board_append("遗漏核算", f"{file_type} {sel_period} {ball_str}", edited)
+            st.success(f"已推送到看板：{ball_str}")
 
-        if st.button("📌 全部属性一次算完并送到 AI 推演", use_container_width=True,
-                     key="om_all_to_board",
-                     help="把 28 个属性各算一遍，每个取前 N 名，一起送过去"):
+        if st.button(f"📌 把 {ball_str} 全部属性算完并合并推送到 AI 推演",
+                     use_container_width=True, key="om_all_to_board",
+                     help="把 28 个属性各算一遍，每个取前 N 名，合并成一条推送；"
+                          "换球号再点一次，就是另一个球的一条"):
             _rows2 = rows
             _start2 = start_idx
             _added = 0
+            _all_blocks = []
             for _attr in ATTR_BASE_COL.keys():
                 _dom = ATTR_DOMAIN.get(_attr, [])
                 if not _dom:
@@ -2492,10 +2513,12 @@ def render_omission_page():
                 _sorted_res = sorted(_res.items(), key=lambda kv: -kv[1])[:_take]
                 _lines = [f"{v}{_suffix}：{n}次" for v, n in _sorted_res]
                 _title = f"{_OM_SEP}{sel_period}期{file_type}{ball_no}球{_attr}遗漏{_OM_SEP}"
-                _board_add("遗漏核算", f"{file_type} {ball_no}球 {_attr} {sel_period}",
-                           _title + "\n" + "\n".join(_lines))
+                _all_blocks.append(_title + "\n" + "\n".join(_lines))
                 _added += 1
-            st.success(f"已送出 {_added} 个属性的遗漏结果")
+            if _all_blocks:
+                _board_append("遗漏核算", f"{file_type} {sel_period} {ball_str}",
+                              "\n\n".join(_all_blocks))
+            st.success(f"已把 {_added} 个属性的遗漏结果合并推送到看板（{ball_str}）")
 
         _om_print(edited)
 
