@@ -1447,6 +1447,12 @@ def render_multi_analysis(df_data):
         raw_text = st.session_state.multi_result_text
         clean_text = raw_text.replace(chr(92) + 'n', chr(10)).replace(chr(92) + 'r', '')
 
+        # 结果框字体放大，方便看
+        st.markdown(
+            '<style>'
+            'div[data-testid="stTextArea"] textarea { font-size: 22px !important;'
+            ' line-height: 1.75 !important; }'
+            '</style>', unsafe_allow_html=True)
         _edited = st.text_area("详细结果（可直接编辑）", value=clean_text, height=440,
                                key="multi_one_box", label_visibility="collapsed")
 
