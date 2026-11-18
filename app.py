@@ -678,6 +678,28 @@ class _ScanStop(Exception):
     pass
 
 
+def _auto_merge(prev, new, ball_str):
+    """把新结果并入同一份文档：同球号的旧段被替换，其它段原样保留。"""
+    def blocks(txt):
+        out, cur = [], []
+        for ln in (txt or "").splitlines():
+            if ln.startswith("==========") and cur:
+                out.append("\n".join(cur).strip("\n"))
+                cur = [ln]
+            else:
+                cur.append(ln)
+        if cur:
+            out.append("\n".join(cur).strip("\n"))
+        return [b for b in out if b.strip()]
+
+    new_b = blocks(new)
+    if not (prev or "").strip():
+        return "\n\n".join(new_b)
+    marker = f"- {ball_str} =========="
+    keep = [b for b in blocks(prev) if marker not in b.splitlines()[0]]
+    return "\n\n".join(keep + new_b)
+
+
 def _scan_build_runner():
     """把页面里的 render_multi_analysis 源码原样抽出来，配虚拟界面"""
     import ast as _astmod
@@ -1017,10 +1039,12 @@ def render_multi_analysis(df_data):
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
-                        st.session_state.multi_result_text = _atext
-                        st.session_state["multi_results_dict"] = {}
+                        _prev = st.session_state.get("multi_result_text") or ""
+                        st.session_state.multi_result_text = _auto_merge(
+                            _prev, _atext, ball_str)
+                        st.session_state["auto_added"] = True
                     else:
-                        st.warning("按死规则筛选后没有任何触发行达标。")
+                        st.warning("按死规则筛选后没有任何触发行达标，本次未追加内容。")
                 except Exception as _e:
                     st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
 
