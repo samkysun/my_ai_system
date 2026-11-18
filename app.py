@@ -28,6 +28,9 @@ import io
 import base64
 import re
 import json
+import hashlib
+import inspect
+import sys
 from collections import Counter
 from datetime import datetime
 from openpyxl.utils import get_column_letter, column_index_from_string
@@ -297,6 +300,49 @@ def calculate_prize(df_data, target_period, predicted_nums):
     status = "有命中" if (len(match_nums) > 0 or z_matched) else "无中任何数字"
     result = {"下期期数": next_period, "预测组合": ",".join(predicted_nums), "中出平码1": match_nums[0] if len(match_nums)>0 else "", "中出平码2": match_nums[1] if len(match_nums)>1 else "", "中出平码3": match_nums[2] if len(match_nums)>2 else "", "中出平码4": match_nums[3] if len(match_nums)>3 else "", "中出平码5": match_nums[4] if len(match_nums)>4 else "", "中出平码6": match_nums[5] if len(match_nums)>5 else "", "中出特码": z_val if z_matched else "", "状态": status}
     return result, None
+
+# ==========================================
+# 4.5 代码锁定保护（AI推演 / 多维分析 / 深度联动）
+# ==========================================
+# 说明：这三个模块的源码指纹被登记在 LOCKED_FINGERPRINTS 中。
+# 运行时对函数源码做 SHA-256 校验，指纹不符则拒绝执行并提示。
+# 如需合法修改，请修改代码后从 stderr 读取新指纹并更新此字典。
+LOCKED_FINGERPRINTS = {
+    "render_multi_analysis": "",
+    "render_deep_linkage": "",
+    "render_ai": "",
+}
+
+
+def _fingerprint(func):
+    try:
+        src = inspect.getsource(func)
+    except Exception:
+        return ""
+    return hashlib.sha256(src.encode("utf-8")).hexdigest()
+
+
+def _guard_locked(func):
+    """包装受保护函数：指纹不符则拦截。指纹为空时仅打印到 stderr 便于登记。"""
+    name = func.__name__
+    expected = LOCKED_FINGERPRINTS.get(name, "")
+    actual = _fingerprint(func)
+    if not expected:
+        try:
+            sys.stderr.write(f"[LOCK] {name} fingerprint = {actual}\n")
+        except Exception:
+            pass
+        return func
+    if actual != expected:
+        def _blocked(*args, **kwargs):
+            st.error(
+                f"🔒 模块【{name}】已被锁定：检测到源码与登记指纹不一致，"
+                f"未经授权不得修改。请联系管理员确认后再更新 LOCKED_FINGERPRINTS。"
+            )
+            st.stop()
+        return _blocked
+    return func
+
 
 # ==========================================
 # 5. 各页面渲染
@@ -1982,9 +2028,9 @@ def main_app():
         st.divider()
 
     if page == "📊 主控台": render_console(df_data)
-    elif page == "📐 多维分析": render_multi_analysis(df_data)
-    elif page == "🔗 深度联动": render_deep_linkage(df_data)
-    elif page == "🧠 AI推演": render_ai(df_data)
+    elif page == "📐 多维分析": _guard_locked(render_multi_analysis)(df_data)
+    elif page == "🔗 深度联动": _guard_locked(render_deep_linkage)(df_data)
+    elif page == "🧠 AI推演": _guard_locked(render_ai)(df_data)
     elif page == "📉 遗漏核算":
         if render_omission_page:
             render_omission_page()
