@@ -692,15 +692,15 @@ class _ScanStop(Exception):
     pass
 
 
-_INNER_RUN = False      # True = 正在内部重跑页面，界面组件一律不渲染
+# 用可变容器：内部重跑时被抽取的函数拿到的是同一个 dict，开关才真正生效
+_INNER = {"run": 0}
 
 
 class _NoComp:
     """内部重跑页面时，把 components.html 换成空操作，避免往真实界面插按钮"""
 
     def __enter__(self):
-        global _INNER_RUN
-        _INNER_RUN = True
+        _INNER["run"] += 1
         import sys as _s
         self._saved = {k: _s.modules.get(k) for k in
                        ("streamlit.components", "streamlit.components.v1")}
@@ -714,8 +714,7 @@ class _NoComp:
         return self
 
     def __exit__(self, *a):
-        global _INNER_RUN
-        _INNER_RUN = False
+        _INNER["run"] = max(0, _INNER["run"] - 1)
         import sys as _s
         for k, v in self._saved.items():
             if v is not None:
@@ -1488,7 +1487,7 @@ def render_multi_analysis(df_data):
                    "</style></head><body><pre>"
                    + _hm.escape(_edited) + "</pre></body></html>")
             _b64p = _b64m.b64encode(_ph.encode("utf-8")).decode("utf-8")
-            if not _INNER_RUN:
+            if not _INNER.get("run"):
                 _comp.html(f"""
             <div style="text-align:center">
               <button onclick="pr()" style="width:100%;padding:11px;background-color:#0284c7;
