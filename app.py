@@ -869,130 +869,67 @@ def render_multi_analysis(df_data):
 
 #=========深度联动（多套合一核算）=======
 def render_deep_linkage(df_data):
-    # 🌟 页面大标题
     st.title("🔗 深度联动分析系统")
-
-    # 🌟 间隔区说明
-    st.info("""
-    **💡 功能说明：** 
-    本系统通过提取基准期开奖号码的属性组合（每3个一组），在全历史数据中寻找相同组合，并统计命中后**下一期各球位的属性频次**。
-    系统会自动将出现次数最多的排在前列，剩余次数较少的作为杀码参考。
-    """)
-
+    st.info("💡 功能说明：提取基准期开奖号码的属性组合，在全历史数据中寻找相同组合，并统计命中后下一期各球位的属性频次。")
     st.divider()
-
-    # ==========================
-    # 1. 界面参数设置
-    # ==========================
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数", "升序数字", "按序数字"])
+    with col1: mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数", "升序数字", "按序数字"])
     with col2:
         if df_data is not None and not isinstance(df_data, str):
             unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
             try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
             except: unique_periods.sort(reverse=True)
-        else:
-            unique_periods = ["暂无数据"]
+        else: unique_periods = ["暂无数据"]
         selected_period = st.selectbox("基准期数", unique_periods)
     with col3:
-        if "生肖" in mode:
-            pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5)
-        else:
-            pick_num = st.number_input("预测前N名", min_value=3, max_value=7, value=5)
+        pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5) if "生肖" in mode else st.number_input("预测前N名", min_value=3, max_value=7, value=5)
     with col4:
-        st.write("")
-        st.write("")
+        st.write(""); st.write("")
         run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
 
-    if "升序" in mode:
-        target_file = "升序全套.csv"
-    else:
-        target_file = "按序全套.csv"
-
-    # 🔥 核心修复：把 sheet_name = None 移出来，不管升序按序都有这个变量
+    if "升序" in mode: target_file = "升序全套.csv"
+    else: target_file = "按序全套.csv"
     sheet_name = None
-
     st.info(f"💡当前读取文件：【{target_file}】 (CSV 极速模式)")
 
-    # ==========================
-    # 2. 执行分析逻辑
-    # ==========================
     if run_btn:
-        with st.spinner(f"正在从云端读取 {target_file} 并进行按球位的深度频次统计..."):
-            import requests
-            import io
-            import itertools
-            from openpyxl.utils import get_column_letter, column_index_from_string
-
+        with st.spinner(f"正在读取并统计..."):
+            import csv
             try:
-                # 直接调用你的读取函数
                 all_rows = load_excel_data(target_file, sheet_name)
-                if not all_rows:
-                    st.error(f"读取 {target_file} 失败！")
-                    st.stop()
-
+                if not all_rows: st.error(f"读取失败！"); st.stop()
                 grouped_data = {}
-
                 def clean_cell(c):
                     if c is None: return ""
                     try: return str(int(float(c)))
                     except: return str(c).strip()
 
-                # 根据你的要求，定义精准的字母列
-                if "生肖" in mode:
-                    col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
-                elif "尾数" in mode:
-                    col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
-                else:
-                    col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
+                if "生肖" in mode: col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
+                elif "尾数" in mode: col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
+                else: col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
 
-                # 遍历每一行（跳过前两行表头，CSV 从索引 2 开始）
                 for r_idx in range(2, len(all_rows)):
                     row = all_rows[r_idx]
-
-                    def get_val(c_idx):
-                        return clean_cell(row[c_idx]) if c_idx < len(row) else ""
-
-                    p1 = get_val(0) # A列
-                    p2 = get_val(1) # B列
-                    p3 = get_val(2) # C列
-                    year_val = get_val(213) # HF列
-
+                    def get_val(c_idx): return clean_cell(row[c_idx]) if c_idx < len(row) else ""
+                    p1, p2, p3 = get_val(0), get_val(1), get_val(2)
+                    year_val = get_val(213) or "2026"
                     if not p1 and not p2 and not p3: continue
-                    if not year_val: year_val = "2026"
-
                     period_str = f"{year_val}{p1}{p2}{p3}"
-
-                    if period_str in grouped_data:
-                        continue
-
+                    if period_str in grouped_data: continue
                     ball_attrs = []
                     for ball_i in range(7):
                         col_letter = col_names[ball_i]
-                        col_idx = column_index_from_string(col_letter) # 1 开始的列号
-
+                        col_idx = column_index_from_string(col_letter)
                         if "数字" in mode:
-                            tens = get_val(col_idx - 1)
-                            units = get_val(col_idx)
-                            if not tens: tens = "0"
-                            if not units: units = "0"
-                            val = f"{tens}{units}"
-                        else:
-                            val = get_val(col_idx - 1)
-
+                            tens, units = get_val(col_idx - 1), get_val(col_idx)
+                            val = f"{tens or '0'}{units or '0'}"
+                        else: val = get_val(col_idx - 1)
                         ball_attrs.append(val)
-
                     grouped_data[period_str] = ball_attrs
 
                 sorted_periods = sorted(list(grouped_data.keys()))
-
-                if selected_period not in sorted_periods:
-                    st.error(f"在历史数据中找不到基准期数 {selected_period}！")
-                    st.stop()
-
+                if selected_period not in sorted_periods: st.error(f"找不到基准期数 {selected_period}！"); st.stop()
                 target_idx = sorted_periods.index(selected_period)
                 base_attrs = grouped_data[selected_period]
                 target_combos = list(itertools.combinations(base_attrs, 3))
@@ -1003,80 +940,86 @@ def render_deep_linkage(df_data):
 
                 freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
                 hit_count = 0
-
                 for i in range(target_idx):
                     hist_attrs = grouped_data[sorted_periods[i]]
                     is_hit = any(all(x in hist_attrs for x in combo) for combo in target_combos)
-
                     if is_hit and i + 1 < target_idx:
                         next_attrs = grouped_data[sorted_periods[i+1]]
                         hit_count += 1
                         for ball_i in range(7):
-                            attr = next_attrs[ball_i]
-                            if attr in freq_dict[ball_i]:
-                                freq_dict[ball_i][attr] += 1
+                            if next_attrs[ball_i] in freq_dict[ball_i]: freq_dict[ball_i][next_attrs[ball_i]] += 1
 
-                report_lines = []
-                report_lines.append(f"========== {mode} 3码联动分析 ==========")
-                report_lines.append(f"【基准期数】: {selected_period}")
-                report_lines.append(f"【基准开出】: {', '.join(base_attrs)}")
-                report_lines.append(f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合")
-                report_lines.append(f"【历史命中】: 共找到 {hit_count} 期包含这些组合\n")
-
+                report_lines = [f"========== {mode} 3码联动分析 ==========", f"【基准期数】: {selected_period}", f"【基准开出】: {', '.join(base_attrs)}", f"【联动组合数】: 共生成 {len(target_combos)} 个三码组合", f"【历史命中】: 共找到 {hit_count} 期包含这些组合\n"]
                 ball_names = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+
+                # 回测：取基准期的下一期真实开出值，用于高亮命中
+                next_attrs = None
+                if target_idx + 1 < len(sorted_periods):
+                    next_attrs = grouped_data[sorted_periods[target_idx + 1]]
 
                 for ball_i in range(7):
                     sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
-                    top_N = sorted_freq[:pick_num]
-                    kills = sorted_freq[pick_num:]
-
-                    top_names = [item[0] for item in top_N]
-                    kill_names = [item[0] for item in kills]
-
+                    top_names = [item[0] for item in sorted_freq[:pick_num]]
+                    kill_names = [item[0] for item in sorted_freq[pick_num:]]
                     line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
-                    if kill_names:
+                    if "数字" not in mode and kill_names:
                         line += f"  | 杀({','.join(kill_names)})"
                     report_lines.append(line)
-
                 report_lines.append("\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
-
                 st.session_state.deep_linkage_result = "\n".join(report_lines)
 
-            except Exception as e:
-                st.error(f"分析异常: {e}")
+                # 生成带高亮的 HTML 报告
+                import html as _html
+                hl_style = "background-color:#fef08a;color:#dc2626;font-weight:bold;padding:1px 4px;border-radius:4px;"
+                html_parts = []
+                html_parts.append(f"<div style='font-family:Consolas,monospace;font-size:16px;line-height:2.0;'>")
+                html_parts.append(f"<div style='font-weight:bold;font-size:18px;margin-bottom:8px;'>{_html.escape(mode)} 3码联动分析</div>")
+                html_parts.append(f"<div>【基准期数】: {_html.escape(str(selected_period))}</div>")
+                html_parts.append(f"<div>【基准开出】: {_html.escape(', '.join(base_attrs))}</div>")
+                html_parts.append(f"<div>【联动组合数】: 共生成 {len(target_combos)} 个三码组合</div>")
+                html_parts.append(f"<div>【历史命中】: 共找到 {hit_count} 期包含这些组合</div>")
+                if next_attrs is not None:
+                    html_parts.append(f"<div style='color:#64748b;'>【回测校对】: 下一期 {_html.escape(str(sorted_periods[target_idx + 1]))} 开出 {_html.escape(', '.join(next_attrs))}</div>")
+                else:
+                    html_parts.append("<div style='color:#64748b;'>【回测校对】: 基准期之后暂无开奖数据，不做高亮</div>")
+                html_parts.append("<hr style='margin:10px 0;'>")
 
-    # ==========================
-    # 4. 结果显示与打印
-    # ==========================
-    if "deep_linkage_result" in st.session_state and st.session_state.deep_linkage_result != "":
-        clean_text = st.session_state.deep_linkage_result
-        st.text_area("联动分析报告:", value=clean_text, height=400)
+                for ball_i in range(7):
+                    sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
+                    top_names = [item[0] for item in sorted_freq[:pick_num]]
+                    kill_names = [item[0] for item in sorted_freq[pick_num:]]
+                    actual = next_attrs[ball_i] if next_attrs is not None else None
+                    hit = actual is not None and actual in top_names
 
-        import html
-        import base64
-        import streamlit.components.v1 as components
+                    chips = []
+                    for name in top_names:
+                        safe = _html.escape(str(name))
+                        if hit and name == actual:
+                            chips.append(f"<span style='{hl_style}'>{safe} ✔</span>")
+                        else:
+                            chips.append(f"<span>{safe}</span>")
+                    line_html = f"<div style='margin:4px 0;'><b>{ball_names[ball_i]}</b>: " + ", ".join(chips)
+                    if "数字" not in mode and kill_names:
+                        line_html += f"  <span style='color:#94a3b8;'>| 杀({_html.escape(','.join(str(x) for x in kill_names))})</span>"
+                    if hit:
+                        line_html += f"  <span style='color:#16a34a;font-weight:bold;'>[命中 {_html.escape(str(actual))}]</span>"
+                    elif actual is not None:
+                        line_html += f"  <span style='color:#94a3b8;'>[实开 {_html.escape(str(actual))}]</span>"
+                    line_html += "</div>"
+                    html_parts.append(line_html)
 
-        # 🔥 修复了原本被转义的 \n 换行符
-        escaped_text = html.escape(clean_text).replace("\n", "<br>")
-        display_html = f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">{escaped_text}</div>'
-        print_html = f'<html><head><meta charset="utf-8"><style>body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; }} pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; }}</style></head><body><pre>{html.escape(clean_text)}</pre></body></html>'
+                html_parts.append("<div style='color:#64748b;margin-top:10px;'>(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况；红底黄字为回测命中项)</div>")
+                html_parts.append("</div>")
+                st.session_state.deep_linkage_html = "".join(html_parts)
+            except Exception as e: st.error(f"分析异常: {e}")
 
-        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
-        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-
-        components.html(
-            f"""
-            <div id="report-container"></div>
-            <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">🖨️ 打印当前报告</button>
-            </div>
-            <script>
-            function b64DecodeUnicode(str) {{ return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{ return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }}).join('')); }}
-            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-            function printReport() {{ var win = window.open(""); win.document.write(b64DecodeUnicode("{b64_print}")); win.document.close(); win.focus(); setTimeout(function() {{ win.print(); }}, 500); }}
-            </script>
-            """, height=620, scrolling=False
-        )
+    if st.session_state.get("deep_linkage_html"):
+        st.markdown("### 深度联动分析报告（回测命中高亮）")
+        st.markdown(st.session_state.deep_linkage_html, unsafe_allow_html=True)
+        with st.expander("📄 查看纯文本版报告", expanded=False):
+            st.text_area("深度联动分析报告", value=st.session_state.get("deep_linkage_result", ""), height=300)
+    elif st.session_state.get("deep_linkage_result"):
+        st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
 
 
 def render_ai(df_data):
