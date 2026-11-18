@@ -872,7 +872,8 @@ def render_deep_linkage(df_data):
     st.divider()
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
-    with col1: mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数", "升序数字", "按序数字"])
+    with col1: mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数",
+                                        "升序数字", "按序数字", "升序门数", "按序门数"])
     with col2:
         if df_data is not None and not isinstance(df_data, str):
             unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
@@ -881,7 +882,14 @@ def render_deep_linkage(df_data):
         else: unique_periods = ["暂无数据"]
         selected_period = st.selectbox("基准期数", unique_periods)
     with col3:
-        pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5) if "生肖" in mode else st.number_input("预测前N名", min_value=3, max_value=7, value=5)
+        if "门数" in mode:
+            _lo, _hi = (1, 3) if "升序" in mode else (1, 5)
+            pick_num = st.number_input(f"预测前N名（门数可选 {_lo}~{_hi}）",
+                                       min_value=_lo, max_value=_hi, value=min(3, _hi))
+        elif "生肖" in mode:
+            pick_num = st.number_input("预测前N名", min_value=4, max_value=9, value=5)
+        else:
+            pick_num = st.number_input("预测前N名", min_value=3, max_value=7, value=5)
     with col4:
         st.write(""); st.write("")
         run_btn = st.button("🚀执行联动分析", use_container_width=True, type="primary")
@@ -905,6 +913,7 @@ def render_deep_linkage(df_data):
 
                 if "生肖" in mode: col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
                 elif "尾数" in mode: col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
+                elif "门数" in mode: col_names = ['J', 'AN', 'BR', 'CV', 'DZ', 'FD', 'GH']
                 else: col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
 
                 for r_idx in range(2, len(all_rows)):
@@ -934,6 +943,7 @@ def render_deep_linkage(df_data):
 
                 if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
                 elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
+                elif "门数" in mode: all_possible = [f"{i}门" for i in range(1, 6)]
                 else: all_possible = [f"{i:02d}" for i in range(1, 50)]
 
                 freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
@@ -955,13 +965,25 @@ def render_deep_linkage(df_data):
                 if target_idx + 1 < len(sorted_periods):
                     next_attrs = grouped_data[sorted_periods[target_idx + 1]]
 
+                # 回测校对行：把下一期真实开出写在最前面
+                if next_attrs is not None:
+                    report_lines.append(
+                        f"【回测校对】: 下一期 {sorted_periods[target_idx + 1]} 开出 "
+                        f"{', '.join(str(x) for x in next_attrs)}")
+
                 for ball_i in range(7):
                     sorted_freq = sorted(freq_dict[ball_i].items(), key=lambda x: (-x[1], str(x[0])))
                     top_names = [item[0] for item in sorted_freq[:pick_num]]
                     kill_names = [item[0] for item in sorted_freq[pick_num:]]
-                    line = f"{ball_names[ball_i]}: {', '.join(top_names)}"
+                    _actual = next_attrs[ball_i] if next_attrs is not None else None
+                    _shown = [f"{n} ✔" if (n == _actual and n in top_names) else n
+                              for n in top_names]
+                    line = f"{ball_names[ball_i]}: {', '.join(str(x) for x in _shown)}"
                     if "数字" not in mode and kill_names:
-                        line += f"  | 杀({','.join(kill_names)})"
+                        line += f"  | 杀({','.join(str(x) for x in kill_names)})"
+                    if _actual is not None:
+                        line += (f"  [命中 {_actual}]" if _actual in top_names
+                                 else f"  [实开 {_actual}]")
                     report_lines.append(line)
                 report_lines.append("\n(注：各球位数据完全独立计算，历史频次基于三码组合命中后的下一期真实开出情况)")
                 st.session_state.deep_linkage_result = "\n".join(report_lines)
@@ -2392,7 +2414,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏核算"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -2402,7 +2424,7 @@ def main_app():
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🧠 AI推演": render_ai(df_data)
-    elif page == "📉 遗漏核算":
+    elif page == "📉 遗漏统计":
         if render_omission_page:
             render_omission_page()
         else:
