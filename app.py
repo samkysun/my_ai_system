@@ -529,6 +529,9 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake):
         runner.__globals__["load_excel_data"] = lambda *a, **k: rows
     except Exception:
         pass
+    # 自动核算要用更低的对比行数，否则 4~6 行的匹配根本算不出来
+    fake.min_len = 4
+    fake.max_len = 12
     fake.ctrl["file"] = file_key
     fake.session_state["current_file"] = file_key
     fake.ctrl["ball"] = ball_str
@@ -632,7 +635,12 @@ class _ScanST:
             return self.ctrl["file"]
         return o[0] if o else None
 
-    def number_input(self, *a, **k):
+    def number_input(self, label="", *a, **k):
+        lbl = str(label)
+        if "最少" in lbl:
+            return getattr(self, "min_len", 7)
+        if "最多" in lbl:
+            return getattr(self, "max_len", 12)
         return k.get("value", 7)
 
     def multiselect(self, *a, **k):
