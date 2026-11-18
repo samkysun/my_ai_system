@@ -1062,31 +1062,43 @@ def render_multi_analysis(df_data):
 
         _docs_show = st.session_state.get("auto_docs") or {}
         if _docs_show:
-            _keys = list(_docs_show.keys())
-            _def = _keys.index(ball_str) if ball_str in _keys else 0
-            _pick = st.selectbox("查看哪个球的文档（每个球独立一份）", _keys,
-                                 index=_def, key="auto_doc_pick")
-            _body = _docs_show.get(_pick, "")
-            _edit = st.text_area(f"{_pick} 的文档（可编辑）", value=_body, height=300,
-                                 key=f"auto_doc_txt_{_pick}")
-            _dc1, _dc2, _dc3 = st.columns(3)
-            with _dc1:
-                if st.button("💾 保存这份", use_container_width=True, key="auto_doc_save"):
-                    _docs_show[_pick] = _edit
-                    st.session_state["auto_docs"] = _docs_show
-                    st.success(f"{_pick} 已保存")
-            with _dc2:
-                st.download_button("📥 下载这份 (TXT)", _edit.encode("utf-8-sig"),
-                                   file_name=f"{_pick}_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                                   mime="text/plain", use_container_width=True,
-                                   key="auto_doc_dl")
-            with _dc3:
-                if st.button("🗑 清空这份", use_container_width=True, key="auto_doc_clear"):
-                    _docs_show.pop(_pick, None)
-                    st.session_state["auto_docs"] = _docs_show
-                    st.rerun()
+            st.markdown("#### 📄 分球文档（全部显示在同一处）")
             st.caption(f"当前共 {len(_docs_show)} 个球的文档："
-                       + "、".join(_keys))
+                       + "、".join(sorted(_docs_show, key=lambda x: int(re.sub(r"\D", "", x) or 0))))
+            _merged_parts = []
+            _ordered = sorted(_docs_show, key=lambda x: int(re.sub(r"\D", "", x) or 0))
+            for _k in _ordered:
+                _body = _docs_show.get(_k, "")
+                st.markdown(f"**{_k}**（{_body.count(chr(61) * 10) // 2} 段）")
+                _edit = st.text_area(f"{_k} 的文档", value=_body, height=220,
+                                     key=f"auto_doc_txt_{_k}")
+                _dc1, _dc2, _dc3 = st.columns(3)
+                with _dc1:
+                    if st.button("💾 保存这份", use_container_width=True,
+                                 key=f"auto_doc_save_{_k}"):
+                        _docs_show[_k] = _edit
+                        st.session_state["auto_docs"] = _docs_show
+                        st.success(f"{_k} 已保存")
+                with _dc2:
+                    st.download_button("📥 下载这份", _edit.encode("utf-8-sig"),
+                                       file_name=f"{_k}_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                                       mime="text/plain", use_container_width=True,
+                                       key=f"auto_doc_dl_{_k}")
+                with _dc3:
+                    if st.button("🗑 清空这份", use_container_width=True,
+                                 key=f"auto_doc_clear_{_k}"):
+                        _docs_show.pop(_k, None)
+                        st.session_state["auto_docs"] = _docs_show
+                        st.rerun()
+                _merged_parts.append(f"########## {_k} ##########\n{_body}")
+                st.divider()
+
+            _all_doc = "\n\n".join(_merged_parts)
+            st.download_button("📥 下载全部（合并成一份文档）", _all_doc.encode("utf-8-sig"),
+                               file_name=f"全自动核算_全部球_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                               mime="text/plain", use_container_width=True,
+                               key="auto_doc_all_dl",
+                               help="把上面每个球的文档按顺序合成一份")
 
         if st.session_state.get("auto_stats"):
             import pandas as _pda2
