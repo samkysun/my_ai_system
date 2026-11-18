@@ -1412,123 +1412,64 @@ def render_multi_analysis(df_data):
             st.rerun()
 
     if st.session_state.multi_result_text != "":
-        import streamlit.components.v1 as components
-        import html
-        import base64
+        import html as _hm
+        import base64 as _b64m
+        import streamlit.components.v1 as _comp
 
-        # ==== 7.1 终极清洗换行符 ====
         raw_text = st.session_state.multi_result_text
         clean_text = raw_text.replace(chr(92) + 'n', chr(10)).replace(chr(92) + 'r', '')
-        _s_head = clean_text.lstrip()
-        # 自动核算格式是 9 个等号开头；执行分析的老格式是 10 个，要区分开
-        _is_auto = (_s_head.startswith("=========")
-                    and (_s_head[9:10] or "") != "=")
 
-        # ==== 7.2 手动编辑面板 ====
-        if _is_auto:
-            _auto_edit = st.text_area("自动核算结果（可直接编辑）", value=clean_text,
-                                      height=420, key="auto_result_box")
-            _ab1, _ab2 = st.columns(2)
-            with _ab1:
-                if st.button("💾 保存修改", use_container_width=True, key="auto_result_save"):
-                    st.session_state.multi_result_text = _auto_edit
-                    st.rerun()
-            with _ab2:
-                st.download_button("📥 保存到本地 (TXT)", _auto_edit.encode("utf-8-sig"),
-                                   file_name=f"自动核算_{ball_str}_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                                   mime="text/plain", use_container_width=True,
-                                   key="auto_result_dl")
+        _edited = st.text_area("详细结果（可直接编辑）", value=clean_text, height=440,
+                               key="multi_one_box", label_visibility="collapsed")
 
-        if not _is_auto:
-            with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
-            #===========调整多维修改处文本框的字体大小代码起始===================
-                st.markdown('<style>div[data-testid="stTextArea"] textarea { font-size: 20px !important; line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
-                edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=300)
-            #=============调整多维修改处文本框的字体大小代码结尾=================
-                if st.button("💾保存修改并更新结果", type="secondary"):
-                    st.session_state.multi_result_text = edited_text
-                    st.rerun()
-
-        # ==== 7.3 高亮替换与 HTML 渲染 ====
-        escaped_text = html.escape(clean_text).replace("\n", "<br>")
-
-        highlighted_display = escaped_text.replace(
-            "[[HIGHLIGHT]]",
-            '<span style="color: #dc2626; background-color: #fef08a; font-weight: bold; padding: 2px 4px; border-radius: 4px;">'
-        ).replace("[[/HIGHLIGHT]]", '</span>')
-
-        #=======多维分析第二个文本框调整字体大小代码起始=============
-        display_html = f"""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #e9ecef; font-family: Consolas, monospace; font-size: 20px; line-height: 2.2; white-space: pre-wrap; word-wrap: break-word; max-height: 480px; overflow-y: auto; text-align: center;">
-            {highlighted_display}
-        </div>
-        """
-        #=======多维分析第二个文本框调整字体大小代码结尾=============
-        print_html = f"""
-        <html><head><meta charset="utf-8"><style>
-        body {{ font-family: Consolas, monospace; padding: 20px; line-height: 1.8; text-align: center; }}
-        pre {{ white-space: pre-wrap; word-wrap: break-word; font-size: 14px; text-align: center; }}
-        </style></head><body><pre>{html.escape(clean_text)}</pre></body></html>
-        """
-
-        b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
-        b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-
-        # ==== 7.4 打印按钮与居中展示（自动核算格式不显示）====
-        if not _is_auto:
-            components.html(
-            f"""
-            <div id="report-container"></div>
-            <div style="margin-top: 15px; text-align: center;">
-                <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                    🖨️ 打印当前报告 (排版不乱)
-                </button>
+        _b1, _b2, _b3, _b4 = st.columns(4)
+        with _b1:
+            if st.button("💾 保存修改", use_container_width=True, key="multi_box_save"):
+                st.session_state.multi_result_text = _edited
+                st.rerun()
+        with _b2:
+            st.download_button("📥 下载 TXT", _edited.encode("utf-8-sig"),
+                               file_name=f"报告_{ball_str}_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                               mime="text/plain", use_container_width=True,
+                               key="multi_box_dl")
+        with _b3:
+            if st.button("📌 推送看板", use_container_width=True, key="multi_to_board"):
+                _board_append("多维分析",
+                              f"{selected_file_type} {selected_period} {ball_str}",
+                              _edited)
+                st.success("已推送")
+        with _b4:
+            _ph = ("<html><head><meta charset='utf-8'><style>"
+                   "@page{margin:15mm} body{font-family:Consolas,monospace;padding:16px}"
+                   "pre{white-space:pre-wrap;word-break:break-word;font-size:13px}"
+                   "</style></head><body><pre>"
+                   + _hm.escape(_edited) + "</pre></body></html>")
+            _b64p = _b64m.b64encode(_ph.encode("utf-8")).decode("utf-8")
+            _comp.html(f"""
+            <div style="text-align:center">
+              <button onclick="pr()" style="width:100%;padding:11px;background-color:#0284c7;
+                color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;">
+                🖨️ 打印</button>
             </div>
             <script>
-            function b64DecodeUnicode(str) {{
-                return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }}).join(''));
+            function d(s) {{
+              return decodeURIComponent(Array.prototype.map.call(atob(s), function(c) {{
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+              }}).join(''));
             }}
-            document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
-            function printReport() {{
-                var html = b64DecodeUnicode("{b64_print}");
-                var f = document.createElement('iframe');
-                f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
-                document.body.appendChild(f);
-                var d = f.contentWindow.document;
-                d.open(); d.write(html); d.close();
-                setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
+            function pr() {{
+              var h = d("{_b64p}");
+              var f = document.createElement('iframe');
+              f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+              document.body.appendChild(f);
+              var x = f.contentWindow.document;
+              x.open(); x.write(h); x.close();
+              setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
             }}
-            </script>
-            """,
-            height=620,
-            scrolling=False
-        )
-
-        st.write("")
-
-        # ==== 7.5 下载按钮（自动核算格式已有下载，不重复显示）====
-        if not _is_auto:
-            file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            st.download_button(
-                label="📥 保存完整报告到本地 (TXT格式)",
-                data=clean_text.encode('utf-8-sig'),
-                file_name=file_name,
-                mime="text/plain",
-                use_container_width=True
-            )
-
-        if st.button(f"📌 推送 {ball_str} 的内容到 AI 推演", use_container_width=True,
-                     key="multi_to_board",
-                     help="推送上面文本框里的内容（你手动改过也算）；"
-                          "同一个球号多次推送会合并成一条"):
-            _board_append("多维分析",
-                          f"{selected_file_type} {selected_period} {ball_str}",
-                          clean_text)
-            st.success(f"已推送到看板：{ball_str}")
+            </script>""", height=68, scrolling=False)
 
         st.divider()
+
         with st.expander("🔍 校验当前报告（逐行核对是否真的匹配）", expanded=False):
             st.caption("把报告里的每条触发行拉回原始 CSV 逐条核对：值是否真的相等、"
                        "生克是否真的成立、上下值是否真实、匹配串是否由真实数据拼接。"
