@@ -28,9 +28,6 @@ import io
 import base64
 import re
 import json
-import hashlib
-import inspect
-import sys
 from collections import Counter
 from datetime import datetime
 from openpyxl.utils import get_column_letter, column_index_from_string
@@ -45,10 +42,6 @@ try:
     from auto_upgrade import render_upgrade_tab
 except Exception:
     render_upgrade_tab = None
-try:
-    from omission_page import render_omission_page
-except Exception:
-    render_omission_page = None
 
 # ==========================================
 # 1. 全局配置与初始化
@@ -300,49 +293,6 @@ def calculate_prize(df_data, target_period, predicted_nums):
     status = "有命中" if (len(match_nums) > 0 or z_matched) else "无中任何数字"
     result = {"下期期数": next_period, "预测组合": ",".join(predicted_nums), "中出平码1": match_nums[0] if len(match_nums)>0 else "", "中出平码2": match_nums[1] if len(match_nums)>1 else "", "中出平码3": match_nums[2] if len(match_nums)>2 else "", "中出平码4": match_nums[3] if len(match_nums)>3 else "", "中出平码5": match_nums[4] if len(match_nums)>4 else "", "中出平码6": match_nums[5] if len(match_nums)>5 else "", "中出特码": z_val if z_matched else "", "状态": status}
     return result, None
-
-# ==========================================
-# 4.5 代码锁定保护（AI推演 / 多维分析 / 深度联动）
-# ==========================================
-# 说明：这三个模块的源码指纹被登记在 LOCKED_FINGERPRINTS 中。
-# 运行时对函数源码做 SHA-256 校验，指纹不符则拒绝执行并提示。
-# 如需合法修改，请修改代码后从 stderr 读取新指纹并更新此字典。
-LOCKED_FINGERPRINTS = {
-    "render_multi_analysis": "",
-    "render_deep_linkage": "",
-    "render_ai": "",
-}
-
-
-def _fingerprint(func):
-    try:
-        src = inspect.getsource(func)
-    except Exception:
-        return ""
-    return hashlib.sha256(src.encode("utf-8")).hexdigest()
-
-
-def _guard_locked(func):
-    """包装受保护函数：指纹不符则拦截。指纹为空时仅打印到 stderr 便于登记。"""
-    name = func.__name__
-    expected = LOCKED_FINGERPRINTS.get(name, "")
-    actual = _fingerprint(func)
-    if not expected:
-        try:
-            sys.stderr.write(f"[LOCK] {name} fingerprint = {actual}\n")
-        except Exception:
-            pass
-        return func
-    if actual != expected:
-        def _blocked(*args, **kwargs):
-            st.error(
-                f"🔒 模块【{name}】已被锁定：检测到源码与登记指纹不一致，"
-                f"未经授权不得修改。请联系管理员确认后再更新 LOCKED_FINGERPRINTS。"
-            )
-            st.stop()
-        return _blocked
-    return func
-
 
 # ==========================================
 # 5. 各页面渲染
@@ -1887,6 +1837,408 @@ def render_admin_panel():
             st.warning("缺少 auto_upgrade.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
 
 # ==========================================
+# 8.5 遗漏核算（原 omission_page.py 内嵌 + 累积框）
+# ==========================================
+# 列规则：每球占 30 列，第 n 球属性列 = 属性基列 + (n-1)*30（1 基）
+ATTR_BASE_COL = {
+    "数字五行": 6, "生肖": 7, "尾数": 8, "数字合": 9, "门数": 10, "段数": 11,
+    "单双组合": 12, "单双笔": 13, "独合字": 14, "单双头": 15, "单双": 16,
+    "波单双": 17, "生肖五行": 18, "颜色肖": 19, "四宝": 20, "物象": 21,
+    "波色": 22, "阴阳": 23, "家野": 24, "天地": 25, "阴阳天地": 26,
+    "吉凶": 27, "男女": 28, "方位": 29, "3模": 30, "尾五行": 31,
+    "福禄寿": 32, "大小肖": 33,
+}
+
+ATTR_DOMAIN = {
+    "生肖": ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"],
+    "尾数": [str(i) for i in range(10)],
+    "数字五行": ["金", "木", "水", "火", "土"],
+    "生肖五行": ["金", "木", "水", "火", "土"],
+    "尾五行": ["金", "木", "水", "火", "土"],
+    "波色": ["红波", "蓝波", "绿波"],
+    "门数": [f"{i}门" for i in range(1, 6)],
+    "段数": [f"{i}段" for i in range(1, 8)],
+    "数字合": [f"{i:02d}合" for i in range(1, 14)],
+    "单双组合": ["双双", "双单", "单单", "单双"],
+    "单双": ["单数", "双数"],
+    "单双笔": ["单笔", "双笔"],
+    "独合字": ["独字", "合字"],
+    "单双头": ["单头", "双头"],
+    "阴阳": ["阴", "阳"],
+    "家野": ["家", "野"],
+    "天地": ["天", "地"],
+    "阴阳天地": ["阳天", "阳地", "阴天", "阴地"],
+    "吉凶": ["吉", "凶"],
+    "男女": ["男", "女"],
+    "方位": ["东", "南", "西", "北"],
+    "3模": ["3余0", "3余1", "3余2"],
+    "福禄寿": ["福肖", "禄肖", "寿肖"],
+    "大小肖": ["大肖", "中肖", "小肖"],
+    "四宝": ["琴", "棋", "书", "画"],
+    "物象": ["家臣", "美女", "君王", "恶人"],
+    "颜色肖": ["红色", "绿色", "蓝色"],
+    "波单双": ["红波单", "红波双", "蓝波单", "蓝波双", "绿波单", "绿波双"],
+}
+
+_OM_SEP = "=" * 10
+_OM_HEADER_RE = re.compile(r"^={10,}.*={10,}$")
+
+
+def _om_clean(v):
+    if v is None:
+        return ""
+    try:
+        if pd.isna(v):
+            return ""
+    except Exception:
+        pass
+    s = str(v).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+
+def _om_col_index(attr_name, ball_no):
+    """CSV 中该球该属性的 0 基列索引"""
+    return ATTR_BASE_COL[attr_name] + (ball_no - 1) * 30 - 1
+
+
+def _om_compute(rows, col_idx, domain, start=2):
+    """从 start 那一行（选定期数）向下扫描，统计每个属性值的遗漏期数"""
+    seq = []
+    for r in range(start, len(rows)):
+        row = rows[r]
+        if col_idx >= len(row):
+            continue
+        val = _om_clean(row[col_idx])
+        if val == "":
+            continue
+        seq.append(val)
+
+    total = len(seq)
+    result = {}
+    for attr_val in domain:
+        miss = total                      # 默认：全表未出现
+        for i, v in enumerate(seq):
+            if v == attr_val:
+                miss = i
+                break
+        result[attr_val] = miss
+
+    # 补上域外出现的值（防止属性表与数据不一致时漏项）
+    for v in seq:
+        if v not in result:
+            miss = total
+            for i, x in enumerate(seq):
+                if x == v:
+                    miss = i
+                    break
+            result[v] = miss
+
+    return result, total
+
+
+def _om_period_of(row):
+    """行 → 期号（年份 + 3 位期号）"""
+    year = _om_clean(row[213]) if len(row) > 213 else ""
+    p = "".join(_om_clean(row[i]) if i < len(row) else "" for i in range(3))
+    return f"{year}{p}"
+
+
+def _om_period_list(rows):
+    """[(期号, 行索引)]，新的在前；行索引即该期在 CSV 里的位置"""
+    seen, out = set(), []
+    for r in range(2, len(rows)):
+        p = _om_period_of(rows[r])
+        if p and p not in seen:
+            seen.add(p)
+            out.append((p, r))
+    return out
+
+
+def _om_latest_period(rows):
+    """最新一期的期号（年份 + 3 位期号）"""
+    if len(rows) <= 2:
+        return ""
+    return _om_period_of(rows[2])
+
+
+def _om_blocks(text):
+    out, head, body = [], None, []
+    for line in (text or "").splitlines():
+        if _OM_HEADER_RE.match(line.strip()):
+            if head is not None:
+                while body and not body[-1].strip():
+                    body.pop()
+                out.append((head, body))
+            head, body = line.rstrip(), []
+        elif head is not None:
+            body.append(line)
+    if head is not None:
+        while body and not body[-1].strip():
+            body.pop()
+        out.append((head, body))
+    return out
+
+
+def _om_join(blocks):
+    return "\n\n".join("\n".join([h] + [b for b in body if b.strip() != ""])
+                       for h, body in blocks)
+
+
+def _om_attr_of_header(head):
+    """从标题行里抠出属性名，例如 '...1球生肖遗漏====' -> '生肖'"""
+    m = re.search(r"\d+球(.+?)遗漏", head or "")
+    return m.group(1) if m else ""
+
+
+def _om_upsert(text, header, body_lines):
+    """按【属性】去重：同一属性只保留一块（标题更新为新条件），只有换属性才追加。
+    期数/球号/数据文件变化都不追加，直接覆盖原属性那一块。"""
+    blocks = _om_blocks(text)
+    key = _om_attr_of_header(header)
+    out, replaced = [], False
+    for head, body in blocks:
+        if key and _om_attr_of_header(head) == key:
+            if not replaced:
+                out.append((header, list(body_lines)))
+                replaced = True
+            # 同属性的重复块直接丢弃，避免堆积
+        else:
+            out.append((head, body))
+    if not replaced:
+        out.append((header, list(body_lines)))
+    return _om_join(out)
+
+
+def _om_print(text):
+    import html as _html
+    import base64 as _b64
+    import streamlit.components.v1 as _components
+
+    body = _html.escape(text).replace("\n", "<br>")
+    display_html = ('<div style="background-color:#f8f9fa;padding:20px;border-radius:10px;'
+                    'border:1px solid #e9ecef;font-family:Consolas,monospace;font-size:16px;'
+                    f'line-height:2.0;white-space:pre-wrap;word-wrap:break-word;">{body}</div>')
+    print_html = ('<html><head><meta charset="utf-8"><style>'
+                  '@page { margin: 15mm; } body { font-family: Consolas, monospace; padding: 20px; }'
+                  'pre { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.9; }'
+                  "</style></head><body><pre>" + _html.escape(text) + "</pre></body></html>")
+
+    b64_display = _b64.b64encode(display_html.encode("utf-8")).decode("utf-8")
+    b64_print = _b64.b64encode(print_html.encode("utf-8")).decode("utf-8")
+
+    _components.html(
+        f"""
+        <div id="report-container"></div>
+        <div style="margin-top: 15px; text-align: center;">
+            <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7;
+                color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                🖨️ 打印当前报告
+            </button>
+        </div>
+        <script>
+        function b64DecodeUnicode(str) {{
+            return decodeURIComponent(Array.prototype.map.call(atob(str), function(c) {{
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }}).join(''));
+        }}
+        document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
+        function printReport() {{
+            var win = window.open("");
+            win.document.write(b64DecodeUnicode("{b64_print}"));
+            win.document.close();
+            win.focus();
+            setTimeout(function() {{ win.print(); }}, 500);
+        }}
+        </script>
+        """, height=620, scrolling=False)
+
+
+def render_omission_page():
+    st.title("📉 遗漏核算")
+    st.info("💡 基准期为最新一期（降序文件最上面一行）。遗漏 = 从最新一期向下连续未出现的期数。")
+
+    st.session_state.setdefault("om_report", "")
+    st.session_state.setdefault("om_ver", 0)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        file_type = st.selectbox("选择数据文件", ["升序全套", "按序全套"], key="om_file")
+    with col2:
+        ball_str = st.selectbox("选择球号", [f"第{i}球" for i in range(1, 8)], key="om_ball")
+    with col3:
+        attr_name = st.selectbox("选择属性", list(ATTR_BASE_COL.keys()), key="om_attr")
+
+    ball_no = int(ball_str.replace("第", "").replace("球", ""))
+
+    # ---------- 先读文件（带缓存），才能列出期数 ----------
+    target_file = "升序全套.csv" if file_type == "升序全套" else "按序全套.csv"
+    rows = load_excel_data(target_file, None)
+    pairs = _om_period_list(rows) if rows else []
+    period_map = dict(pairs)
+
+    p1, p2 = st.columns([2, 2])
+    with p1:
+        period_options = [p for p, _ in pairs] or ["暂无数据"]
+        # 切换数据文件时尽量保留原来选的那一期；新文件里没有才回落到最新一期
+        _prev_period = st.session_state.get("om_period")
+        if _prev_period not in period_options:
+            st.session_state["om_period"] = period_options[0]
+        sel_period = st.selectbox("期数（从这一期往回算）", period_options, key="om_period")
+    start_idx = period_map.get(sel_period, 2)
+    with p2:
+        st.write(""); st.write("")
+        st.caption(f"基准行：CSV 第 {start_idx + 1} 行；从这一期开始往更早的方向统计")
+
+    # ---------- 前几控件：范围随属性自动变化，且每个属性各自记住自己的数字 ----------
+    domain_now = ATTR_DOMAIN.get(attr_name, [])
+    max_n = max(1, len(domain_now))
+    nkey = f"om_n_{attr_name}"
+    cur = st.session_state.get(nkey, min(5, max_n))
+    if not isinstance(cur, int) or cur < 1:
+        cur = 1
+    if cur > max_n:
+        cur = max_n
+    st.session_state[nkey] = cur
+
+    b1, b2, b3 = st.columns([2, 1, 1])
+    with b1:
+        n_pick = st.number_input(f"写入前几名（{attr_name} 共 {max_n} 项，可选 1~{max_n}）",
+                                 min_value=1, max_value=max_n, key=nkey, step=1,
+                                 help="这个数字 = 往下方累积框里写入几行。"
+                                      "12 个生肖只想看 5 个，就调到 5。")
+    with b2:
+        st.write(""); st.write("")
+        run_btn = st.button("🚀 开始遗漏核算", use_container_width=True, type="primary")
+    with b3:
+        st.write(""); st.write("")
+        clear_btn = st.button("🗑 清空累积", use_container_width=True)
+
+    if clear_btn:
+        st.session_state["om_report"] = ""
+        st.session_state["om_df"] = None
+        st.session_state["om_meta"] = None
+        st.session_state["om_ver"] = st.session_state.get("om_ver", 0) + 1
+        st.rerun()
+
+    # ---------- 计算 ----------
+    if run_btn:
+        if not rows:
+            st.error(f"{target_file} 读取为空，请检查云端文件是否存在。")
+        else:
+            col_idx = _om_col_index(attr_name, ball_no)
+            domain = domain_now
+            if not domain:
+                seen = []
+                for r in range(start_idx, len(rows)):
+                    row = rows[r]
+                    if col_idx < len(row):
+                        v = _om_clean(row[col_idx])
+                        if v and v not in seen:
+                            seen.append(v)
+                domain = seen
+
+            result, total = _om_compute(rows, col_idx, domain, start_idx)
+            if total == 0:
+                st.warning("该列没有有效数据，请确认属性列映射是否正确。")
+            else:
+                df = pd.DataFrame([{"属性值": k, "遗漏期数": v} for k, v in result.items()]
+                                  ).sort_values("遗漏期数", ascending=False).reset_index(drop=True)
+                st.session_state["om_df"] = df.to_dict("records")
+                st.session_state["om_meta"] = {
+                    "file_type": file_type, "ball_str": ball_str, "attr_name": attr_name,
+                    "total": total, "period": _om_latest_period(rows),
+                }
+
+                # 校验用：把该球该属性那一列的最近若干期原值存下来，供人工核对
+                try:
+                    from openpyxl.utils import get_column_letter as _gcl
+                    _letter = _gcl(col_idx + 1)
+                except Exception:
+                    _letter = f"第{col_idx + 1}列"
+                _preview = []
+                for _r in range(start_idx, min(start_idx + 30, len(rows))):
+                    _row = rows[_r]
+                    _v = _om_clean(_row[col_idx]) if col_idx < len(_row) else ""
+                    _preview.append({"期号": _om_period_of(_row), "取值": _v,
+                                     "距本期": _r - start_idx})
+                st.session_state["om_col"] = {
+                    "letter": _letter, "col_1based": col_idx + 1,
+                    "ball": ball_no, "attr": attr_name, "preview": _preview,
+                }
+
+                # 写入累积框：标题相同则替换，条件不同则追加
+                suffix = "尾" if attr_name == "尾数" else ""
+                title = (f"{_OM_SEP}{sel_period}期{file_type}"
+                         f"{ball_no}球{attr_name}遗漏{_OM_SEP}")
+                lines = [f"{rec['属性值']}{suffix}：{rec['遗漏期数']}次"
+                         for rec in sorted(df.to_dict("records"),
+                                           key=lambda x: -int(x["遗漏期数"]))[:int(n_pick)]]
+                st.session_state["om_report"] = _om_upsert(
+                    st.session_state.get("om_report", ""), title, lines)
+                st.session_state["om_ver"] = st.session_state.get("om_ver", 0) + 1
+                st.rerun()
+
+    # ---------- ① 第一个框：原有展示（dataframe，内容不变） ----------
+    df_records = st.session_state.get("om_df")
+    meta = st.session_state.get("om_meta")
+    if df_records and meta:
+        df = pd.DataFrame(df_records)
+        # 强制降序：遗漏次数多的在前
+        df = df.sort_values("遗漏期数", ascending=False).reset_index(drop=True)
+        st.subheader(f"{meta['file_type']} · {meta['ball_str']} · {meta['attr_name']} 遗漏统计")
+        st.caption(f"有效期数：{meta['total']} 期（从选定期往回）　·　"
+                   f"排序：遗漏次数 **从多到少**（越久没出越靠前）")
+        st.dataframe(df, use_container_width=True, height=min(600, 40 + 35 * len(df)))
+        if not df.empty:
+            top = df.iloc[0]
+            st.success(f"🔥 当前遗漏最大：**{top['属性值']}**，已遗漏 **{top['遗漏期数']}** 期")
+
+        col_info = st.session_state.get("om_col")
+        if col_info:
+            with st.expander(f"🔍 校验：本列取自「{col_info['attr']}」第 {col_info['ball']} 球 —— "
+                             f"CSV 第 {col_info['col_1based']} 列（{col_info['letter']} 列）",
+                             expanded=False):
+                st.caption("下面就是程序实际读取的那一列原值（最新在上）。"
+                           "「距本期」= 该行与最新一期的间隔，用来核对遗漏数字是否精准。")
+                st.dataframe(pd.DataFrame(col_info["preview"]),
+                             use_container_width=True, height=320)
+                st.caption(f"计算规则：第 n 球 = 属性基列 {ATTR_BASE_COL[col_info['attr']]} "
+                           f"+ (n-1)×30，本球 n={col_info['ball']} → "
+                           f"1 基第 {col_info['col_1based']} 列。")
+
+    # ---------- ② 第二个框：累积报告（可编辑 / 保存 / 打印） ----------
+    ver = st.session_state.get("om_ver", 0)
+    st.divider()
+    h1, h2 = st.columns([8, 2])
+    with h1:
+        st.markdown("### 📑 累积报告（可编辑 / 保存 / 打印）")
+    with h2:
+        if st.button("💾 保存修改", use_container_width=True):
+            st.session_state["om_report"] = st.session_state.get(f"om_rep_{ver}", "")
+            st.session_state["om_ver"] = ver + 1
+            st.success("已保存")
+            st.rerun()
+
+    edited = st.text_area("累积报告（可直接编辑，改完点💾保存）",
+                          value=st.session_state.get("om_report", ""), height=380,
+                          key=f"om_rep_{ver}", label_visibility="collapsed")
+
+    st.caption(f"当前共 {len(_om_blocks(edited))} 段；**只有换属性才追加**，"
+               f"换期数/球号/数据文件都在原属性那一块里覆盖更新。")
+
+    d1, d2 = st.columns(2)
+    with d1:
+        st.download_button("📥 导出累积报告 (TXT)", edited.encode("utf-8-sig"),
+                           file_name=f"遗漏核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                           mime="text/plain", use_container_width=True)
+    with d2:
+        if st.button("🖨️ 打印累积报告", use_container_width=True):
+            st.session_state["om_report"] = edited
+            _om_print(edited)
+
+# ==========================================
 # 9. 登录与系统入口
 # ==========================================
 def register_user(username, password):
@@ -2028,9 +2380,9 @@ def main_app():
         st.divider()
 
     if page == "📊 主控台": render_console(df_data)
-    elif page == "📐 多维分析": _guard_locked(render_multi_analysis)(df_data)
-    elif page == "🔗 深度联动": _guard_locked(render_deep_linkage)(df_data)
-    elif page == "🧠 AI推演": _guard_locked(render_ai)(df_data)
+    elif page == "📐 多维分析": render_multi_analysis(df_data)
+    elif page == "🔗 深度联动": render_deep_linkage(df_data)
+    elif page == "🧠 AI推演": render_ai(df_data)
     elif page == "📉 遗漏核算":
         if render_omission_page:
             render_omission_page()
