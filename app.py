@@ -1450,7 +1450,7 @@ def render_multi_analysis(df_data):
         _edited = st.text_area("详细结果（可直接编辑）", value=clean_text, height=440,
                                key="multi_one_box", label_visibility="collapsed")
 
-        _b1, _b2, _b3, _b4 = st.columns(4)
+        _b1, _b2, _b3 = st.columns(3)
         with _b1:
             if st.button("💾 保存修改", use_container_width=True, key="multi_box_save"):
                 st.session_state.multi_result_text = _edited
@@ -1466,35 +1466,6 @@ def render_multi_analysis(df_data):
                               f"{selected_file_type} {selected_period} {ball_str}",
                               _edited)
                 st.success("已推送")
-        with _b4:
-            _ph = ("<html><head><meta charset='utf-8'><style>"
-                   "@page{margin:15mm} body{font-family:Consolas,monospace;padding:16px}"
-                   "pre{white-space:pre-wrap;word-break:break-word;font-size:13px}"
-                   "</style></head><body><pre>"
-                   + _hm.escape(_edited) + "</pre></body></html>")
-            _b64p = _b64m.b64encode(_ph.encode("utf-8")).decode("utf-8")
-            _comp.html(f"""
-            <div style="text-align:center">
-              <button onclick="pr()" style="width:100%;padding:11px;background-color:#0284c7;
-                color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold;">
-                🖨️ 打印</button>
-            </div>
-            <script>
-            function d(s) {{
-              return decodeURIComponent(Array.prototype.map.call(atob(s), function(c) {{
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-              }}).join(''));
-            }}
-            function pr() {{
-              var h = d("{_b64p}");
-              var f = document.createElement('iframe');
-              f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
-              document.body.appendChild(f);
-              var x = f.contentWindow.document;
-              x.open(); x.write(h); x.close();
-              setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
-            }}
-            </script>""", height=68, scrolling=False)
 
         st.divider()
 
