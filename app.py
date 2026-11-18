@@ -836,11 +836,13 @@ def render_multi_analysis(df_data):
             }}
             document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
             function printReport() {{
-                var win = window.open("");
-                win.document.write(b64DecodeUnicode("{b64_print}"));
-                win.document.close();
-                win.focus();
-                setTimeout(function() {{ win.print(); }}, 500);
+                var html = b64DecodeUnicode("{b64_print}");
+                var f = document.createElement('iframe');
+                f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+                document.body.appendChild(f);
+                var d = f.contentWindow.document;
+                d.open(); d.write(html); d.close();
+                setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
             }}
             </script>
             """,
@@ -1269,11 +1271,13 @@ def render_ai(df_data):
             }}
             document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
             function printReport() {{
-                var win = window.open("");
-                win.document.write(b64DecodeUnicode("{b64_print}"));
-                win.document.close();
-                win.focus();
-                setTimeout(function() {{ win.print(); }}, 500);
+                var html = b64DecodeUnicode("{b64_print}");
+                var f = document.createElement('iframe');
+                f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+                document.body.appendChild(f);
+                var d = f.contentWindow.document;
+                d.open(); d.write(html); d.close();
+                setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
             }}
             </script>
             """,
@@ -2011,6 +2015,16 @@ def _om_upsert(text, header, body_lines):
     return _om_join(out)
 
 
+def _om_print_html(text):
+    """生成可独立打开/打印的 HTML 全文"""
+    import html as _html
+
+    return ('<html><head><meta charset="utf-8"><title>遗漏核算</title><style>'
+            '@page { margin: 15mm; } body { font-family: Consolas, monospace; padding: 20px; }'
+            'pre { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.9; }'
+            "</style></head><body><pre>" + _html.escape(text) + "</pre></body></html>")
+
+
 def _om_print(text):
     import html as _html
     import base64 as _b64
@@ -2030,11 +2044,10 @@ def _om_print(text):
 
     _components.html(
         f"""
-        <div id="report-container"></div>
-        <div style="margin-top: 15px; text-align: center;">
+        <div style="text-align: center;">
             <button onclick="printReport()" style="width: 100%; padding: 12px; background-color: #0284c7;
                 color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                🖨️ 打印当前报告
+                🖨️ 打印累积报告（点这里直接打印）
             </button>
         </div>
         <script>
@@ -2043,16 +2056,17 @@ def _om_print(text):
                 return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
             }}).join(''));
         }}
-        document.getElementById('report-container').innerHTML = b64DecodeUnicode("{b64_display}");
         function printReport() {{
-            var win = window.open("");
-            win.document.write(b64DecodeUnicode("{b64_print}"));
-            win.document.close();
-            win.focus();
-            setTimeout(function() {{ win.print(); }}, 500);
+            var html = b64DecodeUnicode("{b64_print}");
+            var f = document.createElement('iframe');
+            f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+            document.body.appendChild(f);
+            var d = f.contentWindow.document;
+            d.open(); d.write(html); d.close();
+            setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
         }}
         </script>
-        """, height=620, scrolling=False)
+        """, height=90, scrolling=False)
 
 
 def render_omission_page():
@@ -2234,9 +2248,14 @@ def render_omission_page():
                            file_name=f"遗漏核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
                            mime="text/plain", use_container_width=True)
     with d2:
-        if st.button("🖨️ 打印累积报告", use_container_width=True):
-            st.session_state["om_report"] = edited
-            _om_print(edited)
+        st.download_button("💾 下载可打印 HTML", _om_print_html(edited).encode("utf-8"),
+                           file_name=f"遗漏核算_{datetime.now():%Y%m%d_%H%M%S}.html",
+                           mime="text/html", use_container_width=True,
+                           help="浏览器拦打印时用这个：下载后用浏览器打开，按 Ctrl+P")
+
+    # 一个按钮，点一下直接弹打印预览（不再需要点两次）
+    if edited.strip():
+        _om_print(edited)
 
 # ==========================================
 # 9. 登录与系统入口
