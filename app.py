@@ -570,7 +570,8 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
         stats.append((attr, total, len(kept)))
         if kept:
             _title = (f"========={period}期{order}-{attr}{ball_no}球=======")
-            blocks.append(_title + "\n" + "\n".join(kept))
+            _base = [l for l in report.splitlines() if l.startswith("【基准行排列】")]
+            blocks.append(_title + "\n" + "\n".join(_base + kept))
 
     text = ("\n".join(blocks) if blocks else "")
     return text, stats, total_in
