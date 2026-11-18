@@ -1070,18 +1070,6 @@ def render_multi_analysis(df_data):
                 except Exception as _e:
                     st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
 
-        if st.session_state.get("auto_stats"):
-            import pandas as _pda2
-            _st = st.session_state["auto_stats"]
-            with st.expander("查看筛选统计（不影响结果）", expanded=False):
-                st.dataframe(_pda2.DataFrame(
-                    [{"属性": a, "原有触发行": b, "录入": c, "剔除": b - c}
-                     for a, b, c in _st]),
-                    use_container_width=True, hide_index=True)
-            _sum_in = sum(c for _, _, c in _st)
-            _sum_all = sum(b for _, b, _ in _st)
-            st.caption(f"合计：原有 {_sum_all} 条，录入 {_sum_in} 条，剔除 {_sum_all - _sum_in} 条")
-
     st.divider()
 
     # ==========================================
@@ -1431,16 +1419,35 @@ def render_multi_analysis(df_data):
         # ==== 7.1 终极清洗换行符 ====
         raw_text = st.session_state.multi_result_text
         clean_text = raw_text.replace(chr(92) + 'n', chr(10)).replace(chr(92) + 'r', '')
+        _s_head = clean_text.lstrip()
+        # 自动核算格式是 9 个等号开头；执行分析的老格式是 10 个，要区分开
+        _is_auto = (_s_head.startswith("=========")
+                    and (_s_head[9:10] or "") != "=")
 
         # ==== 7.2 手动编辑面板 ====
-        with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
-        #===========调整多维修改处文本框的字体大小代码起始===================
-            st.markdown('<style>div[data-testid="stTextArea"] textarea { font-size: 20px !important; line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
-            edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=300)
-        #=============调整多维修改处文本框的字体大小代码结尾=================
-            if st.button("💾保存修改并更新结果", type="secondary"):
-                st.session_state.multi_result_text = edited_text
-                st.rerun()
+        if _is_auto:
+            _auto_edit = st.text_area("自动核算结果（可直接编辑）", value=clean_text,
+                                      height=420, key="auto_result_box")
+            _ab1, _ab2 = st.columns(2)
+            with _ab1:
+                if st.button("💾 保存修改", use_container_width=True, key="auto_result_save"):
+                    st.session_state.multi_result_text = _auto_edit
+                    st.rerun()
+            with _ab2:
+                st.download_button("📥 保存到本地 (TXT)", _auto_edit.encode("utf-8-sig"),
+                                   file_name=f"自动核算_{ball_str}_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                                   mime="text/plain", use_container_width=True,
+                                   key="auto_result_dl")
+
+        if not _is_auto:
+            with st.expander("📝手动编辑/精简当前报告 (点击展开)", expanded=False):
+            #===========调整多维修改处文本框的字体大小代码起始===================
+                st.markdown('<style>div[data-testid="stTextArea"] textarea { font-size: 20px !important; line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
+                edited_text = st.text_area("删掉你不想看的内容，然后点下方保存：", value=clean_text, height=300)
+            #=============调整多维修改处文本框的字体大小代码结尾=================
+                if st.button("💾保存修改并更新结果", type="secondary"):
+                    st.session_state.multi_result_text = edited_text
+                    st.rerun()
 
         # ==== 7.3 高亮替换与 HTML 渲染 ====
         escaped_text = html.escape(clean_text).replace("\n", "<br>")
@@ -1467,8 +1474,9 @@ def render_multi_analysis(df_data):
         b64_display = base64.b64encode(display_html.encode('utf-8')).decode('utf-8')
         b64_print = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
 
-        # ==== 7.4 打印按钮与居中展示 ====
-        components.html(
+        # ==== 7.4 打印按钮与居中展示（自动核算格式不显示）====
+        if not _is_auto:
+            components.html(
             f"""
             <div id="report-container"></div>
             <div style="margin-top: 15px; text-align: center;">
@@ -1500,15 +1508,16 @@ def render_multi_analysis(df_data):
 
         st.write("")
 
-        # ==== 7.5 下载按钮 ====
-        file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        st.download_button(
-            label="📥 保存完整报告到本地 (TXT格式)",
-            data=clean_text.encode('utf-8-sig'),
-            file_name=file_name,
-            mime="text/plain",
-            use_container_width=True
-        )
+        # ==== 7.5 下载按钮（自动核算格式已有下载，不重复显示）====
+        if not _is_auto:
+            file_name = f"报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            st.download_button(
+                label="📥 保存完整报告到本地 (TXT格式)",
+                data=clean_text.encode('utf-8-sig'),
+                file_name=file_name,
+                mime="text/plain",
+                use_container_width=True
+            )
 
         if st.button(f"📌 推送 {ball_str} 的内容到 AI 推演", use_container_width=True,
                      key="multi_to_board",
