@@ -1021,6 +1021,11 @@ def render_multi_analysis(df_data):
         st.session_state.multi_result_text = ""
         # 绝杀：此处绝对不能加 st.rerun()，否则会导致文件切换时无限死循环卡死
 
+    # 切换球号 → 自动清空上一球的文档
+    if st.session_state.get("auto_doc_ball") != ball_str:
+        st.session_state["auto_doc_ball"] = ball_str
+        st.session_state["auto_doc"] = ""
+
     st.divider()
 
     # ==========================================
@@ -1047,58 +1052,40 @@ def render_multi_analysis(df_data):
                     st.session_state["auto_stats"] = _astat
                     st.session_state["auto_text"] = _atext
                     if _atext:
-                        _docs = st.session_state.get("auto_docs") or {}
-                        _prev_doc = _docs.get(ball_str, "")
-                        _docs[ball_str] = _auto_merge(_prev_doc, _atext, ball_str)
-                        st.session_state["auto_docs"] = _docs
+                        _prev_doc = st.session_state.get("auto_doc") or ""
+                        st.session_state["auto_doc"] = _auto_merge(
+                            _prev_doc, _atext, ball_str)
+                        st.session_state["auto_doc_ball"] = ball_str
                         _nb = _atext.count("==========") // 2
-                        _tb = _docs[ball_str].count("==========") // 2
-                        st.success(f"{ball_str} 本次录入 {_nb} 段，"
-                                   f"该球文档共 {_tb} 段（已单独保存，不受其它球影响）")
+                        _tb = st.session_state["auto_doc"].count("==========") // 2
+                        st.success(f"{ball_str} 本次录入 {_nb} 段，当前文档共 {_tb} 段")
                     else:
                         st.warning(f"{ball_str} 按死规则筛选后没有任何触发行达标。")
                 except Exception as _e:
                     st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
 
-        _docs_show = st.session_state.get("auto_docs") or {}
-        if _docs_show:
-            st.markdown("#### 📄 分球文档（全部显示在同一处）")
-            st.caption(f"当前共 {len(_docs_show)} 个球的文档："
-                       + "、".join(sorted(_docs_show, key=lambda x: int(re.sub(r"\D", "", x) or 0))))
-            _merged_parts = []
-            _ordered = sorted(_docs_show, key=lambda x: int(re.sub(r"\D", "", x) or 0))
-            for _k in _ordered:
-                _body = _docs_show.get(_k, "")
-                st.markdown(f"**{_k}**（{_body.count(chr(61) * 10) // 2} 段）")
-                _edit = st.text_area(f"{_k} 的文档", value=_body, height=220,
-                                     key=f"auto_doc_txt_{_k}")
-                _dc1, _dc2, _dc3 = st.columns(3)
-                with _dc1:
-                    if st.button("💾 保存这份", use_container_width=True,
-                                 key=f"auto_doc_save_{_k}"):
-                        _docs_show[_k] = _edit
-                        st.session_state["auto_docs"] = _docs_show
-                        st.success(f"{_k} 已保存")
-                with _dc2:
-                    st.download_button("📥 下载这份", _edit.encode("utf-8-sig"),
-                                       file_name=f"{_k}_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                                       mime="text/plain", use_container_width=True,
-                                       key=f"auto_doc_dl_{_k}")
-                with _dc3:
-                    if st.button("🗑 清空这份", use_container_width=True,
-                                 key=f"auto_doc_clear_{_k}"):
-                        _docs_show.pop(_k, None)
-                        st.session_state["auto_docs"] = _docs_show
-                        st.rerun()
-                _merged_parts.append(f"########## {_k} ##########\n{_body}")
-                st.divider()
-
-            _all_doc = "\n\n".join(_merged_parts)
-            st.download_button("📥 下载全部（合并成一份文档）", _all_doc.encode("utf-8-sig"),
-                               file_name=f"全自动核算_全部球_{datetime.now():%Y%m%d_%H%M%S}.txt",
-                               mime="text/plain", use_container_width=True,
-                               key="auto_doc_all_dl",
-                               help="把上面每个球的文档按顺序合成一份")
+        _doc_now = st.session_state.get("auto_doc") or ""
+        if _doc_now:
+            st.markdown(f"#### 📄 {st.session_state.get('auto_doc_ball', ball_str)} 的文档"
+                        f"（{_doc_now.count(chr(61) * 10) // 2} 段）")
+            _edit = st.text_area("文档内容（可编辑）", value=_doc_now, height=340,
+                                 key="auto_doc_txt")
+            _dc1, _dc2, _dc3 = st.columns(3)
+            with _dc1:
+                if st.button("💾 保存修改", use_container_width=True, key="auto_doc_save"):
+                    st.session_state["auto_doc"] = _edit
+                    st.success("已保存")
+            with _dc2:
+                st.download_button("📥 下载这份 (TXT)", _edit.encode("utf-8-sig"),
+                                   file_name=f"{st.session_state.get('auto_doc_ball', ball_str)}"
+                                             f"_自动核算_{datetime.now():%Y%m%d_%H%M%S}.txt",
+                                   mime="text/plain", use_container_width=True,
+                                   key="auto_doc_dl")
+            with _dc3:
+                if st.button("🗑 清空", use_container_width=True, key="auto_doc_clear"):
+                    st.session_state["auto_doc"] = ""
+                    st.rerun()
+            st.caption("换球号会自动清空这份，重新开始记录新球的结果。")
 
         if st.session_state.get("auto_stats"):
             import pandas as _pda2
