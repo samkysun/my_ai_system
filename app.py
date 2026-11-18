@@ -1011,7 +1011,7 @@ def render_multi_analysis(df_data):
     with row2_col2: max_len = st.number_input("最多对比行数", min_value=3, max_value=20, value=17, step=1)
     with row2_col3:
         st.write(""); st.write("")
-        run_btn = st.button("🚀执行分析", use_container_width=True, type="primary")
+        run_btn = st.button("🚀 执行分析（原始·不筛选）", use_container_width=True, type="primary")
     with row2_col4:
         st.write(""); st.write("")
         if st.button("☁️刷新云端数据", use_container_width=True, type="secondary"):
