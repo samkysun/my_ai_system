@@ -434,6 +434,142 @@ def _v_rel(a, b, kind):
     return _V_KE.get(ca) == cb or _V_KE.get(cb) == ca
 
 
+# ==========================================
+# 全自动核算：死规则（阈值）
+#   near = 近N期一致的最小 N；self = 自身参考列匹配的最小行数；
+#   normal = 普通匹配的最小行数
+# ==========================================
+_AUTO_RULES = {
+    "生肖": {"near": 4, "self": 4, "normal": 5},
+    "尾数": {"near": 4, "self": 4, "normal": 5},
+    "数字合": {"near": 4, "self": 4, "normal": 5},
+    "数字五行": {"near": 6, "self": 6, "normal": 7},
+    "单双组合": {"near": 6, "self": 9, "normal": 9},
+    "波单双": {"near": 5, "self": 6, "normal": 6},
+    "生肖五行": {"near": 6, "self": 8, "normal": 8},
+    "尾五行": {"near": 6, "self": 8, "normal": 8},
+    "四宝": {"near": 6, "self": 9, "normal": 9},
+    "物象": {"near": 6, "self": 9, "normal": 9},
+    "阴阳天地": {"near": 6, "self": 9, "normal": 9},
+    "方位": {"near": 6, "self": 9, "normal": 9},
+    "颜色肖": {"near": 6, "self": 11, "normal": 12},
+    "波色": {"near": 6, "self": 11, "normal": 12},
+    "3模": {"near": 10, "self": 12, "normal": 12},
+    "福禄寿": {"near": 10, "self": 12, "normal": 12},
+    "大小肖": {"near": 10, "self": 12, "normal": 12},
+}
+# 门数 / 段数：按球位不同
+_AUTO_MENDUAN = {
+    1: {"near": 7, "self": 8, "normal": 9},
+    6: {"near": 7, "self": 8, "normal": 9},
+    2: {"near": 6, "self": 7, "normal": 7},
+    3: {"near": 6, "self": 7, "normal": 7},
+    4: {"near": 6, "self": 7, "normal": 7},
+    5: {"near": 6, "self": 7, "normal": 7},
+    7: {"near": 6, "self": 6, "normal": 7},
+}
+_AUTO_XIANG = {"near": 12, "self": 12, "normal": 12}   # 所有相生/相克
+
+
+def _auto_rule(attr, ball_no):
+    if "相生" in attr or "相克" in attr:
+        return dict(_AUTO_XIANG)
+    if attr in ("门数", "段数"):
+        return dict(_AUTO_MENDUAN.get(int(ball_no), {"near": 7, "self": 8, "normal": 9}))
+    return dict(_AUTO_RULES.get(attr, {"near": 6, "self": 8, "normal": 9}))
+
+
+_AUTO_LINE_RE = None
+
+
+def _auto_parse_line(ln):
+    """解析一条触发行 -> dict 或 None"""
+    import re as _re
+    global _AUTO_LINE_RE
+    if _AUTO_LINE_RE is None:
+        _AUTO_LINE_RE = _re.compile(
+            r"触发行：(?P<ball>\d)球\((?P<col>[A-Z]+)\)\s*行(?P<a>\d+)-(?P<b>\d+)"
+            r"\((?P<n>\d+)行\)(?P<mid>[^\n]*?)(?:上:.*)$")
+    mm = _AUTO_LINE_RE.search(ln)
+    if not mm:
+        return None
+    mid = mm.group("mid") or ""
+    near = None
+    mn = _re.search(r"近(\d+)期一致", mid)
+    if mn:
+        near = int(mn.group(1))
+    return {"n": int(mm.group("n")), "near": near,
+            "self": "自身参考列匹配" in ln, "col": mm.group("col")}
+
+
+def _auto_keep(line, rule):
+    """按死规则判断这条触发行是否录入"""
+    info = _auto_parse_line(line)
+    if info is None:
+        return False
+    n = info["n"]
+    if info["near"] is not None and info["near"] >= rule["near"]:
+        return True
+    if info["self"]:
+        return n >= rule["self"]
+    return n >= rule["normal"]
+
+
+def _auto_run(file_key, rows, ball_str, attrs, runner, fake):
+    """对当前球的所有属性跑一遍，按规则筛选。返回 (结果文本, 统计表, 原始行数)"""
+    import pandas as _pda
+    ball_no = int(str(ball_str).replace("第", "").replace("球", ""))
+    periods = []
+    for r in rows:
+        periods.append(f"{r[213]}{r[0]}{r[1]}{r[2]}" if len(r) > 213 else "")
+    df = _pda.DataFrame({str(i): [""] * len(rows) for i in range(29)})
+    df[str(18)] = periods
+
+    try:
+        runner.__globals__["load_excel_data"] = lambda *a, **k: rows
+    except Exception:
+        pass
+    fake.ctrl["file"] = file_key
+    fake.session_state["current_file"] = file_key
+    fake.ctrl["ball"] = ball_str
+
+    blocks, stats = [], []
+    total_in = 0
+    for attr in attrs:
+        fake.ctrl["attr"] = attr
+        fake.session_state["multi_result_text"] = ""
+        fake.session_state["multi_results_dict"] = {}
+        fake.session_state["last_multi_signature"] = None
+        fake.errors.clear()
+        try:
+            runner(df)
+        except _ScanStop:
+            pass
+        except Exception:
+            continue
+        report = fake.session_state.get("multi_result_text") or ""
+        if not report:
+            stats.append((attr, 0, 0))
+            continue
+        rule = _auto_rule(attr, ball_no)
+        kept, total = [], 0
+        for ln in report.splitlines():
+            if "触发行：" not in ln:
+                continue
+            total += 1
+            if _auto_keep(ln, rule):
+                kept.append(ln)
+        total_in += len(kept)
+        stats.append((attr, total, len(kept)))
+        if kept:
+            head = [l for l in report.splitlines() if l.startswith("==========")]
+            base = [l for l in report.splitlines() if l.startswith("【基准行排列】")]
+            blocks.append("\n".join(head + base + [""] + kept))
+
+    text = ("\n\n".join(blocks) if blocks else "")
+    return text, stats, total_in
+
+
 class _ScanST:
     """假界面：让页面函数在后台跑，只取计算结果，不碰真实 UI"""
 
@@ -854,6 +990,48 @@ def render_multi_analysis(df_data):
         st.session_state.multi_results_dict = {}
         st.session_state.multi_result_text = ""
         # 绝杀：此处绝对不能加 st.rerun()，否则会导致文件切换时无限死循环卡死
+
+    st.divider()
+
+    # ==========================================
+    # 全自动核算（单个球，按死规则筛选）
+    # ==========================================
+    with st.expander(f"🤖 全自动核算（{ball_str}，按死规则筛选）", expanded=False):
+        st.caption("自动把当前球的 29 个属性各算一遍，再按你的固定阈值筛选后录入结果区。"
+                   "**不修改任何原有核算代码**，只做外层筛选；只读数据，不写入。")
+        _rn = _auto_rule("生肖", 1)
+        _rm = _auto_rule("门数", int(ball_str.replace("第", "").replace("球", "")))
+        _rz = _auto_rule("生肖五行相生", 1)
+        st.caption(f"当前规则｜生肖·尾数·数字合：近{_rn['near']}期一致 / 自身{_rn['self']}行 / "
+                   f"普通{_rn['normal']}行　·　门数·段数（{ball_str}）：近{_rm['near']}期一致 / "
+                   f"自身{_rm['self']}行 / 普通{_rm['normal']}行　·　相生相克：{_rz['normal']}行")
+        if st.button("开始全自动核算", type="primary", use_container_width=True,
+                     key="auto_go"):
+            with st.spinner("正在核算并筛选…"):
+                try:
+                    _ar, _af = _scan_build_runner()
+                    _arows = load_excel_data(target_file, None)
+                    _atext, _astat, _ain = _auto_run(target_file.replace(".csv", ""), _arows,
+                                                     ball_str, show_attrs, _ar, _af)
+                    st.session_state["auto_stats"] = _astat
+                    st.session_state["auto_text"] = _atext
+                    if _atext:
+                        st.session_state.multi_result_text = _atext
+                        st.session_state["multi_results_dict"] = {}
+                    else:
+                        st.warning("按死规则筛选后没有任何触发行达标。")
+                except Exception as _e:
+                    st.error(f"全自动核算失败：{type(_e).__name__}: {_e}")
+
+        if st.session_state.get("auto_stats"):
+            import pandas as _pda2
+            _st = st.session_state["auto_stats"]
+            st.dataframe(_pda2.DataFrame(
+                [{"属性": a, "原有触发行": b, "录入": c, "剔除": b - c} for a, b, c in _st]),
+                use_container_width=True, hide_index=True)
+            _sum_in = sum(c for _, _, c in _st)
+            _sum_all = sum(b for _, b, _ in _st)
+            st.caption(f"合计：原有 {_sum_all} 条，录入 {_sum_in} 条，剔除 {_sum_all - _sum_in} 条")
 
     st.divider()
 
