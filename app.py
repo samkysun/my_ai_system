@@ -28,6 +28,7 @@ import io
 import base64
 import re
 import json
+import sqlite3
 from collections import Counter
 from datetime import datetime
 from openpyxl.utils import get_column_letter, column_index_from_string
@@ -1955,7 +1956,7 @@ def _ai_extract(answer):
         return []
     text = str(answer)
 
-    # 0) 最优先：AI 声明为结论的 FINAL 行（与正文里那行完全同源，保证球和文字一致）
+    # 0) 最优先：AI 声明为结论的 FINAL 行（与正文那行同源，保证球和文字一致）
     _fin = _re.search(r"FINAL\s*[:：]\s*([^\n\r]*)", text, _re.I)
     if _fin:
         _got_fin = []
@@ -1997,6 +1998,170 @@ def _ai_extract(answer):
     if not got:
         got = _nums(text)          # 兜底
     return sorted(set(got))
+
+
+def _pred_db_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_pred_history.db")
+
+
+def _pred_db_init():
+    """建表：期号+球号 唯一，同期同球只留最新一次推演"""
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred (",
+        )
+        conn.close()
+    except Exception:
+        pass
+
+
+def _pred_save(period, ball, order_type, nums):
+    """按期号+球号 upsert，同期同球覆盖为最新"""
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred ("
+            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
+        )
+        conn.execute(
+            "INSERT INTO ai_pred(period, ball, order_type, nums, ts) "
+            "VALUES(?,?,?,?,?) "
+            "ON CONFLICT(period, ball) DO UPDATE SET "
+            "order_type=excluded.order_type, nums=excluded.nums, ts=excluded.ts",
+            (str(period), str(ball), str(order_type),
+             ",".join(str(n) for n in nums),
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def _pred_load(period):
+    """取某期所有球号的推演结果 -> {ball: (nums_list, ts, order_type)}"""
+    out = {}
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred ("
+            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
+        )
+        rows = conn.execute(
+            "SELECT ball, nums, ts, order_type FROM ai_pred WHERE period=?",
+            (str(period),),
+        ).fetchall()
+        conn.close()
+        for ball, nums, ts, ot in rows:
+            lst = [int(x) for x in str(nums or "").split(",") if x.strip().isdigit()]
+            out[ball] = (lst, ts, ot)
+    except Exception:
+        pass
+    return out
+
+
+def _pred_periods():
+    """库里已存的所有期号，新的在前"""
+    out = []
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred ("
+            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
+        )
+        rows = conn.execute(
+            "SELECT DISTINCT period FROM ai_pred ORDER BY period DESC"
+        ).fetchall()
+        conn.close()
+        out = [r[0] for r in rows]
+    except Exception:
+        pass
+    return out
+
+
+def _pred_actual_nums(df_data, period):
+    """从总数据表取该期实际开奖号（6 平码 + 特码），未开奖返回 None"""
+    if df_data is None or isinstance(df_data, str):
+        return None
+    try:
+        tmp = df_data.iloc[:, 18].apply(clean_period)
+        matched = df_data[tmp == str(period)]
+        if matched.empty:
+            return None
+        row = matched.iloc[0]
+        nums = []
+        for i in range(19, 26):
+            v = clean_period(row.iloc[i]) if i < len(row) else ""
+            if v != "":
+                try:
+                    nums.append(int(v))
+                except Exception:
+                    pass
+        return nums if nums else None
+    except Exception:
+        return None
+
+
+def _pred_render_archive(df_data, default_period):
+    """推演结果存档 + 开奖对照区"""
+    st.divider()
+    st.markdown("### 📚 推演结果存档与开奖对照")
+    st.caption("按期号+球号保存 AI 推演结果（同期同球只留最新一次）。"
+               "开奖后自动从总数据表读取实际开奖号，命中的球号高亮显示。")
+
+    periods = _pred_periods()
+    if not periods:
+        st.info("暂无存档。完成一次 AI 推演后会自动保存。")
+        return
+
+    _idx = 0
+    if default_period in periods:
+        _idx = periods.index(default_period)
+    sel = st.selectbox("选择期号查看存档", periods, index=_idx, key="pred_arch_period")
+
+    data = _pred_load(sel)
+    if not data:
+        st.warning(f"{sel} 期暂无存档。")
+        return
+
+    actual = _pred_actual_nums(df_data, sel)
+    if actual:
+        st.success(f"{sel} 期已开奖，实际开奖号：" + " ".join(f"{n:02d}" for n in actual))
+    else:
+        st.info(f"{sel} 期尚未开奖，暂不做命中对照。")
+
+    ball_order = [f"第{i}球" for i in range(1, 8)]
+    for ball in ball_order:
+        if ball not in data:
+            continue
+        nums, ts, ot = data[ball]
+        st.markdown(f"**{ball}**（{ot or '-'}，推演于 {ts}）")
+        if not nums:
+            st.caption("（空）")
+            continue
+        chips = []
+        for n in nums:
+            hit = bool(actual) and n in actual
+            if hit:
+                chips.append(
+                    f"<span style='display:inline-block;min-width:38px;text-align:center;"
+                    f"padding:4px 8px;margin:3px;border-radius:6px;background:#ef4444;"
+                    f"color:#fff;font-weight:700;'>{n:02d}</span>")
+            else:
+                chips.append(
+                    f"<span style='display:inline-block;min-width:38px;text-align:center;"
+                    f"padding:4px 8px;margin:3px;border-radius:6px;background:#e5e7eb;"
+                    f"color:#111827;'>{n:02d}</span>")
+        st.markdown("<div>" + "".join(chips) + "</div>", unsafe_allow_html=True)
+        if actual:
+            _hit = [n for n in nums if n in actual]
+            st.caption(f"命中 {len(_hit)} 个：" + (
+                " ".join(f"{n:02d}" for n in _hit) if _hit else "无"))
 
 
 def render_ai(df_data):
@@ -2117,6 +2282,8 @@ def render_ai(df_data):
                                 st.success("✅ AI 推演成功！")
                                 _got = _ai_extract(answer)
                                 st.session_state.ai_ball_result = _got
+                                if _got:
+                                    _pred_save(qishu, qiu, order_type, _got)
                                 if len(_got) > 30:
                                     st.warning(
                                         f"提取到 {len(_got)} 个号码，偏多。"
@@ -2291,6 +2458,9 @@ def render_ai(df_data):
         )
     else:
         st.info("👈 请先在上方设置参数，然后点击【开始推演】。")
+
+    # 推演结果存档 + 开奖对照（默认展示当前选中期）
+    _pred_render_archive(df_data, qishu)
 
 
 # ==========================================
