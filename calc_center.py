@@ -819,6 +819,61 @@ def render(df_data, H):
         st.session_state["cc_patterns"] = pattern_rows
         st.session_state["cc_counts"] = (len(kill), len(uniq), len(keep))
 
+    # ---------- 预测下一期（未开奖） ----------
+    st.divider()
+    st.markdown("### 🔮 预测下一期（未开奖）")
+    st.caption("用全部历史数据，为下一个期号每个球位给出 4 个号（已避开按当前阈值的杀号）。")
+    _nc1, _nc2 = st.columns([1, 3])
+    with _nc1:
+        _next_go = st.button("🔮 算下一期", use_container_width=True, key="cc_next")
+    with _nc2:
+        st.caption(f"每球 4 个号 ｜ 杀号阈值 {kill_th:g} ｜ 数据全部历史")
+
+    if _next_go:
+        _rows_n = load("升序全套.csv", None) or []
+        if not _rows_n:
+            st.error("读不到 升序全套.csv")
+        else:
+            _per_n, _balls_n = _period_list(_rows_n)
+            _last = _per_n[-1] if _per_n else ""
+            try:
+                _nxt = str(int(_last) + 1)
+            except Exception:
+                _nxt = "下一期"
+            st.markdown(f"#### 目标期号：{_nxt}（上一期 {_last} 已开奖）")
+            _nr = []
+            for b in range(1, 8):
+                lo, hi = _RANGE[b]
+                hist = _balls_n[b]
+                c = Counter(x for x in hist if x and lo <= x <= hi)
+                for n in range(lo, hi + 1):
+                    c.setdefault(n, 0)
+                # 杀号
+                _rate = _omission_rates(hist)
+                _cur = _cur_omission(hist)
+                _base = 1.0 / max(1, hi - lo + 1)
+                killed = set()
+                for n in range(lo, hi + 1):
+                    pv = _rate.get(_cur.get(n, 0))
+                    if pv is not None and pv < _base * kill_th:
+                        killed.add(n)
+                # 留下的里按边际热度取前 4
+                cand = [(n, c.get(n, 0)) for n in range(lo, hi + 1) if n not in killed]
+                cand.sort(key=lambda x: (-x[1], x[0]))
+                pick = [n for n, _ in cand[:4]]
+                cum = sum(1 for v in hist if v in pick) / (len(hist) or 1)
+                _nr.append({
+                    "球位": f"第{b}球",
+                    "推荐 4 个": " ".join(f"{n:02d}" for n in pick),
+                    "历史累计命中率": f"{cum*100:.1f}%",
+                    "本球杀号数": len(killed),
+                })
+            st.dataframe(pd.DataFrame(_nr), use_container_width=True, hide_index=True)
+            _s = "　".join(f"第{r['球位'][1:2]}球:{r['推荐 4 个']}" for r in _nr)
+            st.success(f"{_nxt} 期推荐：{_s}")
+            st.caption("历史上这 4 个号在该球位出现的期数占比见第三列；"
+                       "「本球杀号数」是按阈值排除掉的号码个数。")
+
     # ---------- 仅看杀号结果 ----------
     st.divider()
     st.markdown("### 🚫 仅看杀号结果")
