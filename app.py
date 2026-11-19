@@ -2307,9 +2307,64 @@ def _pred_gh_restore(sha):
         return False
     _cur, _sha = _pred_gh_read()
     ok = _pred_gh_write(data, _sha, f"恢复存档到历史版本 {sha[:7]}")
+    _audit_append("恢复到历史版本", f"commit={sha[:7]}")
     if ok:
         st.session_state.pop("_pred_cache", None)
     return ok
+
+
+_AUDIT_FILE = "_audit_log.json"
+_AUDIT_CACHE = 200
+
+
+def _audit_read():
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return [], None
+    try:
+        r = requests.get(f"https://api.github.com/repos/{repo}/contents/{_AUDIT_FILE}",
+                         headers=hdrs, timeout=20)
+        if r.status_code == 404:
+            return [], None
+        if r.status_code != 200:
+            return [], None
+        info = r.json()
+        raw = base64.b64decode(info["content"]).decode("utf-8")
+        return (json.loads(raw) if raw.strip() else []), info["sha"]
+    except Exception:
+        return [], None
+
+
+def _audit_append(action, detail=""):
+    """追加一条审计记录：时间、用户、动作、详情，并链接上一条指纹"""
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return False
+    try:
+        logs, sha = _audit_read()
+        prev = logs[-1].get("sig", "") if logs else ""
+        rec = {
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "user": str(st.session_state.get("username", "") or "未知"),
+            "action": str(action),
+            "detail": str(detail)[:300],
+        }
+        rec["sig"] = _pred_sig({"period": rec["ts"], "ball": rec["user"],
+                                "order": rec["action"], "nums": [],
+                                "ts": rec["detail"]}, prev)
+        logs.append(rec)
+        logs = logs[-500:]
+        body = {"message": f"审计：{rec['user']} {action}",
+                "content": base64.b64encode(
+                    json.dumps(logs, ensure_ascii=False, indent=1).encode()).decode(),
+                "branch": "main"}
+        if sha:
+            body["sha"] = sha
+        r2 = requests.put(f"https://api.github.com/repos/{repo}/contents/{_AUDIT_FILE}",
+                          headers=hdrs, json=body, timeout=25)
+        return r2.status_code in (200, 201)
+    except Exception:
+        return False
 
 
 def _pred_sig(rec, prev_sig=""):
@@ -2389,6 +2444,10 @@ def _pred_save(period, ball, order_type, nums, force=False):
         data[_k] = _rec
         st.session_state["_pred_cache"] = data
         _pred_persist(f"推演存档：{period} {ball}")
+        _audit_append("保存存档",
+                      f"{period} {ball} {order_type} -> "
+                      f"{','.join(str(n) for n in nums)}"
+                      + ("（覆盖）" if _old else ""))
         return True
     except Exception:
         return False
@@ -2410,6 +2469,8 @@ def _pred_delete(period=None, ball=None, order=None):
             data.clear()
         st.session_state["_pred_cache"] = data
         _pred_persist("推演存档删除")
+        _audit_append("删除存档",
+                      f"period={period or '*'} ball={ball or '*'} order={order or '*'}")
         return True
     except Exception:
         return False
@@ -2433,6 +2494,7 @@ def _pred_restore(period, ball, order_type):
         v["history"] = _new_hist[:5]
         st.session_state["_pred_cache"] = data
         _pred_persist(f"恢复存档 {period} {ball}")
+        _audit_append("恢复存档", f"{period} {ball} {order_type}")
         return True
     except Exception:
         return False
@@ -2647,6 +2709,17 @@ def _pred_render_archive(df_data, default_period):
                     st.rerun()
                 else:
                     st.error("恢复失败：没有历史版本")
+
+    if _is_admin_now:
+        with st.expander("📋 审计日志（谁、何时、做了什么）", expanded=False):
+            _logs, _ = _audit_read()
+            if not _logs:
+                st.caption("还没有审计记录（保存/删除/恢复都会自动记录）")
+            else:
+                st.caption(f"共 {len(_logs)} 条，最新在上（追加式 + 指纹链）")
+                _show = list(reversed(_logs[-50:]))
+                st.dataframe(pd.DataFrame(_show)[["ts", "user", "action", "detail"]],
+                             use_container_width=True, hide_index=True)
 
     with st.expander("🕘 云端历史版本（可从任意一次提交恢复）", expanded=False):
         _cmts = _pred_gh_commits(15)
