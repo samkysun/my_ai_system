@@ -2313,77 +2313,101 @@ def _pred_render_archive(df_data, default_period):
         st.info("暂无存档。完成一次 AI 推演后会自动保存。")
         return
 
-    # ---------- 主表：一期一行，期号 + 7 个球位 = 8 列 ----------
-    _rows_tbl = []
-    for _p in periods:
-        _d = _pred_load(_p)
-        _act = _pred_actual_nums(df_data, _p)
-        _row = {"期号": _p}
-        for i in range(1, 8):
-            _v = _d.get(f"第{i}球")
-            if not _v or not _v[0]:
-                _row[f"第{i}球"] = "-"
-                continue
-            _nums = _v[0]
-            if _act and i - 1 < len(_act):
-                _hitn = _act[i - 1]
-                _row[f"第{i}球"] = " ".join(
-                    (f"{n:02d}✓" if n == _hitn else f"{n:02d}") for n in _nums)
+    # ---------- ① 选择期号 ----------
+    _sc1, _sc2 = st.columns([1, 2])
+    with _sc1:
+        sel = st.selectbox("选择期号查看存档", periods, key="pred_arch_period")
+    with _sc2:
+        st.write("")
+        _drawn_n = sum(1 for _p in periods if _pred_actual_nums(df_data, _p))
+        st.caption(f"共 {len(periods)} 期存档、{_drawn_n} 期已开奖；"
+                   f"选中的期会自动带上实际开奖号做命中标记")
+
+    data = _pred_load(sel)
+    if not data:
+        st.warning(f"{sel} 期暂无存档。")
+        return
+
+    actual = _pred_actual_nums(df_data, sel)
+
+    # ---------- ② 选中期的对照表（期号 + 7 球位） ----------
+    _row = {"期号": sel}
+    _hit_balls = 0
+    for i in range(1, 8):
+        _v = data.get(f"第{i}球")
+        if not _v or not _v[0]:
+            _row[f"第{i}球"] = "-"
+            continue
+        _nums = _v[0]
+        if actual and i - 1 < len(actual):
+            _hn = actual[i - 1]
+            if _hn in _nums:
+                _hit_balls += 1
+            _row[f"第{i}球"] = " ".join(
+                (f"{n:02d}✓" if n == _hn else f"{n:02d}") for n in _nums)
+        else:
+            _row[f"第{i}球"] = " ".join(f"{n:02d}" for n in _nums)
+
+    st.dataframe(pd.DataFrame([_row]), use_container_width=True, hide_index=True)
+
+    if actual:
+        st.success(f"{sel} 期已开奖，实际开奖号：" +
+                   " ".join(f"{n:02d}" for n in actual) +
+                   f"　｜　7 个球位命中 {_hit_balls} 个")
+    else:
+        st.info(f"{sel} 期尚未开奖，暂不做命中对照。")
+
+    # ---------- ③ 该期号码球（红底=命中） ----------
+    for i in range(1, 8):
+        _v = data.get(f"第{i}球")
+        if not _v or not _v[0]:
+            continue
+        chips = []
+        for n in _v[0]:
+            if actual and n in actual:
+                chips.append(
+                    f"<span style='display:inline-block;min-width:34px;text-align:center;"
+                    f"padding:3px 6px;margin:2px;border-radius:6px;background:#ef4444;"
+                    f"color:#fff;font-weight:700;'>{n:02d}</span>")
             else:
-                _row[f"第{i}球"] = " ".join(f"{n:02d}" for n in _nums)
-        _rows_tbl.append(_row)
+                chips.append(
+                    f"<span style='display:inline-block;min-width:34px;text-align:center;"
+                    f"padding:3px 6px;margin:2px;border-radius:6px;background:#e5e7eb;"
+                    f"color:#111827;'>{n:02d}</span>")
+        st.markdown(f"**第{i}球**　" + "".join(chips), unsafe_allow_html=True)
 
-    st.markdown("**【存档总表】**（✓ = 该球位实际开出的号，空表示未开奖）")
-    st.dataframe(pd.DataFrame(_rows_tbl), use_container_width=True, hide_index=True)
+    # ---------- ④ 全部期号总表（折叠） ----------
+    with st.expander(f"📜 全部 {len(periods)} 期总表", expanded=False):
+        _rows_all = []
+        for _p in periods:
+            _d = _pred_load(_p)
+            _a = _pred_actual_nums(df_data, _p)
+            _r = {"期号": _p}
+            for i in range(1, 8):
+                _v = _d.get(f"第{i}球")
+                if not _v or not _v[0]:
+                    _r[f"第{i}球"] = "-"
+                elif _a and i - 1 < len(_a) and _a[i - 1] in _v[0]:
+                    _r[f"第{i}球"] = " ".join(
+                        (f"{n:02d}✓" if n == _a[i - 1] else f"{n:02d}") for n in _v[0])
+                else:
+                    _r[f"第{i}球"] = " ".join(f"{n:02d}" for n in _v[0])
+            _rows_all.append(_r)
+        st.dataframe(pd.DataFrame(_rows_all), use_container_width=True, hide_index=True)
 
-    _drawn = [r["期号"] for r in _rows_tbl
-              if _pred_actual_nums(df_data, r["期号"])]
-    st.caption(f"共 {len(_rows_tbl)} 期存档｜已开奖 {len(_drawn)} 期"
-               + (f"（{_drawn[0]} ~ {_drawn[-1]}）" if _drawn else ""))
-
-    # ---------- 操作 ----------
-    _op1, _op2, _op3 = st.columns([1, 1, 2])
+    # ---------- ⑤ 删除 ----------
+    _op1, _op2 = st.columns(2)
     with _op1:
-        _del = st.selectbox("选择要删除的期号", periods, key="pred_del_sel")
-    with _op2:
-        st.write(""); st.write("")
-        if st.button(f"🗑 删除 {_del} 期", use_container_width=True, key="pred_del_period"):
-            if _pred_delete(period=_del):
-                st.success(f"已删除 {_del}")
+        if st.button(f"🗑 删除 {sel} 期全部存档", use_container_width=True,
+                     key="pred_del_period"):
+            if _pred_delete(period=sel):
+                st.success(f"已删除 {sel}")
                 st.rerun()
-    with _op3:
-        st.write(""); st.write("")
-        if st.button("🧹 清空全部存档", key="pred_del_all"):
+    with _op2:
+        if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all"):
             if _pred_delete():
                 st.success("已清空")
                 st.rerun()
-
-    # ---------- 选中期的号码球视图（折叠） ----------
-    with st.expander("🎱 查看某一期的号码球（带命中高亮）", expanded=False):
-        _pick = st.selectbox("期号", periods, key="pred_chip_sel")
-        _pd = _pred_load(_pick)
-        _pact = _pred_actual_nums(df_data, _pick)
-        if _pact:
-            st.success(f"{_pick} 期已开奖：" + " ".join(f"{n:02d}" for n in _pact))
-        else:
-            st.info(f"{_pick} 期尚未开奖")
-        for i in range(1, 8):
-            _v = _pd.get(f"第{i}球")
-            if not _v or not _v[0]:
-                continue
-            chips = []
-            for n in _v[0]:
-                if _pact and n in _pact:
-                    chips.append(
-                        f"<span style='display:inline-block;min-width:34px;text-align:center;"
-                        f"padding:3px 6px;margin:2px;border-radius:6px;background:#ef4444;"
-                        f"color:#fff;font-weight:700;'>{n:02d}</span>")
-                else:
-                    chips.append(
-                        f"<span style='display:inline-block;min-width:34px;text-align:center;"
-                        f"padding:3px 6px;margin:2px;border-radius:6px;background:#e5e7eb;"
-                        f"color:#111827;'>{n:02d}</span>")
-            st.markdown(f"**第{i}球**　" + "".join(chips), unsafe_allow_html=True)
 
 
 def render_ai(df_data):
