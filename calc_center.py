@@ -462,9 +462,14 @@ def render(df_data, H):
                 mg = marg.get(b, {}).get(n, 0.0)
                 kk = cur.get(n, 0)
                 om = kk / _max_omi
+                _p = rr.get(kk) or 0.0          # 该遗漏期数的历史出现率
+                _base = bc
+                _kill = 1 if (_p and _p < _base * 0.6) else 0
                 sc = 0.05 * h_ + 0.65 * mg + 0.15 * k_ - 0.10 * l_ - 0.05 * om
-                arr.append((n, h_, k_, l_, kk, mg, om, sc))
-            arr.sort(key=lambda x: -x[7])
+                if _kill:
+                    sc -= 0.15                   # 冷号额外扣分（决定要杀）
+                arr.append((n, h_, k_, l_, kk, mg, om, sc, _p, _kill))
+            arr.sort(key=lambda x: (x[9], -x[7]))   # 先留后杀
             scores[b] = arr[:8]
             for it in arr[:6]:
                 _ev = evid.get(b, {}).get(it[0], [])
@@ -472,6 +477,8 @@ def render(df_data, H):
                               "查档热度": round(it[1], 3), "边际频次": round(it[5], 2),
                               "保留分": round(it[2], 2), "杀分": round(it[3], 2),
                               "当前遗漏": it[4],
+                              "该遗漏出现率": f"{it[8]*100:.1f}%" if it[8] else "<5样本",
+                              "判定": "杀" if it[9] else "留",
                               "命中形态": len(_ev),
                               "综合分": round(it[7], 3),
                               "证据": "；".join(f"{a}·{m}({h}次)" for a, m, h in
@@ -494,6 +501,33 @@ def render(df_data, H):
     st.caption("综合分 = 边际频次×0.65 + 保留×0.15 + 查档×0.05 − 杀×0.10 − 遗漏×0.05"
                "　｜回测实据：边际热 18.6% ＞ 组合 17.9% ＞ 查档 9.3% ＜ 随机 10.5%；"
                "查档权重压到 0.05，仅用于展示证据链")
+
+    # ---------- 杀号策略 ----------
+    _kill_rows = []
+    _scores_now = st.session_state.get("cc_scores", {})
+    for b in sorted(_scores_now):
+        arr = _scores_now[b]
+        killed = [x for x in arr if x[9]]
+        kept = [x for x in arr if not x[9]]
+        if not arr:
+            continue
+        # 用该球位候选的平均出现率估算"杀错率"
+        ps = [x[8] for x in arr if x[8]]
+        avg_p = (sum(ps) / len(ps)) if ps else 0.0
+        _kill_rows.append({
+            "球位": f"第{b}球",
+            "候选数": len(arr),
+            "判杀": len(killed),
+            "判留": len(kept),
+            "被杀号": " ".join(f"{x[0]:02d}" for x in killed[:10]) or "-",
+            "杀错率(估)": f"{avg_p*100:.1f}%",
+            "杀对率(估)": f"{(1-avg_p)*100:.1f}%",
+        })
+    if _kill_rows:
+        st.markdown("**【杀号策略：宁可杀错，换多次正确】**")
+        st.dataframe(pd.DataFrame(_kill_rows), use_container_width=True, hide_index=True)
+        st.caption("判定规则：该号码当前遗漏的历史出现率 < 区间均分×0.6 → 判杀；"
+                   "「杀错率」= 这种遗漏状态下它实际开出的概率，越低说明杀得越值。")
 
     _bl = []
     for b in sorted(st.session_state.get("cc_scores", {})):
@@ -525,7 +559,10 @@ def render(df_data, H):
              "④ 遗漏修正 = 该遗漏期数历史出现率 ÷ 区间均分",
              "", "【各球位评分】"]
     for b in sorted(st.session_state.get("cc_scores", {})):
-        seg = "　".join(f"{n:02d}(分{sc:.2f})" for n, h_, k_, l_, kk, mg, om, sc
+        _kd = [x for x in st.session_state["cc_scores"][b] if x[9]]
+        if _kd:
+            lines.append(f"  第{b}球 判杀：" + " ".join(f"{x[0]:02d}" for x in _kd[:8]))
+        seg = "　".join(f"{n:02d}(分{sc:.2f})" for n, h_, k_, l_, kk, mg, om, sc, _p, _k
                         in st.session_state["cc_scores"][b][:6])
         lines.append(f"  第{b}球：{seg}")
     lines += ["", "【任务】基于以上统计，输出：",
