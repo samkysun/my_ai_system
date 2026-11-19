@@ -438,9 +438,6 @@ def render(df_data, H):
     call_ai = H["call_deepseek_api"]
 
     board = st.session_state.get("ai_board") or []
-    if not board:
-        st.info("看板里还没有内容。请先到「多维分析 / 深度联动 / 遗漏核算」点【📌 推送看板】。")
-        return
 
     st.markdown("### 🚀 一键全量分析")
     _o1, _o2 = st.columns([1, 2])
@@ -454,7 +451,13 @@ def render(df_data, H):
     opts = [f"{i+1}. {e['source']} · {e['title']}" for i, e in enumerate(board)]
     c1, c2 = st.columns([4, 1])
     with c1:
-        picks = st.multiselect("参与分析的内容（默认全选）", opts, default=opts, key="cc_picks")
+        if opts:
+            picks = st.multiselect("参与分析的内容（默认全选）", opts, default=opts,
+                                   key="cc_picks")
+        else:
+            picks = []
+            st.info("看板还是空的（可不管它，直接用上面的「🚀 开始全量分析」自己跑 1-7 球）")
+            st.caption("想让看板有内容：去「多维分析 / 深度联动 / 遗漏核算」点【📌 推送看板】。")
     with c2:
         st.write(""); st.write("")
         go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
