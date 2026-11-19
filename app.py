@@ -2615,8 +2615,15 @@ def render_ai(df_data):
                     st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）已有存档"
                                f"（推演于 {_exist_same.get('ts','')}，号码 "
                                f"{' '.join('%02d' % n for n in _exist_same.get('nums', []))}）。"
-                               "再算会覆盖它——要覆盖请勾选右边「允许覆盖本球存档」；"
-                               "存档区也提供「恢复上一版」。")
+                               "再算会覆盖它；旧版会保留在历史里，可随时恢复。")
+                    _f1, _f2 = st.columns([1, 2])
+                    with _f1:
+                        if st.button("✅ 允许覆盖并重算", key="ai_force_btn",
+                                     use_container_width=True):
+                            st.session_state["ai_allow_dup"] = True
+                            st.rerun()
+                    with _f2:
+                        st.caption("或者：右键勾选「允许覆盖本球存档」后再点推演")
                     st.stop()
                 _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
                 if (_sig == st.session_state.get("ai_last_sig")
