@@ -827,7 +827,9 @@ def render(df_data, H):
     with _nc1:
         _next_go = st.button("🔮 算下一期", use_container_width=True, key="cc_next")
     with _nc2:
-        st.caption(f"每球 4 个号 ｜ 杀号阈值 {kill_th:g} ｜ 数据全部历史")
+        _nk = st.slider("每球覆盖几个号", min_value=1, max_value=4, value=4, step=1,
+                        key="cc_next_k")
+        st.caption(f"杀号阈值 {kill_th:g} ｜ 用全部历史数据")
 
     if _next_go:
         _rows_n = load("升序全套.csv", None) or []
@@ -860,17 +862,17 @@ def render(df_data, H):
                 # 留下的里按边际热度取前 4
                 cand = [(n, c.get(n, 0)) for n in range(lo, hi + 1) if n not in killed]
                 cand.sort(key=lambda x: (-x[1], x[0]))
-                pick = [n for n, _ in cand[:4]]
+                pick = [n for n, _ in cand[:_nk]]
                 cum = sum(1 for v in hist if v in pick) / (len(hist) or 1)
                 _nr.append({
                     "球位": f"第{b}球",
-                    "推荐 4 个": " ".join(f"{n:02d}" for n in pick),
+                    f"推荐 {_nk} 个": " ".join(f"{n:02d}" for n in pick),
                     "历史累计命中率": f"{cum*100:.1f}%",
                     "本球杀号数": len(killed),
                 })
             st.dataframe(pd.DataFrame(_nr), use_container_width=True, hide_index=True)
             _s = "　".join(f"第{r['球位'][1:2]}球:{r['推荐 4 个']}" for r in _nr)
-            st.success(f"{_nxt} 期推荐：{_s}")
+            st.success(f"{_nxt} 期推荐（每球 {_nk} 个，共 {_nk*7} 注）：{_s}")
             st.caption("历史上这 4 个号在该球位出现的期数占比见第三列；"
                        "「本球杀号数」是按阈值排除掉的号码个数。")
 
