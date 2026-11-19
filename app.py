@@ -2598,40 +2598,56 @@ def render_ai(df_data):
             ' line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
 
 
+        # ---------- 推演前置检查（不中断页面） ----------
+        _exist_same = _pred_has(qishu, qiu, order_type)
+        _exist_period = _pred_load(qishu, order_type)
+        _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
+        _dup_allow = st.session_state.get("ai_allow_dup", False)
+        _blocked = False
+
+        if st.session_state.get("ai_order_confirmed") != order_type:
+            st.warning(f"⚠️ 请先确认核算模式：本次是按【{order_type}】计算吗？"
+                       "请在「核算模式」里点选一次，避免算错方向。")
+            _blocked = True
+
+        if _exist_period:
+            _balls_have = "、".join(
+                b for b in [f"第{i}球" for i in range(1, 8)] if b in _exist_period)
+            st.info(f"ℹ️ {qishu} 期（{order_type}）已核算过：{_balls_have}")
+
+        if _exist_same and not _dup_allow:
+            st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）已有存档"
+                       f"（推演于 {_exist_same.get('ts', '')}，号码 "
+                       f"{' '.join('%02d' % n for n in _exist_same.get('nums', []))}）。"
+                       "再算会覆盖它；旧版会保留在历史里，可随时恢复。")
+            _fc1, _fc2 = st.columns([1, 2])
+            with _fc1:
+                if st.button("✅ 允许覆盖并重算", key="ai_force_btn",
+                             use_container_width=True):
+                    st.session_state["ai_allow_dup"] = True
+                    st.rerun()
+            with _fc2:
+                st.caption("或者勾选下方「允许覆盖本球存档」")
+            _blocked = True
+
+        if _sig == st.session_state.get("ai_last_sig") and not _dup_allow:
+            st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）刚刚计算过，"
+                       "如需重算请勾选「允许覆盖本球存档」。")
+            _blocked = True
+
+        if not checked_texts:
+            st.caption("提示：还没有勾选任何条件，推演前请先勾选")
+            _blocked = True
+
         b1, b2 = st.columns(2)
         with b1:
-            if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
-                if st.session_state.get("ai_order_confirmed") != order_type:
-                    st.warning(f"⚠️ 请先确认核算模式：本次是按【{order_type}】计算吗？"
-                               "请在「核算模式」里重新点选一次，避免算错方向。")
-                    st.stop()
-                _exist_same = _pred_has(qishu, qiu, order_type)
-                _exist_period = _pred_load(qishu, order_type)
-                if _exist_period:
-                    _balls_have = "、".join(
-                        b for b in [f"第{i}球" for i in range(1, 8)] if b in _exist_period)
-                    st.info(f"ℹ️ {qishu} 期（{order_type}）已核算过：{_balls_have}")
-                if _exist_same and not st.session_state.get("ai_allow_dup", False):
-                    st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）已有存档"
-                               f"（推演于 {_exist_same.get('ts','')}，号码 "
-                               f"{' '.join('%02d' % n for n in _exist_same.get('nums', []))}）。"
-                               "再算会覆盖它；旧版会保留在历史里，可随时恢复。")
-                    _f1, _f2 = st.columns([1, 2])
-                    with _f1:
-                        if st.button("✅ 允许覆盖并重算", key="ai_force_btn",
-                                     use_container_width=True):
-                            st.session_state["ai_allow_dup"] = True
-                            st.rerun()
-                    with _f2:
-                        st.caption("或者：右键勾选「允许覆盖本球存档」后再点推演")
-                    st.stop()
-                _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
-                if (_sig == st.session_state.get("ai_last_sig")
-                        and not st.session_state.get("ai_allow_dup", False)):
-                    st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）刚刚计算过，"
-                               "已跳过重复调用。如需重算，请勾选右边「允许重复计算同一球」。")
-                    st.stop()
-                if not checked_texts: st.warning("请先勾选！")
+            _run_now = st.button("🚀 开始推演 (呼叫 API)", use_container_width=True,
+                                 type="primary", disabled=_blocked)
+            if _blocked:
+                st.caption("↑ 按钮暂不可用，按上面的提示处理后即可推演")
+            if _run_now:
+                if not checked_texts:
+                    st.warning("请先勾选！")
                 else:
                     #==========给AI推演加入严厉的区间警告=============
                     question = full_text + f"\n请严格根据以上文本中的【取值区间】和所有【排杀条件】，一步步详细列出推导过程，最终核算{qiu}剩余什么生肖与号码。如果全杀，请将触犯次数最少的作为后补。" + \
