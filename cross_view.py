@@ -368,11 +368,13 @@ def render(df_data, H):
                 _seg = [x[2] for x in _rows_seg]
                 _det = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球"
                                 for r in reversed(_rows_seg))
+                _p_prev = ser[i - 1][0] if i - 1 >= 0 else "-"
+                _p_next = ser[i + len(base)][0] if i + len(base) < len(ser) else "-"
                 _lines.append(
                     f"触发行：行{i+1}-{i+len(base)}({len(base)}行): "
-                    f"上:{pv if pv is not None else '-'} "
+                    f"上:{pv if pv is not None else '-'}({_p_prev}期) "
                     f"(匹配:{' '.join(str(x) for x in _seg)}) "
-                    f"下:{nv if nv is not None else '-'}"
+                    f"下:{nv if nv is not None else '-'}({_p_next}期)"
                     f"　[{periods[-1]}~{periods[0]}]")
                 _lines.append(f"　　　　　{periods[-1]}：期起始 基准列：{_det}")
             if nxt:
@@ -382,6 +384,19 @@ def render(df_data, H):
                 _lines.append("  " + "　".join(
                     f"第{i}位:{nxt.get(i,0)}次({nxt.get(i,0)/_tot_n*100:.0f}%)"
                     for i in range(1, 7)))
+                _lines.append("")
+                _lines.append("【各位置对应的期号】")
+                for _pos in range(1, 7):
+                    _ps = [x[0] for x in ser if x[2] == _pos]   # 仅列出当期之后的
+                    _periods_next = []
+                    for _k, (ii, _pe, _pv, _nv, _sm) in enumerate(hits, 1):
+                        if _nv == _pos:
+                            _pp = ser[ii + len(base)][0] if ii + len(base) < len(ser) else "-"
+                            _periods_next.append(_pp)
+                    if _periods_next:
+                        _lines.append(f"  第{_pos}位（{len(_periods_next)}次）："
+                                      + "、".join(_periods_next[:15])
+                                      + ("…" if len(_periods_next) > 15 else ""))
             _report = "\n".join(_lines)
 
             st.markdown("**文本报告（可复制/保存）**")
