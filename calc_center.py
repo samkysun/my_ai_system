@@ -939,8 +939,9 @@ def render(df_data, H):
         st.write(""); st.write("")
         _tp_go = st.button("▶ 回测这一期", use_container_width=True, key="cc_tp_go")
     with _pc3:
-        _tp_k = st.slider(每球覆盖几个号, min_value=1, max_value=7, value=4, step=1,
-                          key=cc_tp_k)
+        _tp_k = st.slider("每球覆盖几个号",
+                          min_value=1, max_value=7, value=4, step=1,
+                          key="cc_tp_k")
 
     st.caption(f"共 {len(_opts)} 个期号可选，最新在列表顶部")
 
