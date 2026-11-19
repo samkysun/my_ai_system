@@ -178,8 +178,8 @@ def find_patterns(series, base, allow_miss=0, top_n=30):
         prev_val = series[i - 1][2] if i - 1 >= 0 else None
         next_val = series[i + n][2] if i + n < len(series) else None
         hits.append((i, [x[0] for x in series[i:i + n]], prev_val, next_val, same))
-    hits.sort(key=lambda x: (-x[4], x[0]))
-    return hits[:top_n]
+    hits.sort(key=lambda x: x[0])          # 按时间排列，不再截断
+    return hits if top_n is None else hits[:top_n]
 
 
 def backtest_period(seq, which, rows_n, target, direction="up2an"):
@@ -353,7 +353,7 @@ def render(df_data, H):
                     + " → ".join(str(x) for x in base))
         st.markdown("**" + base_line(_base_rows, which, direction) + "**")
 
-        hits = find_patterns(ser, base, 0)
+        hits = find_patterns(ser, base, 0, top_n=None)   # 完全一致，取全部
         _expect = len(ser) / (6 ** len(base))
         st.markdown(f"**【触发行】**：历史中排列完全一致共出现 **{len(hits)}** 次")
         st.caption(f"（{len(base)} 行完全一致的期望出现次数约 {_expect:.2f} 次。"
@@ -362,7 +362,7 @@ def render(df_data, H):
 
         if hits:
             rows_out = []
-            for k, (i, periods, prev_val, next_val, _sm) in enumerate(hits[:50], 1):
+            for k, (i, periods, prev_val, next_val, _sm) in enumerate(hits[:60], 1):
                 rows_out.append({
                     "序": k,
                     "吻合": f"{hits[k-1][4]}/{len(base)}",
@@ -475,7 +475,7 @@ def render(df_data, H):
                     if _r["hit"]:
                         st.success("✅ 预测正确")
                     else:
-                        st.error("❌ 预测不符（本方法允许错期）")
+                        st.error("❌ 预测不符")
                     if _r["hits"]:
                         _rows_h = []
                         for k, h in enumerate(_r["hits"][:30], 1):
