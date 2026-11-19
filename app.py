@@ -2041,6 +2041,29 @@ def _pred_save(period, ball, order_type, nums):
         return False
 
 
+def _pred_delete(period=None, ball=None):
+    """删除存档：period+ball 删单球；只给 period 删整期；都不给清空全部"""
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred ("
+            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
+        )
+        if period and ball:
+            conn.execute("DELETE FROM ai_pred WHERE period=? AND ball=?",
+                         (str(period), str(ball)))
+        elif period:
+            conn.execute("DELETE FROM ai_pred WHERE period=?", (str(period),))
+        else:
+            conn.execute("DELETE FROM ai_pred")
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
 def _pred_load(period):
     """取某期所有球号的推演结果 -> {ball: (nums_list, ts, order_type)}"""
     out = {}
@@ -2124,6 +2147,22 @@ def _pred_render_archive(df_data, default_period):
         _idx = periods.index(default_period)
     sel = st.selectbox("选择期号查看存档", periods, index=_idx, key="pred_arch_period")
 
+    _dc1, _dc2, _dc3 = st.columns([1, 1, 2])
+    with _dc1:
+        if st.button(f"🗑 删除 {sel} 期", use_container_width=True, key="pred_del_period"):
+            if _pred_delete(period=sel):
+                st.success(f"已删除 {sel} 期全部存档")
+                st.rerun()
+            else:
+                st.error("删除失败（数据库被占用或不可写）")
+    with _dc2:
+        if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all"):
+            if _pred_delete():
+                st.success("已清空全部存档")
+                st.rerun()
+            else:
+                st.error("清空失败（数据库被占用或不可写）")
+
     data = _pred_load(sel)
     if not data:
         st.warning(f"{sel} 期暂无存档。")
@@ -2140,7 +2179,13 @@ def _pred_render_archive(df_data, default_period):
         if ball not in data:
             continue
         nums, ts, ot = data[ball]
-        st.markdown(f"**{ball}**（{ot or '-'}，推演于 {ts}）")
+        _lc, _rc = st.columns([6, 1])
+        with _lc:
+            st.markdown(f"**{ball}**（{ot or '-'}，推演于 {ts}）")
+        with _rc:
+            if st.button("🗑 删除", key=f"pred_del_{sel}_{ball}"):
+                if _pred_delete(period=sel, ball=ball):
+                    st.rerun()
         if not nums:
             st.caption("（空）")
             continue
