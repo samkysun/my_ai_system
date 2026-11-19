@@ -2500,27 +2500,7 @@ def _pred_render_archive(df_data, default_period):
                     f"color:#111827;'>{n:02d}</span>")
         st.markdown(f"**第{i}球**　" + "".join(chips), unsafe_allow_html=True)
 
-    # ---------- ④ 全部期号总表（折叠） ----------
-    with st.expander(f"📜 全部 {len(periods)} 期总表", expanded=False):
-        _rows_all = []
-        for _p in periods:
-            _d = _pred_load(_p)
-            _a = _pred_actual_nums(df_data, _p)
-            _r = {"期号": _p, "排序": _d.get("第1球", ("", "", "升序"))[2] or "升序"}
-            for i in range(1, 8):
-                _v = _d.get(f"第{i}球")
-                if not _v or not _v[0]:
-                    _r[f"第{i}球"] = "-"
-                elif _a and i - 1 < len(_a) and _a[i - 1] in _v[0]:
-                    _r[f"第{i}球"] = " ".join(
-                        (f"{n:02d}✓" if n == _a[i - 1] else f"{n:02d}") for n in _v[0])
-                else:
-                    _r[f"第{i}球"] = " ".join(f"{n:02d}" for n in _v[0])
-            _rows_all.append(_r)
-        st.dataframe(pd.DataFrame(_rows_all), use_container_width=True, hide_index=True)
-
-    # ---------- ⑤ 删除 ----------
-    # 历史版本恢复
+    # 恢复上一版（记录级历史）
     _hist_balls = []
     for i in range(1, 8):
         _v = data.get(f"第{i}球")
@@ -2529,12 +2509,12 @@ def _pred_render_archive(df_data, default_period):
             if _raw and _raw.get("history"):
                 _hist_balls.append(f"第{i}球")
     if _hist_balls:
-        with st.expander(f"↩ 恢复上一版（{ '、'.join(_hist_balls) } 有历史）", expanded=False):
+        with st.expander(f"↩ 恢复上一版（{'、'.join(_hist_balls)} 有历史）", expanded=False):
             _rb = st.selectbox("选择球位", _hist_balls, key="pred_restore_ball")
             _raw = _pred_has(sel, _rb, _ord) or {}
-            _hs = _raw.get("history") or []
-            for _hi, _h in enumerate(_hs):
-                st.caption(f"历史第{_hi+1}版：{' '.join('%02d' % n for n in _h.get('nums', []))}"
+            for _hi, _h in enumerate(_raw.get("history") or []):
+                st.caption(f"历史第{_hi+1}版："
+                           f"{' '.join('%02d' % n for n in _h.get('nums', []))}"
                            f"　（{_h.get('ts', '')}）")
             if st.button(f"↩ 恢复 {_rb} 上一版", key="pred_restore_btn"):
                 if _pred_restore(sel, _rb, _ord):
