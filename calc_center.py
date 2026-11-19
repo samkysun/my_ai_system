@@ -439,6 +439,16 @@ def render(df_data, H):
 
     board = st.session_state.get("ai_board") or []
 
+    with st.expander("🔧 自检（页面没显示内容时先看这里）", expanded=False):
+        st.write("版本：v9（含一键全量分析 / 两个滑块 / 回测区）")
+        st.write(f"看板条数：{len(board)}")
+        st.write(f"是否有 raw_report：{'是' if H.get('raw_report') else '否'}")
+        try:
+            _test = load("升序全套.csv", None) or []
+            st.write(f"读数据：成功，{len(_test)} 行")
+        except Exception as _e:
+            st.write(f"读数据：失败 {type(_e).__name__}: {_e}")
+
     st.markdown("### 🚀 一键全量分析")
     _o1, _o2 = st.columns([1, 2])
     with _o1:
