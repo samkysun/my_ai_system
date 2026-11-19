@@ -1,0 +1,9 @@
+[
+ {
+  "ts": "2026-11-19 18:58:36",
+  "user": "admin",
+  "action": "系统自检",
+  "detail": "audit smoke test",
+  "sig": "ebb7687542856ac3a95660867d6d9cc6ba3215ed4344fea014115c134c256ab1"
+ }
+]
