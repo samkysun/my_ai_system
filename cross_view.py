@@ -163,6 +163,39 @@ def find_patterns(series, base, allow_miss=0, top_n=30):
     return hits[:top_n]
 
 
+def backtest_period(seq, which, rows_n, target):
+    """用 target 之前的排列预测 target 的位置
+       seq 是旧->新；返回 dict"""
+    periods = [x[0] for x in seq]
+    if target not in periods:
+        return None
+    pos = periods.index(target)
+    if pos < rows_n + 5:
+        return {"error": "该期之前数据不足"}
+    posv = []
+    for q, u, a in seq:
+        try:
+            posv.append(a[:6].index(u[which - 1]) + 1)
+        except Exception:
+            posv.append(None)
+    base = posv[pos - rows_n:pos]
+    if any(v is None for v in base):
+        return {"error": "基准行含无效值"}
+
+    hits = []
+    for i in range(0, pos - rows_n):
+        if posv[i:i + rows_n] == base:
+            nxt = posv[i + rows_n] if i + rows_n < len(posv) else None
+            hits.append({"start": i, "periods": periods[i:i + rows_n], "next": nxt})
+    from collections import Counter as _C
+    dist = _C(h["next"] for h in hits if h["next"])
+    actual = posv[pos]
+    pred = dist.most_common(1)[0][0] if dist else None
+    return {"target": target, "base": base, "hits": hits, "dist": dist,
+            "actual": actual, "pred": pred,
+            "hit": (pred == actual) if pred is not None else False}
+
+
 def render(df_data, H):
     st.title("🔀 升降交集")
     st.caption("「升序」是 6 个平码从小到大排列 + 特码；「按序」是落球顺序。"
@@ -352,7 +385,53 @@ def render(df_data, H):
                              hide_index=True)
                 st.caption("「之后的取值」= 该排列出现后，更早一期的位置值（新→旧方向）。")
 
-            if H.get("board_add"):
+            # ---------- 选期号回测 ----------
+        st.markdown("**选期号回测：拿某一期做验证**")
+        _rc1, _rc2 = st.columns([2, 1])
+        with _rc1:
+            _recent = [x[0] for x in list(reversed(seq))[:200]]
+            _tgt = st.selectbox("选择要回测的期号（该期之后的数据不使用）",
+                                _recent, index=0, key="cv_seq_tgt")
+        with _rc2:
+            st.write("")
+            _bt_go = st.button("▶ 回测这一期", key="cv_seq_bt", use_container_width=True)
+
+        if _bt_go:
+            _r = backtest_period(seq, int(which), int(rows_n), _tgt)
+            if _r is None:
+                st.error("没找到这一期")
+            elif _r.get("error"):
+                st.warning(_r["error"])
+            else:
+                st.markdown(f"**{_tgt} 期回测**")
+                st.write(f"基准排列（{len(_r['base'])}行）："
+                         + " → ".join(str(x) for x in _r["base"]))
+                st.write(f"历史相同排列：**{len(_r['hits'])} 段**")
+                if _r["dist"]:
+                    _tot = sum(_r["dist"].values())
+                    st.write("后续位置分布：" + "　".join(
+                        f"第{i}位 {_r['dist'].get(i,0)}次({_r['dist'].get(i,0)/_tot*100:.0f}%)"
+                        for i in range(1, 7)))
+                    st.write(f"预测位置：**第{_r['pred']}位**　"
+                             f"实际位置：**第{_r['actual']}位**")
+                    if _r["hit"]:
+                        st.success("✅ 预测正确")
+                    else:
+                        st.error("❌ 预测不符（本方法允许错期）")
+                    if _r["hits"]:
+                        _rows_h = []
+                        for k, h in enumerate(_r["hits"][:30], 1):
+                            _rows_h.append({
+                                "序": k,
+                                "期号范围": f"{h['periods'][0]} ~ {h['periods'][-1]}",
+                                "之后的位置": h["next"],
+                            })
+                        st.dataframe(pd.DataFrame(_rows_h), use_container_width=True,
+                                     hide_index=True)
+                else:
+                    st.warning("该期的基准排列在历史中没有出现过，无法回测")
+
+        if H.get("board_add"):
                 if st.button("📌 推送到 AI 推演看板", key="cv_seq_push"):
                     txt = (f"【位置序列】升序第{which}球在按序中的位置\n"
                            f"基准排列({len(base)}行)：{base}\n"
