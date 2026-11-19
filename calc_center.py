@@ -744,6 +744,82 @@ def render(df_data, H):
         st.session_state["cc_patterns"] = pattern_rows
         st.session_state["cc_counts"] = (len(kill), len(uniq), len(keep))
 
+    # ---------- 指定期号回测 ----------
+    st.divider()
+    st.markdown("### 🎯 指定期号回测")
+    st.caption("输入一个历史期号，程序只用「该期之前」的数据算推荐，再与该期实际开奖对照。")
+    _pc1, _pc2, _pc3 = st.columns([2, 1, 2])
+    with _pc1:
+        _tp_in = st.text_input("期号（如 2026068）", value="", key="cc_tp")
+    with _pc2:
+        st.write(""); st.write("")
+        _tp_go = st.button("▶ 回测这一期", use_container_width=True, key="cc_tp_go")
+    with _pc3:
+        _tp_k = st.number_input("每球看几个号", 1, 20, 3, 1, key="cc_tp_k")
+
+    if _tp_go and _tp_in.strip():
+        _rows_p = load("升序全套.csv", None) or []
+        _res, _msg = backtest_period(_rows_p, _tp_in.strip(), int(_tp_k))
+        if _res is None:
+            st.warning(_msg)
+        else:
+            st.success(_msg)
+            st.dataframe(pd.DataFrame(_res), use_container_width=True, hide_index=True)
+            st.session_state["cc_pred_save"] = {
+                "period": _tp_in.strip(),
+                "rows": _res,
+                "k": int(_tp_k),
+            }
+            if H.get("pred_save"):
+                if st.button("💾 存入推演档案", key="cc_tp_save"):
+                    _ok = 0
+                    for _r in _res:
+                        _nums = [int(x) for x in _r["推荐"].split() if x.isdigit()]
+                        try:
+                            _ok += 1 if H["pred_save"](_tp_in.strip(),
+                                                       _r["球位"], "升序", _nums) else 0
+                        except Exception:
+                            pass
+                    st.success(f"已存入 {_ok}/7 条（可在 AI推演页的存档区查看）")
+            st.download_button("📥 下载这一期结果",
+                               pd.DataFrame(_res).to_csv(index=False).encode("utf-8-sig"),
+                               file_name=f"回测_{_tp_in.strip()}.csv",
+                               mime="text/csv", key="cc_tp_dl")
+
+    # ---------- 模型回测 ----------
+    st.divider()
+    st.markdown("### 📊 模型回测验证")
+    st.caption("用「只看过去」的方式逐期回测：边际热 / 查档 / 组合 / 随机，四种对比。"
+               "跑一次约 20~60 秒。")
+    _rc1, _rc2 = st.columns([1, 2])
+    with _rc1:
+        do_bt = st.button("▶ 跑回测", use_container_width=True, key="cc_bt")
+    with _rc2:
+        _bt_n = st.number_input("回测期数（每球）", 200, 2000, 600, 100, key="cc_bt_n")
+    if do_bt:
+        _rows_all = load("升序全套.csv", None) or []
+        if not _rows_all:
+            st.error("读不到 升序全套.csv")
+        else:
+            _pb = st.progress(0.0, text="回测中…")
+            _tab = _backtest_table(_rows_all, n_test=int(_bt_n), prog=_pb.progress)
+            _pb.empty()
+            st.session_state["cc_bt_table"] = _tab
+    _tc1, _tc2 = st.columns([1, 2])
+    with _tc1:
+        do_sw = st.button("🎯 扫描杀号阈值", use_container_width=True, key="cc_sw")
+    with _tc2:
+        st.caption("用前 70% 历史建立「遗漏→出现率」表，在后 30% 上评估："
+                   "阈值越高杀得越多，杀对率会下降——找一个平衡点。")
+    if do_sw:
+        _rows_all = load("升序全套.csv", None) or []
+        if _rows_all:
+            st.session_state["cc_sw_table"] = _threshold_sweep(_rows_all)
+    _sw = st.session_state.get("cc_sw_table")
+    if _sw:
+        st.dataframe(pd.DataFrame(_sw), use_container_width=True, hide_index=True)
+        st.caption("「杀对率」= 杀掉的号里确实没开出的比例；每期平均杀得多、杀对率又不掉，越好。")
+
     table = st.session_state.get("cc_table")
     if not table:
         return
@@ -840,82 +916,6 @@ def render(df_data, H):
         st.download_button("📥 下载统计与提示词", prompt.encode("utf-8-sig"),
                            file_name="计算中心_全量查档.txt", mime="text/plain",
                            use_container_width=True, key="cc_dl")
-
-    # ---------- 指定期号回测 ----------
-    st.divider()
-    st.markdown("### 🎯 指定期号回测")
-    st.caption("输入一个历史期号，程序只用「该期之前」的数据算推荐，再与该期实际开奖对照。")
-    _pc1, _pc2, _pc3 = st.columns([2, 1, 2])
-    with _pc1:
-        _tp_in = st.text_input("期号（如 2026068）", value="", key="cc_tp")
-    with _pc2:
-        st.write(""); st.write("")
-        _tp_go = st.button("▶ 回测这一期", use_container_width=True, key="cc_tp_go")
-    with _pc3:
-        _tp_k = st.number_input("每球看几个号", 1, 20, 3, 1, key="cc_tp_k")
-
-    if _tp_go and _tp_in.strip():
-        _rows_p = load("升序全套.csv", None) or []
-        _res, _msg = backtest_period(_rows_p, _tp_in.strip(), int(_tp_k))
-        if _res is None:
-            st.warning(_msg)
-        else:
-            st.success(_msg)
-            st.dataframe(pd.DataFrame(_res), use_container_width=True, hide_index=True)
-            st.session_state["cc_pred_save"] = {
-                "period": _tp_in.strip(),
-                "rows": _res,
-                "k": int(_tp_k),
-            }
-            if H.get("pred_save"):
-                if st.button("💾 存入推演档案", key="cc_tp_save"):
-                    _ok = 0
-                    for _r in _res:
-                        _nums = [int(x) for x in _r["推荐"].split() if x.isdigit()]
-                        try:
-                            _ok += 1 if H["pred_save"](_tp_in.strip(),
-                                                       _r["球位"], "升序", _nums) else 0
-                        except Exception:
-                            pass
-                    st.success(f"已存入 {_ok}/7 条（可在 AI推演页的存档区查看）")
-            st.download_button("📥 下载这一期结果",
-                               pd.DataFrame(_res).to_csv(index=False).encode("utf-8-sig"),
-                               file_name=f"回测_{_tp_in.strip()}.csv",
-                               mime="text/csv", key="cc_tp_dl")
-
-    # ---------- 模型回测 ----------
-    st.divider()
-    st.markdown("### 📊 模型回测验证")
-    st.caption("用「只看过去」的方式逐期回测：边际热 / 查档 / 组合 / 随机，四种对比。"
-               "跑一次约 20~60 秒。")
-    _rc1, _rc2 = st.columns([1, 2])
-    with _rc1:
-        do_bt = st.button("▶ 跑回测", use_container_width=True, key="cc_bt")
-    with _rc2:
-        _bt_n = st.number_input("回测期数（每球）", 200, 2000, 600, 100, key="cc_bt_n")
-    if do_bt:
-        _rows_all = load("升序全套.csv", None) or []
-        if not _rows_all:
-            st.error("读不到 升序全套.csv")
-        else:
-            _pb = st.progress(0.0, text="回测中…")
-            _tab = _backtest_table(_rows_all, n_test=int(_bt_n), prog=_pb.progress)
-            _pb.empty()
-            st.session_state["cc_bt_table"] = _tab
-    _tc1, _tc2 = st.columns([1, 2])
-    with _tc1:
-        do_sw = st.button("🎯 扫描杀号阈值", use_container_width=True, key="cc_sw")
-    with _tc2:
-        st.caption("用前 70% 历史建立「遗漏→出现率」表，在后 30% 上评估："
-                   "阈值越高杀得越多，杀对率会下降——找一个平衡点。")
-    if do_sw:
-        _rows_all = load("升序全套.csv", None) or []
-        if _rows_all:
-            st.session_state["cc_sw_table"] = _threshold_sweep(_rows_all)
-    _sw = st.session_state.get("cc_sw_table")
-    if _sw:
-        st.dataframe(pd.DataFrame(_sw), use_container_width=True, hide_index=True)
-        st.caption("「杀对率」= 杀掉的号里确实没开出的比例；每期平均杀得多、杀对率又不掉，越好。")
 
     # ---------- 覆盖模式：每球 K 个号，累计命中率 ----------
     if _bl:
