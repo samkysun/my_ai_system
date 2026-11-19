@@ -132,6 +132,37 @@ def rank_probs(seq_hist, A):
     return out
 
 
+def position_series(seq, which=1):
+    """返回 [(期号, 该升序球在按序中的位置1-6)]，按时间从新到旧"""
+    out = []
+    for p, u, a in reversed(seq):          # seq 是旧->新，反转成新->旧
+        try:
+            val = u[which - 1]
+            pos = a[:6].index(val) + 1
+        except Exception:
+            continue
+        out.append((p, pos))
+    return out
+
+
+def find_patterns(series, base, allow_miss=0, top_n=30):
+    """在 series（新->旧）里找与 base 相似的连续片段
+       返回 [(索引, 期号列表, 上一行值, 后续值, 吻合位数)]
+       allow_miss=0 时要求完全一致"""
+    n = len(base)
+    hits = []
+    for i in range(1, len(series) - n):          # i=0 是当前基准本身，跳过
+        seg = [x[1] for x in series[i:i + n]]
+        same = sum(1 for a, b in zip(seg, base) if a == b)
+        if same < n - allow_miss:
+            continue
+        prev_val = series[i - 1][1] if i - 1 >= 0 else None
+        next_val = series[i + n][1] if i + n < len(series) else None
+        hits.append((i, [x[0] for x in series[i:i + n]], prev_val, next_val, same))
+    hits.sort(key=lambda x: (-x[4], x[0]))
+    return hits[:top_n]
+
+
 def render(df_data, H):
     st.title("🔀 升降交集")
     st.caption("「升序」是 6 个平码从小到大排列 + 特码；「按序」是落球顺序。"
@@ -158,7 +189,8 @@ def render(df_data, H):
     with c1:
         k = st.slider("每个位置取前几个候选", 3, 20, 8, 1, key="cv_k")
     with c2:
-        mode = st.radio("模式", ["预测下一期", "回测对比"], horizontal=True, key="cv_mode")
+        mode = st.radio("模式", ["预测下一期", "回测对比", "位置序列"],
+                        horizontal=True, key="cv_mode")
 
     if mode == "预测下一期":
         st.markdown("### 下一期候选")
@@ -236,6 +268,73 @@ def render(df_data, H):
                 st.success("已推送到看板")
             else:
                 st.warning("看板接口不可用")
+
+    elif mode == "位置序列":
+        st.markdown("### 位置序列分析")
+        st.caption("把「升序第 N 球落在按序第几位」当成属性列，"
+                   "用基准行排列去历史里找同样的排列。")
+
+        _c1, _c2, _c3 = st.columns([1, 1, 1])
+        with _c1:
+            which = st.selectbox("看升序第几个球", [1, 2, 3, 4, 5, 6],
+                                 index=0, key="cv_which")
+        with _c2:
+            rows_n = st.number_input("基准行排列（几行）", 3, 20, 7, 1, key="cv_rows")
+            allow = st.number_input("允许错几位（0=完全一致）", 0, 6, 2, 1,
+                                    key="cv_allow")
+        with _c3:
+            st.write("")
+        ser = position_series(seq, int(which))
+        if not ser:
+            st.warning("没有可用的序列数据")
+            return
+
+        base = [x[1] for x in ser[:int(rows_n)]]
+        st.markdown(f"**【基准行排列】({len(base)}行)**：" + " → ".join(str(x) for x in base))
+        st.caption("（左为最新一期，按号码在按序中的位置 1~6）")
+
+        hits = find_patterns(ser, base, int(allow))
+        _exact = sum(1 for h in hits if h[4] == len(base))
+        st.markdown(f"**【触发行】**：按相似度取前 {len(hits)} 段"
+                    f"（其中完全一致 {_exact} 段）")
+
+        if hits:
+            rows_out = []
+            for k, (i, periods, prev_val, next_val) in enumerate(hits[:50], 1):
+                rows_out.append({
+                    "序": k,
+                    "吻合": f"{hits[k-1][4]}/{len(base)}",
+                    "行号": f"{i+1}-{i+len(base)}",
+                    "期号范围": f"{periods[-1]} ~ {periods[0]}",
+                    "更近一期(上一行)": prev_val if prev_val is not None else "-",
+                    "更早一期(下一行)": next_val if next_val is not None else "-",
+                })
+            st.dataframe(pd.DataFrame(rows_out), use_container_width=True,
+                         hide_index=True)
+
+            from collections import Counter as _C
+            nxt = _C(h[3] for h in hits if h[3] is not None)
+            if nxt:
+                st.markdown("**【触发行之后的取值分布】**（位置 1~6 出现次数）")
+                dist = [{"位置": f"第{i}位", "次数": nxt.get(i, 0),
+                         "占比": f"{nxt.get(i,0)/sum(nxt.values())*100:.1f}%"}
+                        for i in range(1, 7)]
+                st.dataframe(pd.DataFrame(dist), use_container_width=True,
+                             hide_index=True)
+                st.caption("「之后的取值」= 该排列出现后，更早一期的位置值（新→旧方向）。")
+
+            if H.get("board_add"):
+                if st.button("📌 推送到 AI 推演看板", key="cv_seq_push"):
+                    txt = (f"【位置序列】升序第{which}球在按序中的位置\n"
+                           f"基准排列({len(base)}行)：{base}\n"
+                           f"历史出现 {len(hits)} 次\n")
+                    for k, (i, periods, pv, nv, _sm) in enumerate(hits[:30], 1):
+                        txt += (f"  触发行{k}: 行{i+1}-{i+len(base)} "
+                                f"({periods[-1]}~{periods[0]}) 上一行={pv} 下一行={nv}\n")
+                    H["board_add"]("位置序列", f"升序第{which}球 → 按序位置", txt)
+                    st.success("已推送到看板")
+        else:
+            st.info("历史中没有出现过完全相同的排列，可以把行数调小或换一个球位试试。")
 
     else:
         st.markdown("### 回测对比")
