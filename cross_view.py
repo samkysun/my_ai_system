@@ -229,6 +229,42 @@ def backtest_period(seq, which, rows_n, target, direction="up2an"):
             "hit": (pred == actual) if pred is not None else False}
 
 
+def print_block(report_text, key="cv_print"):
+    """打印按钮：隐藏 iframe，只打印报告内容"""
+    import base64 as _b64
+    import html as _html
+    import streamlit.components.v1 as _comp
+    _body = ("<html><head><meta charset='utf-8'><style>"
+             "@page{margin:12mm}"
+             "body{font-family:Consolas,'Microsoft YaHei',monospace;padding:12px}"
+             "pre{white-space:pre-wrap;word-break:break-word;font-size:15px;"
+             "line-height:1.9;text-align:left}</style></head><body><pre>"
+             + _html.escape(report_text) + "</pre></body></html>")
+    _b = _b64.b64encode(_body.encode("utf-8")).decode()
+    _comp.html(f"""
+    <div style="text-align:center">
+      <button onclick="pr()" style="width:100%;padding:9px;background:#ffffff;
+        color:#111827;border:1px solid rgba(49,51,63,0.2);border-radius:8px;
+        cursor:pointer;font-size:14px;">🖨️ 打印</button>
+    </div>
+    <script>
+    function d(s) {{
+      return decodeURIComponent(Array.prototype.map.call(atob(s), function(c) {{
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }}).join(''));
+    }}
+    function pr() {{
+      var h = d("{_b}");
+      var f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+      document.body.appendChild(f);
+      var x = f.contentWindow.document;
+      x.open(); x.write(h); x.close();
+      setTimeout(function() {{ f.contentWindow.focus(); f.contentWindow.print(); }}, 400);
+    }}
+    </script>""", height=44, scrolling=False)
+
+
 def solve_matching(forbid_up, forbid_an=None, required=None):
     """forbid_up: {升序位1-6: [不能落的按序位...]}
        返回 (合法排列列表, 信息)  排列 = 升序位1..6 各自落在的按序位"""
@@ -693,6 +729,57 @@ def render(df_data, H):
                         with st.expander("逐期明细", expanded=False):
                             st.dataframe(pd.DataFrame(_rows_bt),
                                          use_container_width=True, hide_index=True)
+
+                # ---------- 文本报告 + 打印 ----------
+                _rl = ["========== 配位求解报告 ==========", ""]
+                _rl.append("【不在约束】")
+                for j in range(1, 7):
+                    if _f_up.get(j):
+                        _rl.append(f"  升序{j}球 不能在按序: "
+                                   + "、".join(str(x) for x in _f_up[j]))
+                for i in range(1, 7):
+                    if _f_an.get(i):
+                        _rl.append(f"  按序{i}球 不能在升序: "
+                                   + "、".join(str(x) for x in _f_an[i]))
+                _rl.append("")
+                _rl.append("【必须在约束】")
+                _any_req = False
+                for j in range(1, 7):
+                    if _req.get(j):
+                        _rl.append(f"  升序{j}位 必须在 按序第{_req[j]}球")
+                        _any_req = True
+                for i in range(1, 7):
+                    if _req_an.get(i):
+                        _rl.append(f"  按序{i}位 必须来自 升序第{_req_an[i]}位")
+                        _any_req = True
+                if not _any_req:
+                    _rl.append("  （无）")
+                _rl.append("")
+                _rl.append(f"【合法排列】共 {len(_sols)} 种")
+                _rl.append("")
+                _rl.append("【升序位 → 按序候选】")
+                for r in _rows1:
+                    _rl.append(f"  {r['升序位']} → {r['可能落在按序']}（{r['候选数']} 个）")
+                _rl.append("")
+                _rl.append("【按序位 ← 升序来源】")
+                for r in _rows2:
+                    _rl.append(f"  {r['按序位']} ← {r['可能来自升序']}（{r['候选数']} 个）")
+                _rl.append("")
+                _rl.append("【全部合法排列】（升序1~6位各自落在按序第几球）")
+                for k, _p in enumerate(_sols, 1):
+                    _rl.append(f"  {k:>3}. " + " ".join(str(x) for x in _p))
+                _report = "\n".join(_rl)
+
+                st.markdown("**报告（可编辑 / 下载 / 打印）**")
+                st.text_area("配位报告", value=_report, height=300,
+                             key="cv_solve_report", label_visibility="collapsed")
+                _pc1, _pc2 = st.columns(2)
+                with _pc1:
+                    st.download_button("📥 下载 TXT", _report.encode("utf-8-sig"),
+                                       file_name="配位求解.txt", mime="text/plain",
+                                       use_container_width=True, key="cv_solve_dl")
+                with _pc2:
+                    print_block(_report)
 
                 if H.get("board_add"):
                     if st.button("📌 推送到 AI 推演看板", key="cv_solve_push"):
