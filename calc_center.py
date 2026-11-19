@@ -827,7 +827,7 @@ def render(df_data, H):
     with _nc1:
         _next_go = st.button("🔮 算下一期", use_container_width=True, key="cc_next")
     with _nc2:
-        _nk = st.slider("每球覆盖几个号", min_value=1, max_value=4, value=4, step=1,
+        _nk = st.slider("每球覆盖几个号", min_value=1, max_value=7, value=4, step=1,
                         key="cc_next_k")
         st.caption(f"杀号阈值 {kill_th:g} ｜ 用全部历史数据")
 
