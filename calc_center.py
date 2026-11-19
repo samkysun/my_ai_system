@@ -466,9 +466,10 @@ def render(df_data, H):
         full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
                                 value=True, key="cc_full")
 
+    _maxk = st.session_state.get("cc_max_k_hint", 20)
     pick_k = st.slider(
-        "每球推荐几个号（想看几个就滑到几个）",
-        min_value=1, max_value=12, value=3, step=1, key="cc_pick_k")
+        "每球推荐几个号（想看几个就滑到几个，1~20 任意）",
+        min_value=1, max_value=20, value=3, step=1, key="cc_pick_k")
 
     kill_th = st.slider(
         "杀号阈值（×区间均分）：越高杀得越多　—　回测显示 0.8~0.9 性价比较好",
