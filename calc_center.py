@@ -262,6 +262,99 @@ def _cur_omission(series):
     return out
 
 
+def _backtest_table(rows, n_test=600, start=300, prog=None):
+    """滚动回测：边际热 / 查档 / 组合 / 随机，四者对比"""
+    RNG = _RANGE
+
+    def series(ball):
+        i10 = 3 + (ball - 1) * 30
+        i1 = i10 + 1
+        out = []
+        for r in rows[2:]:
+            if len(r) <= i1:
+                continue
+            try:
+                out.append(int((r[i10].strip() + r[i1].strip()) or 0))
+            except Exception:
+                pass
+        return out
+
+    def attr_of(n, kind):
+        if kind == "尾数":
+            return n % 10
+        if kind == "数字合":
+            return sum(map(int, str(n)))
+        return 1 if n <= 9 else min(5, (n - 1) // 10 + 1)
+
+    def nums_for(kind, v, lo, hi):
+        if kind == "尾数":
+            return [n for n in range(lo, hi + 1) if n % 10 == v]
+        if kind == "数字合":
+            return [n for n in range(lo, hi + 1) if sum(map(int, str(n))) == v]
+        return [n for n in range(lo, hi + 1) if attr_of(n, "门数") == v]
+
+    L = 6
+    out = []
+    tot = {"q": [0, 0], "m": [0, 0], "c": [0, 0], "u": 0.0}
+    for b in range(1, 8):
+        if prog:
+            prog(b / 7.0, text=f"回测第{b}球…")
+        seq = series(b)
+        lo, hi = RNG[b]
+        attrs = {k: [attr_of(n, k) for n in seq] for k in ("尾数", "数字合", "门数")}
+        hq = hm = hc = 0
+        cnt = 0
+        for t_ in range(start, min(len(seq) - 1, start + n_test)):
+            actual = seq[t_]
+            if not actual:
+                continue
+            cnt += 1
+            votes = Counter()
+            for kind, arr in attrs.items():
+                if t_ < L:
+                    continue
+                pat = arr[t_ - L:t_]
+                for i in range(2, t_ - L):
+                    if arr[i:i + L] == pat:
+                        for num in nums_for(kind, arr[i + L], lo, hi):
+                            votes[num] += 1
+            top_q = [n for n, _ in votes.most_common(3)]
+            c = Counter(x for x in seq[:t_] if x and lo <= x <= hi)
+            for n in range(lo, hi + 1):
+                c.setdefault(n, 0)
+            top_m = [n for n, _ in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[:3]]
+            blend = Counter()
+            mv = max(votes.values()) if votes else 1
+            mc = max(c.values()) or 1
+            for n in range(lo, hi + 1):
+                blend[n] = votes.get(n, 0) / mv + 0.5 * c.get(n, 0) / mc
+            top_c = [n for n, _ in blend.most_common(3)]
+            hq += actual in top_q
+            hm += actual in top_m
+            hc += actual in top_c
+        if not cnt:
+            continue
+        for k, h in (("q", hq), ("m", hm), ("c", hc)):
+            tot[k][0] += h
+            tot[k][1] += cnt
+        tot["u"] += 3.0 / (hi - lo + 1) * cnt
+        out.append({"球位": f"第{b}球",
+                    "查档": f"{hq/cnt*100:.1f}%",
+                    "边际热": f"{hm/cnt*100:.1f}%",
+                    "组合": f"{hc/cnt*100:.1f}%",
+                    "随机": f"{3.0/(hi-lo+1)*100:.1f}%",
+                    "样本": cnt})
+    if tot["q"][1]:
+        n_ = tot["q"][1]
+        out.append({"球位": "合计",
+                    "查档": f"{tot['q'][0]/n_*100:.1f}%",
+                    "边际热": f"{tot['m'][0]/n_*100:.1f}%",
+                    "组合": f"{tot['c'][0]/n_*100:.1f}%",
+                    "随机": f"{tot['u']/n_*100:.1f}%",
+                    "样本": n_})
+    return out
+
+
 def render(df_data, H):
     st.title("🧮 计算中心")
     st.caption("全量查档：把看板里所有触发行拿到历史里查「之后开出了什么」，"
@@ -585,6 +678,37 @@ def render(df_data, H):
         st.download_button("📥 下载统计与提示词", prompt.encode("utf-8-sig"),
                            file_name="计算中心_全量查档.txt", mime="text/plain",
                            use_container_width=True, key="cc_dl")
+
+    # ---------- 模型回测 ----------
+    st.divider()
+    st.markdown("### 📊 模型回测验证")
+    st.caption("用「只看过去」的方式逐期回测：边际热 / 查档 / 组合 / 随机，四种对比。"
+               "跑一次约 20~60 秒。")
+    _rc1, _rc2 = st.columns([1, 2])
+    with _rc1:
+        do_bt = st.button("▶ 跑回测", use_container_width=True, key="cc_bt")
+    with _rc2:
+        _bt_n = st.number_input("回测期数（每球）", 200, 2000, 600, 100, key="cc_bt_n")
+    if do_bt:
+        _rows_all = load("升序全套.csv", None) or []
+        if not _rows_all:
+            st.error("读不到 升序全套.csv")
+        else:
+            _pb = st.progress(0.0, text="回测中…")
+            _tab = _backtest_table(_rows_all, n_test=int(_bt_n), prog=_pb.progress)
+            _pb.empty()
+            st.session_state["cc_bt_table"] = _tab
+    _bt = st.session_state.get("cc_bt_table")
+    if _bt:
+        st.dataframe(pd.DataFrame(_bt), use_container_width=True, hide_index=True)
+        st.caption("「查档」= 用最近6期属性序列去历史里找同样序列的结果；"
+                   "「边际热」= 该球位历史上最常出的3个号；「组合」= 两者各半。")
+        _txt = "\n".join(f"{r['球位']}\t查档{r['查档']}\t边际热{r['边际热']}"
+                         f"\t组合{r['组合']}\t随机{r['随机']}\t样本{r['样本']}"
+                         for r in _bt)
+        st.download_button("📥 下载回测结果", _txt.encode("utf-8-sig"),
+                           file_name="模型回测.txt", mime="text/plain",
+                           key="cc_bt_dl")
 
     ans = st.session_state.get("cc_answer")
     if ans:
