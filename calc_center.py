@@ -529,44 +529,65 @@ def render(df_data, H):
         except Exception as _e:
             st.write(f"读数据：失败 {type(_e).__name__}: {_e}")
 
-    st.markdown("### 🚀 一键全量分析")
-    _o1, _o2 = st.columns([1, 2])
-    with _o1:
-        one_click = st.button("🚀 开始全量分析（1-7球 × 4~17行）",
-                              type="primary", use_container_width=True, key="cc_one")
-    with _o2:
-        st.caption("自动跑 7 个球 × 29 个属性的全部对比行数（4~17），自动去重后查档。"
-                   "不需要先推送看板。")
+    one_click = False
+    go = False
+    self_run = True
+    full_mode = True
+    kill_th = st.session_state.get("cc_kill_th", 0.8)
+    pick_k = st.session_state.get("cc_pick_k", 3)
+    picks = []
+    _have = bool(st.session_state.get("cc_table"))
+    if _have:
+        _cA, _cB = st.columns([1, 3])
+        with _cA:
+            if st.button("🧹 清空结果，重新设置", use_container_width=True,
+                         key="cc_clear"):
+                for _k in ("cc_table", "cc_scores", "cc_probs", "cc_hits",
+                           "cc_counts", "cc_patterns", "cc_bt_table",
+                           "cc_sw_table", "cc_answer", "cc_pred_save"):
+                    st.session_state.pop(_k, None)
+                st.rerun()
+        with _cB:
+            st.caption("参数已收起（界面保持整洁）。点左边按钮可重新设置并重算。")
+    if not _have:
+        st.markdown("### 🚀 一键全量分析")
+        _o1, _o2 = st.columns([1, 2])
+        with _o1:
+            one_click = st.button("🚀 开始全量分析（1-7球 × 4~17行）",
+                                  type="primary", use_container_width=True, key="cc_one")
+        with _o2:
+            st.caption("自动跑 7 个球 × 29 个属性的全部对比行数（4~17），自动去重后查档。"
+                       "不需要先推送看板。")
 
-    opts = [f"{i+1}. {e['source']} · {e['title']}" for i, e in enumerate(board)]
-    c1, c2 = st.columns([4, 1])
-    with c1:
-        if opts:
-            picks = st.multiselect("参与分析的内容（默认全选）", opts, default=opts,
-                                   key="cc_picks")
-        else:
-            picks = []
-            st.info("看板还是空的（可不管它，直接用上面的「🚀 开始全量分析」自己跑 1-7 球）")
-            st.caption("想让看板有内容：去「多维分析 / 深度联动 / 遗漏核算」点【📌 推送看板】。")
-    with c2:
-        st.write(""); st.write("")
-        go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
-    _c1, _c2 = st.columns([1, 1])
-    with _c1:
-        self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
-                               value=True, key="cc_self")
-    with _c2:
-        full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
-                                value=True, key="cc_full")
+        opts = [f"{i+1}. {e['source']} · {e['title']}" for i, e in enumerate(board)]
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            if opts:
+                picks = st.multiselect("参与分析的内容（默认全选）", opts, default=opts,
+                                       key="cc_picks")
+            else:
+                picks = []
+                st.info("看板还是空的（可不管它，直接用上面的「🚀 开始全量分析」自己跑 1-7 球）")
+                st.caption("想让看板有内容：去「多维分析 / 深度联动 / 遗漏核算」点【📌 推送看板】。")
+        with c2:
+            st.write(""); st.write("")
+            go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
+        _c1, _c2 = st.columns([1, 1])
+        with _c1:
+            self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
+                                   value=True, key="cc_self")
+        with _c2:
+            full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
+                                    value=True, key="cc_full")
 
-    _maxk = st.session_state.get("cc_max_k_hint", 20)
-    pick_k = st.slider(
-        "每球推荐几个号（想看几个就滑到几个，1~20 任意）",
-        min_value=1, max_value=20, value=3, step=1, key="cc_pick_k")
+        _maxk = st.session_state.get("cc_max_k_hint", 20)
+        pick_k = st.slider(
+            "每球推荐几个号（想看几个就滑到几个，1~20 任意）",
+            min_value=1, max_value=20, value=3, step=1, key="cc_pick_k")
 
-    kill_th = st.slider(
-        "杀号阈值（×区间均分）：越高杀得越多　—　回测显示 0.8~0.9 性价比较好",
-        min_value=0.3, max_value=1.2, value=0.8, step=0.05, key="cc_kill_th")
+        kill_th = st.slider(
+            "杀号阈值（×区间均分）：越高杀得越多　—　回测显示 0.8~0.9 性价比较好",
+            min_value=0.3, max_value=1.2, value=0.8, step=0.05, key="cc_kill_th")
 
     if one_click and H.get("raw_report"):
         go = True
