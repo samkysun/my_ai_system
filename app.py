@@ -2508,7 +2508,18 @@ def render_ai(df_data):
         qishu = st.selectbox("选择期数：", unique_periods, key="ai_period_sel")
     with col2:
         qiu = st.selectbox("选择球数：", _BALLS, key="ai_qiu_sel")
-    with col3: order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
+    def _mark_order():
+        st.session_state["ai_order_confirmed"] = st.session_state.get("ai_order_sel")
+
+    with col3:
+        order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True,
+                              key="ai_order_sel", on_change=_mark_order)
+    if not st.session_state.get("ai_order_confirmed"):
+        st.warning("⚠️ 还没确认核算模式：本次要按【升序】还是【按序】计算？"
+                   "请在上方「核算模式」点一下再开始推演。")
+    elif st.session_state.get("ai_order_confirmed") != order_type:
+        st.info(f"当前选择是【{order_type}】，与上次确认的"
+                f"【{st.session_state.get('ai_order_confirmed')}】不同，请再确认一次。")
 
     st.divider()
     checked_texts = []
@@ -2530,6 +2541,10 @@ def render_ai(df_data):
         b1, b2 = st.columns(2)
         with b1:
             if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
+                if st.session_state.get("ai_order_confirmed") != order_type:
+                    st.warning(f"⚠️ 请先确认核算模式：本次是按【{order_type}】计算吗？"
+                               "请在「核算模式」里重新点选一次，避免算错方向。")
+                    st.stop()
                 _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
                 if (_sig == st.session_state.get("ai_last_sig")
                         and not st.session_state.get("ai_allow_dup", False)):
