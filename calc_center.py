@@ -871,7 +871,7 @@ def render(df_data, H):
                     "本球杀号数": len(killed),
                 })
             st.dataframe(pd.DataFrame(_nr), use_container_width=True, hide_index=True)
-            _s = "　".join(f"第{r['球位'][1:2]}球:{r['推荐 4 个']}" for r in _nr)
+            _s = "　".join(f"{r['球位']}:{list(r.values())[1]}" for r in _nr)
             st.success(f"{_nxt} 期推荐（每球 {_nk} 个，共 {_nk*7} 注）：{_s}")
             st.caption("历史上这 4 个号在该球位出现的期数占比见第三列；"
                        "「本球杀号数」是按阈值排除掉的号码个数。")
