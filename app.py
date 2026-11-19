@@ -1746,6 +1746,25 @@ def render_multi_analysis(df_data):
 
 
 #=========深度联动（多套合一核算）=======
+@st.cache_data(ttl=1800, show_spinner=False)
+def _periods_of_file(file_key):
+    """取某个数据文件的期号列表（新→旧），用于下拉框"""
+    try:
+        rows = load_excel_data(file_key, None) or []
+    except Exception:
+        return []
+    seen, out = set(), []
+    for r in rows[2:]:
+        if len(r) < 214:
+            continue
+        p = f"{r[213]}{r[0]}{r[1]}{r[2]}".strip()
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    out.sort(reverse=True)
+    return out
+
+
 def render_deep_linkage(df_data):
     st.title("🔗 深度联动分析系统")
     st.info("💡 功能说明：提取基准期开奖号码的属性组合，在全历史数据中寻找相同组合，并统计命中后下一期各球位的属性频次。")
@@ -1754,8 +1773,12 @@ def render_deep_linkage(df_data):
     col1, col2, col3, col4 = st.columns(4)
     with col1: mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数",
                                         "升序数字", "按序数字", "升序门数", "按序门数"])
+    _target_file_early = "升序全套.csv" if "升序" in mode else "按序全套.csv"
     with col2:
-        if df_data is not None and not isinstance(df_data, str):
+        _file_periods = _periods_of_file(_target_file_early)
+        if _file_periods:
+            unique_periods = _file_periods
+        elif df_data is not None and not isinstance(df_data, str):
             unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
             try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
             except: unique_periods.sort(reverse=True)
@@ -1816,7 +1839,11 @@ def render_deep_linkage(df_data):
                     grouped_data[period_str] = ball_attrs
 
                 sorted_periods = sorted(list(grouped_data.keys()))
-                if selected_period not in sorted_periods: st.error(f"找不到基准期数 {selected_period}！"); st.stop()
+                if selected_period not in sorted_periods:
+                    st.error(f"【{target_file}】里没有 {selected_period} 这一期。"
+                             f"该文件期号范围：{sorted_periods[0]} ~ {sorted_periods[-1]}，"
+                             f"共 {len(sorted_periods)} 期。")
+                    st.stop()
                 target_idx = sorted_periods.index(selected_period)
                 base_attrs = grouped_data[selected_period]
                 target_combos = list(itertools.combinations(base_attrs, 3))
