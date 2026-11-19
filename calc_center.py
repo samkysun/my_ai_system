@@ -578,15 +578,16 @@ def render(df_data, H):
     picks = []
     _have = bool(st.session_state.get("cc_table"))
     if _have:
+        def _cc_clear_all():
+            for _k in ("cc_table", "cc_scores", "cc_probs", "cc_hits",
+                       "cc_counts", "cc_patterns", "cc_bt_table",
+                       "cc_sw_table", "cc_answer", "cc_pred_save"):
+                st.session_state.pop(_k, None)
+
         _cA, _cB = st.columns([1, 3])
         with _cA:
-            if st.button("🧹 清空结果，重新设置", use_container_width=True,
-                         key="cc_clear"):
-                for _k in ("cc_table", "cc_scores", "cc_probs", "cc_hits",
-                           "cc_counts", "cc_patterns", "cc_bt_table",
-                           "cc_sw_table", "cc_answer", "cc_pred_save"):
-                    st.session_state.pop(_k, None)
-                st.rerun()
+            st.button("🧹 清空结果，重新设置", use_container_width=True,
+                      key="cc_clear", on_click=_cc_clear_all)
         with _cB:
             st.caption("参数已收起（界面保持整洁）。点左边按钮可重新设置并重算。")
     if not _have:
