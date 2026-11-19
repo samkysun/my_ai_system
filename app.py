@@ -149,6 +149,12 @@ def clean_period(val):
 # ==========================================
 # 跨页面汇总看板（各页面结果 → AI推演页固定展示）
 # ==========================================
+try:
+    from calc_center import render as render_calc_center
+except Exception as _cc_err:
+    render_calc_center = None
+
+
 def _board_add(source, title, text):
     """把一段结果放进看板；同一个 source+title 会覆盖，不重复堆积。"""
     if "ai_board" not in st.session_state:
@@ -3650,7 +3656,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -3660,6 +3666,12 @@ def main_app():
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🧠 AI推演": render_ai(df_data)
+    elif page == "🧮 计算中心":
+        if render_calc_center is None:
+            st.error("缺少 calc_center.py，请把它一起上传到仓库根目录。")
+        else:
+            render_calc_center(df_data, {"load_excel_data": load_excel_data,
+                                        "call_deepseek_api": call_deepseek_api})
     elif page == "📉 遗漏统计":
         if render_omission_page:
             render_omission_page()
