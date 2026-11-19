@@ -2087,6 +2087,27 @@ def _pred_load(period):
     return out
 
 
+def _pred_rows():
+    """返回全部存档 [(期号, 球号, 时间, 号码串)]，按期号倒序"""
+    out = []
+    try:
+        conn = sqlite3.connect(_pred_db_path(), timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_pred ("
+            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
+        )
+        rows = conn.execute(
+            "SELECT period, ball, ts, nums, order_type FROM ai_pred "
+            "ORDER BY period DESC, ball"
+        ).fetchall()
+        conn.close()
+        out = rows
+    except Exception:
+        pass
+    return out
+
+
 def _pred_periods():
     """库里已存的所有期号，新的在前"""
     out = []
@@ -2136,6 +2157,29 @@ def _pred_render_archive(df_data, default_period):
     st.markdown("### 📚 推演结果存档与开奖对照")
     st.caption("按期号+球号保存 AI 推演结果（同期同球只留最新一次）。"
                "开奖后自动从总数据表读取实际开奖号，命中的球号高亮显示。")
+
+    _all_rows = _pred_rows()
+    if _all_rows:
+        _agg = {}
+        for _p, _b, _ts, _nums, _ot in _all_rows:
+            d = _agg.setdefault(_p, {"balls": [], "last": ""})
+            d["balls"].append(_b)
+            if _ts and _ts > d["last"]:
+                d["last"] = _ts
+        with st.expander(f"📜 全部期号总览（已累积 {len(_agg)} 期）", expanded=False):
+            import pandas as _pdp
+            _rows = []
+            for _p in sorted(_agg.keys(), reverse=True):
+                d = _agg[_p]
+                _rows.append({
+                    "期号": _p,
+                    "已存档球位": "、".join(
+                        sorted(d["balls"], key=lambda x: int(str(x).replace("第", "").replace("球", "") or 0))),
+                    "球位数": len(d["balls"]),
+                    "最近推演": d["last"] or "-",
+                })
+            st.dataframe(_pdp.DataFrame(_rows), use_container_width=True, hide_index=True)
+            st.caption("每期按球位累积；同一期同一球再推演会覆盖为最新一次。")
 
     periods = _pred_periods()
     if not periods:
