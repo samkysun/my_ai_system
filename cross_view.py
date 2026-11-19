@@ -575,11 +575,34 @@ def render(df_data, H):
                                   index=0, key=f"cv_rq{j}")
                 _req[j] = 0 if _v == "任意" else int(_v)
 
+        st.markdown("**反向约束：某按序位必须来自升序第几球（可选）**")
+        _cols4 = st.columns(6)
+        _req_an = {}
+        for i in range(1, 7):
+            with _cols4[i - 1]:
+                _v2 = st.selectbox(f"按序{i}位", ["任意", 1, 2, 3, 4, 5, 6],
+                                   index=0, key=f"cv_ra{i}")
+                _req_an[i] = 0 if _v2 == "任意" else int(_v2)
+
         _a, _b = st.columns(2)
         with _a:
             if st.button("🔍 计算合法排列", type="primary", key="cv_solve",
                          use_container_width=True):
-                _sols, _banned = solve_matching(_f_up, _f_an, _req)
+                # 合并正向约束：升序j必须在按序i / 按序i必须来自升序j（同一个排列约束）
+                _req_all = {j: i for j, i in _req.items() if i}
+                _conflict = []
+                for i, j in _req_an.items():
+                    if not j:
+                        continue
+                    if j in _req_all and _req_all[j] != i:
+                        _conflict.append((j, _req_all[j], i))
+                    else:
+                        _req_all[j] = i
+                if _conflict:
+                    st.error("正向约束互相冲突：" + "；".join(
+                        f"升序第{j}位被要求同时在按序第{a}球和第{b}球"
+                        for j, a, b in _conflict))
+                _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
                 st.session_state["cv_sols"] = _sols
                 st.session_state["cv_banned"] = len(_banned)
         with _b:
