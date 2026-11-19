@@ -526,6 +526,46 @@ def _auto_keep(line, rule):
     return n >= rule["normal"]
 
 
+def _raw_report_for_ball(file_key, rows, ball_str, attrs, runner, fake):
+    """跑某球全部属性，返回【未经规则筛选】的原始报告（供计算中心查档）"""
+    import pandas as _pd
+    periods = []
+    for r in rows:
+        periods.append(f"{r[213]}{r[0]}{r[1]}{r[2]}" if len(r) > 213 else "")
+    df = _pd.DataFrame({str(i): [""] * len(rows) for i in range(29)})
+    df[str(18)] = periods
+
+    try:
+        runner.__globals__["load_excel_data"] = lambda *a, **k: rows
+    except Exception:
+        pass
+    fake.session_state["_allow_raw_btn"] = True
+    fake.ctrl["file"] = file_key
+    fake.session_state["current_file"] = file_key
+    fake.ctrl["ball"] = ball_str
+    fake.min_len = 4
+    fake.max_len = 17
+
+    parts = []
+    for attr in attrs:
+        fake.ctrl["attr"] = attr
+        fake.session_state["multi_result_text"] = ""
+        fake.session_state["multi_results_dict"] = {}
+        fake.session_state["last_multi_signature"] = None
+        fake.errors.clear()
+        try:
+            with _NoComp():
+                runner(df)
+        except _ScanStop:
+            pass
+        except Exception:
+            continue
+        rep_txt = fake.session_state.get("multi_result_text") or ""
+        if rep_txt:
+            parts.append(rep_txt)
+    return "\n".join(parts)
+
+
 def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="升序"):
     """对当前球的所有属性跑一遍，按规则筛选。返回 (结果文本, 统计表, 原始行数)"""
     import pandas as _pda
@@ -3670,8 +3710,23 @@ def main_app():
         if render_calc_center is None:
             st.error("缺少 calc_center.py，请把它一起上传到仓库根目录。")
         else:
+            def _cc_raw(ball_str, file_key="升序全套"):
+                _f = "升序全套.csv" if file_key == "升序全套" else "按序全套.csv"
+                _rows = load_excel_data(_f, None) or []
+                _r, _fk = _scan_build_runner()
+                _attrs = []
+                for _n in _ast.parse(open(__file__, encoding="utf-8").read()).body:
+                    if isinstance(_n, _ast.FunctionDef) and _n.name == "render_multi_analysis":
+                        for _m in _ast.walk(_n):
+                            if (isinstance(_m, _ast.Assign) and _m.targets
+                                    and isinstance(_m.targets[0], _ast.Name)
+                                    and _m.targets[0].id == "show_attrs"):
+                                _attrs = _ast.literal_eval(_m.value)
+                return _raw_report_for_ball(file_key, _rows, ball_str, _attrs, _r, _fk)
+
             render_calc_center(df_data, {"load_excel_data": load_excel_data,
-                                        "call_deepseek_api": call_deepseek_api})
+                                        "call_deepseek_api": call_deepseek_api,
+                                        "raw_report": _cc_raw})
     elif page == "📉 遗漏统计":
         if render_omission_page:
             render_omission_page()
