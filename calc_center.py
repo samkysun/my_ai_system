@@ -71,6 +71,7 @@ def _numbers_for(attr, value, zmap=None):
 
 # ---------------- 解析 ----------------
 _AUTO_T = re.compile(r"=+\s*(\d{5,8})期(升序|按序)-(.+?)(\d)球\s*=+")
+_T_OLD = re.compile(r"=+\s*(升序全套|按序全套)\s*-\s*(\d{5,8})\s*-\s*(.+?)\s*-\s*第(\d)球\s*=+")
 _LINK_T = re.compile(r"=+\s*(升序|按序)(.+?)\s*\d?码?联动分析\s*=+")
 _LINE_AUTO = re.compile(
     r"触发行：(\d)球\(([A-Z]+)\)\s*行(\d+)-(\d+)\((\d+)行\)"
@@ -90,16 +91,24 @@ def _blocks(text):
 
 
 def collect(texts):
-    """收集全部触发行(删除法)与保留值(保留法)"""
+    """收集全部触发行(删除法)与保留值(保留法)，兼容两种标题格式"""
     if isinstance(texts, str):
         texts = [texts]
     kill, keep = [], []
     for tx in texts:
         for b in _blocks(tx):
-            m = _AUTO_T.search(b["head"])
+            head = b["head"]
+            period = attr = None
+            ball = None
+            m = _AUTO_T.search(head)
             if m:
-                attr, ball = m.group(3).strip(), int(m.group(4))
-                period = m.group(1)
+                period, attr, ball = m.group(1), m.group(3).strip(), int(m.group(4))
+            else:
+                m2 = _T_OLD.search(head)
+                if m2:
+                    period, attr, ball = m2.group(2), m2.group(3).strip(), int(m2.group(4))
+
+            if attr is not None:
                 for ln in b["lines"]:
                     mm = _LINE_AUTO.search(ln)
                     if not mm:
@@ -111,23 +120,23 @@ def collect(texts):
                         "down": mm.group(8).strip(), "period": period,
                     })
                 continue
-            m = _LINK_T.search(b["head"])
-            if m:
-                mode = m.group(2).strip()
+
+            mk = _LINK_T.search(head)
+            if mk:
+                mode = mk.group(2).strip()
                 for ln in b["lines"]:
-                    mm = _LINE_LINK.search(ln.strip())
-                    if not mm:
+                    ml = _LINE_LINK.search(ln.strip())
+                    if not ml:
                         continue
-                    ball = int(mm.group(1))
-                    seg = mm.group(2).split("杀(")[0]
+                    bl = int(ml.group(1))
+                    seg = ml.group(2).split("杀(")[0]
                     for v in re.split(r"[,，、]", seg):
                         v2 = re.sub(r"[✔✓\s]", "", v)
                         if v2:
-                            keep.append({"attr": mode, "ball": ball, "value": v2})
+                            keep.append({"attr": mode, "ball": bl, "value": v2})
     return kill, keep
 
 
-# ---------------- 历史查档 ----------------
 def _ball_cols(rows):
     """{球位: [每期号码]}（从新到旧）"""
     out = {}
@@ -245,6 +254,15 @@ def render(df_data, H):
         st.info("看板里还没有内容。请先到「多维分析 / 深度联动 / 遗漏核算」点【📌 推送看板】。")
         return
 
+    st.markdown("### 🚀 一键全量分析")
+    _o1, _o2 = st.columns([1, 2])
+    with _o1:
+        one_click = st.button("🚀 开始全量分析（1-7球 × 4~17行）",
+                              type="primary", use_container_width=True, key="cc_one")
+    with _o2:
+        st.caption("自动跑 7 个球 × 29 个属性的全部对比行数（4~17），自动去重后查档。"
+                   "不需要先推送看板。")
+
     opts = [f"{i+1}. {e['source']} · {e['title']}" for i, e in enumerate(board)]
     c1, c2 = st.columns([4, 1])
     with c1:
@@ -254,6 +272,10 @@ def render(df_data, H):
         go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
     self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
                            value=False, key="cc_self")
+
+    if one_click and H.get("raw_report"):
+        go = True
+        self_run = True
 
     if go:
         texts = []
@@ -283,6 +305,16 @@ def render(df_data, H):
         rows_up = load("升序全套.csv", None) or []
         rows_an = load("按序全套.csv", None) or []
 
+        # 当年映射表（查档就要用）
+        _r0 = rows_up[2] if rows_up and len(rows_up) > 2 else None
+        _yr = ""
+        if _r0 is not None:
+            try:
+                _yr = f"{_r0[213]}{_r0[0]}{_r0[1]}{_r0[2]}"[:4]
+            except Exception:
+                _yr = ""
+        zmap_early = _build_maps(rows_up, _yr)
+
         # 形态去重
         uniq = {}
         for k in kill:
@@ -295,7 +327,13 @@ def render(df_data, H):
             uniq[key]["downs"][k["down"]] += 1
             uniq[key]["windows"].append((k["a"], k["b"], k["period"]))
 
-        keys = list(uniq.keys())
+        # 瘦身：出现次数 >= MIN_OCC，按出现次数排序取前 MAX_PAT
+        MIN_OCC, MAX_PAT = 3, 800
+        _filtered = {k: v for k, v in uniq.items() if v["times"] >= MIN_OCC}
+        if not _filtered:
+            _filtered = uniq
+        keys = sorted(_filtered.keys(), key=lambda k: -_filtered[k]["times"])[:MAX_PAT]
+        st.caption(f"形态 {len(uniq)} 个 → 保留出现≥{MIN_OCC}次的前 {len(keys)} 个（查档提速）")
         total = max(1, len(keys))
         _colcache = {}
         heat = defaultdict(Counter)          # ball -> Counter(number)
@@ -324,7 +362,7 @@ def render(df_data, H):
                 continue
             nums = Counter()
             for v, c in cnt.items():
-                for num in _numbers_for(u["attr"], v, None):
+                for num in _numbers_for(u["attr"], v, zmap_early):
                     nums[num] += c
             for num, c in nums.items():
                 heat[ball][num] += c
@@ -335,14 +373,7 @@ def render(df_data, H):
             })
         bar.progress(1.0, text="查档完成")
 
-        # 映射表（用于生肖/五行）
-        year = ""
-        try:
-            r0 = rows_up[2]
-            year = f"{r0[213]}{r0[0]}{r0[1]}{r0[2]}"[:4]
-        except Exception:
-            pass
-        zmap = _build_maps(rows_up, year)
+        zmap = zmap_early
 
         # 保留 / 杀
         keep_s, kill_s = defaultdict(Counter), defaultdict(Counter)
@@ -374,7 +405,8 @@ def render(df_data, H):
             cur = _cur_omission(cols_up.get(b, [])) if cols_up else {}
             rr = omi_rate.get(b, {})
             bc = base_rate.get(b, 0.02) or 0.02
-            cand = set(hs) | set(ks) | set(kls)
+            lo_, hi_ = _RANGE.get(b, (1, 49))
+            cand = [n for n in (set(hs) | set(ks) | set(kls)) if lo_ <= n <= hi_]
             arr = []
             for n in cand:
                 h_ = hs.get(n, 0) / th
