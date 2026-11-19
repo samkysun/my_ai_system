@@ -159,8 +159,7 @@ def base_line(rows, which, direction="up2an"):
         seg = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球" for r in chrono)
     else:
         seg = "，".join(f"按序{which}球{r[1]:02d}：升序第{r[2]}位" for r in chrono)
-    span = (chrono[0][0] if len(chrono) == 1
-            else f"{chrono[0][0]} ~ {chrono[-1][0]}")
+    span = "、".join(r[0] for r in chrono)
     return f"基准期 {span}（共{len(chrono)}期）：基准列：{seg}"
 
 
@@ -404,8 +403,8 @@ def render(df_data, H):
             for k, h in enumerate(_hits[:60], 1):
                 _rows_t.append({
                     "序": k,
-                    "行号": f"{h['i']+1}-{h['i']+int(rows_n)}",
-                    "期数": f"{h['seg'][0][0]} ~ {h['seg'][-1][0]}",
+                    "序列行": f"{h['i']+1}-{h['i']+int(rows_n)}",
+                    "期数": "、".join(r[0] for r in h["seg"]),
                     "上": f"{h['up']}({h['up_p']}期)" if h["up"] is not None else "-",
                     "下": f"{h['dn']}({h['dn_p']}期)" if h["dn"] is not None else "-",
                 })
@@ -431,9 +430,9 @@ def render(df_data, H):
                     (f"升序{which}球{r[1]:02d}：按序{r[2]}球" if direction == "up2an"
                      else f"按序{which}球{r[1]:02d}：升序第{r[2]}位") for r in reversed(h["seg"])))
                 _lines.append(
-                    f"触发行{k}：行{h['i']+1}-{h['i']+int(rows_n)}({len(_base)}行): "
+                    f"触发行{k}：序列行{h['i']+1}-{h['i']+int(rows_n)}({len(_base)}行): "
                     f"上:{h['up']}({h['up_p']}期) 下:{h['dn']}({h['dn_p']}期)"
-                    f"　[{h['seg'][0][0]}~{h['seg'][-1][0]}]")
+                    f"　[{'、'.join(r[0] for r in h['seg'])}]")
                 _lines.append(f"　　　　　{h['seg'][0][0]}：{_det}")
             if _dist:
                 _lines.append("")
