@@ -47,7 +47,32 @@ except Exception:
 # ==========================================
 # 1. 全局配置与初始化
 # ==========================================
+GLOBAL_RESULT_CSS = """
+<style>
+/* ===== 所有计算结果的统一字体与颜色 ===== */
+div[data-testid="stTextArea"] textarea {
+    font-family: Consolas, 'Microsoft YaHei', 'Courier New', monospace !important;
+    font-size: 20px !important;
+    line-height: 1.85 !important;
+    font-weight: 500 !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+}
+div[data-testid="stDataFrame"] {
+    font-size: 15px !important;
+}
+div[data-testid="stDataFrame"] * {
+    font-family: Consolas, 'Microsoft YaHei', sans-serif !important;
+}
+.stMarkdown p, .stMarkdown li, .stCaption {
+    color: #1f2937;
+}
+</style>
+"""
+
+
 st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
+st.markdown(GLOBAL_RESULT_CSS, unsafe_allow_html=True)
 
 # 号码球样式（原来只用了类名没有定义，补上）
 st.markdown("""
@@ -192,10 +217,7 @@ def _board_render():
     board = st.session_state.get("ai_board") or []
     if not board:
         return
-    # 看板里的数据字体放大，方便核对
-    st.markdown(
-        '<style>div[data-testid="stTextArea"] textarea { font-size: 21px !important;'
-        ' line-height: 1.75 !important; }</style>', unsafe_allow_html=True)
+    # 字体由全局 CSS 统一控制
     with st.expander(f"📋 汇总看板（{len(board)} 条结果，来自其它页面）", expanded=True):
         c1, c2 = st.columns([1, 3])
         with c1:
@@ -1522,12 +1544,7 @@ def render_multi_analysis(df_data):
         raw_text = st.session_state.multi_result_text
         clean_text = raw_text.replace(chr(92) + 'n', chr(10)).replace(chr(92) + 'r', '')
 
-        # 结果框字体放大，方便看
-        st.markdown(
-            '<style>'
-            'div[data-testid="stTextArea"] textarea { font-size: 22px !important;'
-            ' line-height: 1.75 !important; }'
-            '</style>', unsafe_allow_html=True)
+        # 字体样式由全局 CSS 统一控制
         # key 跟内容走：内容一变，输入框就重建，才能显示新追加的结果
         _box_key = "multi_box_" + str(abs(hash(clean_text)) % (10 ** 10))
         _edited = st.text_area("详细结果（可直接编辑）", value=clean_text, height=440,
@@ -2675,9 +2692,7 @@ def render_ai(df_data):
 
         full_text = get_prefix(qishu, qiu, order_type) + "".join(checked_texts) + extra
         st.text_area("已选核算条件：", value=full_text, height=420, disabled=True)
-        st.markdown(
-            '<style>div[data-testid="stTextArea"] textarea { font-size: 17px !important;'
-            ' line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
+        # 字体由全局 CSS 统一控制
 
 
         # ---------- 推演前置检查（不中断页面） ----------
