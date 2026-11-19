@@ -395,14 +395,15 @@ def render(df_data, H):
         for i in range(0, _pos - int(rows_n)):
             if _posv[i:i + int(rows_n)] != _base:
                 continue
-            _p_prev = chrono[i - 1][0] if i - 1 >= 0 else "-"
-            _p_next = chrono[i + int(rows_n)][0] if i + int(rows_n) < len(chrono) else "-"
-            _up = _posv[i - 1] if i - 1 >= 0 else None
-            _dn = _posv[i + int(rows_n)] if i + int(rows_n) < len(chrono) else None
+            # 上 = 向上一行（更新的期）；下 = 向下一行（更旧的期）
+            _p_up = chrono[i + int(rows_n)][0] if i + int(rows_n) < len(chrono) else "-"
+            _p_dn = chrono[i - 1][0] if i - 1 >= 0 else "-"
+            _up = _posv[i + int(rows_n)] if i + int(rows_n) < len(chrono) else None
+            _dn = _posv[i - 1] if i - 1 >= 0 else None
             _seg = [(chrono[j][0], chrono[j][1], chrono[j][2])
                     for j in range(i, i + int(rows_n))]
-            _hits.append({"i": i, "up": _up, "up_p": _p_prev,
-                          "dn": _dn, "dn_p": _p_next, "seg": _seg})
+            _hits.append({"i": i, "up": _up, "up_p": _p_up,
+                          "dn": _dn, "dn_p": _p_dn, "seg": _seg})
 
         st.markdown(f"**【触发行】**：历史中 100% 相同的排列共 **{len(_hits)}** 段（不允许错位）")
 
@@ -418,9 +419,14 @@ def render(df_data, H):
                 _ro = (_rowno_up if direction == "up2an" else _rowno_an)
                 _r1 = _ro.get(h["seg"][0][0], "-")
                 _r2 = _ro.get(h["seg"][-1][0], "-")
+                try:
+                    _ra, _rb = sorted([int(_r1), int(_r2)])
+                    _rspan = f"{_ra}~{_rb}"
+                except Exception:
+                    _rspan = "-"
                 _rows_t.append({
                     "序": k,
-                    "文件行号": f"{_r1}~{_r2}" if _r1 != "-" and _r2 != "-" else "-",
+                    "文件行号": _rspan,
                     "期数": "、".join(r[0] for r in h["seg"]),
                     "上": f"{h['up']}({h['up_p']}期)" if h["up"] is not None else "-",
                     "下": f"{h['dn']}({h['dn_p']}期)" if h["dn"] is not None else "-",
@@ -449,8 +455,13 @@ def render(df_data, H):
                 _ro2 = (_rowno_up if direction == "up2an" else _rowno_an)
                 _rr1 = _ro2.get(h["seg"][0][0], "-")
                 _rr2 = _ro2.get(h["seg"][-1][0], "-")
+                try:
+                    _na, _nb = sorted([int(_rr1), int(_rr2)])
+                    _rspan2 = f"{_na}~{_nb}"
+                except Exception:
+                    _rspan2 = "-"
                 _lines.append(
-                    f"触发行{k}：行{_rr1}~{_rr2}({len(_base)}期): "
+                    f"触发行{k}：行{_rspan2}({len(_base)}期): "
                     f"上:{h['up']}({h['up_p']}期) 下:{h['dn']}({h['dn_p']}期)"
                     f"　[{'、'.join(r[0] for r in h['seg'])}]")
                 _lines.append(f"　　　　　{h['seg'][0][0]}：{_det}")
