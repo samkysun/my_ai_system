@@ -300,7 +300,7 @@ def render(df_data, H):
 
         if hits:
             rows_out = []
-            for k, (i, periods, prev_val, next_val) in enumerate(hits[:50], 1):
+            for k, (i, periods, prev_val, next_val, _sm) in enumerate(hits[:50], 1):
                 rows_out.append({
                     "序": k,
                     "吻合": f"{hits[k-1][4]}/{len(base)}",
