@@ -326,181 +326,135 @@ def render(df_data, H):
 
     elif mode == "位置序列":
         st.markdown("### 位置序列分析")
-        st.caption("把「升序第 N 球落在按序第几位」当成属性列，"
-                   "用基准行排列去历史里找同样的排列。")
+        st.caption("先选目标期号，用它之前的若干行做基准排列，再去历史里找 100% 相同的排列。")
 
-        _c0, _c1, _c2, _c3 = st.columns([1, 1, 1, 1])
-        with _c0:
+        # ---------- 目标期号 ----------
+        _periods = [x[0] for x in seq]
+        _next_p = "—"
+        try:
+            _next_p = str(int(_periods[-1]) + 1)
+        except Exception:
+            pass
+        _choices = [_next_p] + list(reversed(_periods[-300:]))
+
+        _q1, _q2, _q3, _q4 = st.columns([1, 1, 1, 1])
+        with _q1:
             _dir_label = st.selectbox("方向", ["升序 → 按序", "按序 → 升序"],
                                       index=0, key="cv_dir")
-        direction = "up2an" if _dir_label.startswith("升序") else "an2up"
-        with _c1:
+            direction = "up2an" if _dir_label.startswith("升序") else "an2up"
+        with _q2:
+            _tgt = st.selectbox(f"目标期号（下一期 {_next_p}）", _choices,
+                                index=0, key="cv_tgt")
+        with _q3:
             which = st.selectbox(
-                "看升序第几球" if direction == "up2an" else "看按序第几球",
+                "升序第几球" if direction == "up2an" else "按序第几球",
                 [1, 2, 3, 4, 5, 6], index=0, key="cv_which")
-        with _c2:
-            rows_n = st.number_input("基准行排列（几行）", 2, 20, 2, 1, key="cv_rows")
-        with _c3:
-            st.write("")
-        ser = position_series(seq, int(which), direction)
-        if not ser:
-            st.warning("没有可用的序列数据")
+        with _q4:
+            rows_n = st.number_input("基准行数", 2, 20, 3, 1, key="cv_rows")
+
+        # ---------- 序列与目标位置 ----------
+        ser = position_series(seq, int(which), direction)          # 新 -> 旧
+        chrono = list(reversed(ser))                               # 旧 -> 新
+        _posv = [x[2] for x in chrono]
+        _pere = [x[0] for x in chrono]
+
+        if _tgt in _pere:
+            _pos = _pere.index(_tgt)
+            _note = f"（该期已开奖，回测）"
+        else:
+            _pos = len(chrono)
+            _note = "（该期未开奖，预测）"
+
+        if _pos < int(rows_n):
+            st.warning("目标期之前的数据不足，无法取基准行")
             return
 
-        _base_rows = ser[:int(rows_n)]
-        base = [x[2] for x in _base_rows]
-        st.markdown(f"**【基准行排列】({len(base)}行)**："
-                    + " → ".join(str(x) for x in base))
-        st.markdown("**" + base_line(_base_rows, which, direction) + "**")
+        _base_idx = list(range(_pos - int(rows_n), _pos))
+        _base = [_posv[i] for i in _base_idx]
+        _base_rows = [(chrono[i][0], chrono[i][1], chrono[i][2]) for i in _base_idx]
 
-        hits = find_patterns(ser, base, 0, top_n=None)   # 完全一致，取全部
-        _expect = len(ser) / (6 ** len(base))
-        st.markdown(f"**【触发行】**：历史中排列 **100% 完全一致**共出现 **{len(hits)}** 次"
-                    f"（不允许任何错位）")
-        st.caption(f"（{len(base)} 行完全一致的期望出现次数约 {_expect:.2f} 次。"
-                   "这个属性只有 6 个取值，实测：2 行约 12~30 次，3 行约 0~9 次，"
-                   "4 行以上基本为 0。默认用 2 行，样本最多。）")
+        st.markdown(f"**目标期号：{_tgt}** {_note}")
+        st.markdown("**" + base_line(_base_rows, int(which), direction) + "**")
+        st.markdown(f"**基准排列（{len(_base)}行）**：" + " → ".join(str(x) for x in _base))
 
-        if hits:
-            rows_out = []
-            for k, (i, periods, prev_val, next_val, _sm) in enumerate(hits[:60], 1):
-                rows_out.append({
+        # ---------- 历史匹配（只用目标期之前的） ----------
+        _hits = []
+        for i in range(0, _pos - int(rows_n)):
+            if _posv[i:i + int(rows_n)] != _base:
+                continue
+            _p_prev = chrono[i - 1][0] if i - 1 >= 0 else "-"
+            _p_next = chrono[i + int(rows_n)][0] if i + int(rows_n) < len(chrono) else "-"
+            _up = _posv[i - 1] if i - 1 >= 0 else None
+            _dn = _posv[i + int(rows_n)] if i + int(rows_n) < len(chrono) else None
+            _seg = [(chrono[j][0], chrono[j][1], chrono[j][2])
+                    for j in range(i, i + int(rows_n))]
+            _hits.append({"i": i, "up": _up, "up_p": _p_prev,
+                          "dn": _dn, "dn_p": _p_next, "seg": _seg})
+
+        st.markdown(f"**【触发行】**：历史中 100% 相同的排列共 **{len(_hits)}** 段（不允许错位）")
+
+        if _pos < len(chrono):
+            _actual = _posv[_pos]
+            _act_p = _tgt
+        else:
+            _actual, _act_p = None, None
+
+        if _hits:
+            _rows_t = []
+            for k, h in enumerate(_hits[:60], 1):
+                _rows_t.append({
                     "序": k,
-                    "行号": f"{i+1}-{i+len(base)}",
-                    "期号范围": f"{periods[-1]} ~ {periods[0]}",
-                    "更近一期(上一行)": prev_val if prev_val is not None else "-",
-                    "更早一期(下一行)": next_val if next_val is not None else "-",
+                    "行号": f"{h['i']+1}-{h['i']+int(rows_n)}",
+                    "期数": f"{h['seg'][0][0]} ~ {h['seg'][-1][0]}",
+                    "上": f"{h['up']}({h['up_p']}期)" if h["up"] is not None else "-",
+                    "下": f"{h['dn']}({h['dn_p']}期)" if h["dn"] is not None else "-",
                 })
-            st.dataframe(pd.DataFrame(rows_out), use_container_width=True,
-                         hide_index=True)
-            from collections import Counter as _C2
-            nxt = _C2(h[3] for h in hits if h[3] is not None)
-
-            # ---------- 多维分析风格的文本报告 ----------
-            _lines = [f"========== 升序第{which}球 在按序中的位置序列 ==========",
-                      f"【基准行排列】({len(base)}行): " + " → ".join(str(x) for x in base),
-                      f"【历史命中】: 共找到 {len(hits)} 段完全一致",
-                      ""]
-            for k, (i, periods, pv, nv, _sm) in enumerate(hits, 1):
-                _rows_seg = ser[i:i + len(base)]
-                _seg = [x[2] for x in _rows_seg]
-                if direction == "up2an":
-                    _det = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球"
-                                    for r in reversed(_rows_seg))
-                else:
-                    _det = "，".join(f"按序{which}球{r[1]:02d}：升序第{r[2]}位"
-                                    for r in reversed(_rows_seg))
-                _p_prev = ser[i - 1][0] if i - 1 >= 0 else "-"
-                _p_next = ser[i + len(base)][0] if i + len(base) < len(ser) else "-"
-                _lines.append(
-                    f"触发行：行{i+1}-{i+len(base)}({len(base)}行): "
-                    f"上:{pv if pv is not None else '-'}({_p_prev}期) "
-                    f"(匹配:{' '.join(str(x) for x in _seg)}) "
-                    f"下:{nv if nv is not None else '-'}({_p_next}期)"
-                    f"　[{periods[-1]}~{periods[0]}]")
-                _lines.append(f"　　　　　{periods[-1]}：期起始 基准列：{_det}")
-            if nxt:
-                _lines.append("")
-                _lines.append("【触发行之后的位置分布】")
-                _tot_n = sum(nxt.values()) or 1
-                _lines.append("  " + "　".join(
-                    f"第{i}位:{nxt.get(i,0)}次({nxt.get(i,0)/_tot_n*100:.0f}%)"
-                    for i in range(1, 7)))
-                _lines.append("")
-                _lines.append("【各位置对应的期号】")
-                for _pos in range(1, 7):
-                    _ps = [x[0] for x in ser if x[2] == _pos]   # 仅列出当期之后的
-                    _periods_next = []
-                    for _k, (ii, _pe, _pv, _nv, _sm) in enumerate(hits, 1):
-                        if _nv == _pos:
-                            _pp = ser[ii + len(base)][0] if ii + len(base) < len(ser) else "-"
-                            _periods_next.append(_pp)
-                    if _periods_next:
-                        _lines.append(f"  第{_pos}位（{len(_periods_next)}次）："
-                                      + "、".join(_periods_next[:15])
-                                      + ("…" if len(_periods_next) > 15 else ""))
-            _report = "\n".join(_lines)
-
-            st.markdown("**文本报告（可复制/保存）**")
-            st.text_area("位置序列报告", value=_report, height=320,
-                         key="cv_seq_report", label_visibility="collapsed")
-            st.download_button("📥 下载报告", _report.encode("utf-8-sig"),
-                               file_name=f"位置序列_升序第{which}球.txt",
-                               mime="text/plain", key="cv_seq_dl")
+            st.dataframe(pd.DataFrame(_rows_t), use_container_width=True, hide_index=True)
 
             from collections import Counter as _C
-            if nxt:
-                st.markdown("**【触发行之后的取值分布】**（位置 1~6 出现次数）")
-                dist = [{"位置": f"第{i}位", "次数": nxt.get(i, 0),
-                         "占比": f"{nxt.get(i,0)/sum(nxt.values())*100:.1f}%"}
-                        for i in range(1, 7)]
-                st.dataframe(pd.DataFrame(dist), use_container_width=True,
-                             hide_index=True)
-                st.caption("「之后的取值」= 该排列出现后，更早一期的位置值（新→旧方向）。")
+            _dist = _C(h["dn"] for h in _hits if h["dn"] is not None)
+            _tot = sum(_dist.values()) or 1
+            _rows_d = [{"位置": f"第{i}位", "次数": _dist.get(i, 0),
+                        "占比": f"{_dist.get(i,0)/_tot*100:.1f}%",
+                        "期数": "、".join(h["dn_p"] for h in _hits if h["dn"] == i)[:80]}
+                       for i in range(1, 7)]
+            st.markdown("**【触发行之后的位置分布（含期数）】**")
+            st.dataframe(pd.DataFrame(_rows_d), use_container_width=True, hide_index=True)
 
-            # ---------- 选期号回测 ----------
-        st.markdown("**选期号回测：拿某一期做验证**")
-        _rc1, _rc2 = st.columns([2, 1])
-        with _rc1:
-            _recent = [x[0] for x in list(reversed(seq))[:200]]
-            _tgt = st.selectbox("选择要回测的期号（该期之后的数据不使用）",
-                                _recent, index=0, key="cv_seq_tgt")
-        with _rc2:
-            st.write("")
-            _bt_go = st.button("▶ 回测这一期", key="cv_seq_bt", use_container_width=True)
+            # 文本报告
+            _lines = [f"========== 目标期 {_tgt} {_note} ==========",
+                      base_line(_base_rows, int(which), direction),
+                      f"【基准排列】({len(_base)}行): " + " → ".join(str(x) for x in _base),
+                      f"【历史命中】: {len(_hits)} 段 100% 相同", ""]
+            for k, h in enumerate(_hits[:60], 1):
+                _det = ("，".join(
+                    (f"升序{which}球{r[1]:02d}：按序{r[2]}球" if direction == "up2an"
+                     else f"按序{which}球{r[1]:02d}：升序第{r[2]}位") for r in reversed(h["seg"])))
+                _lines.append(
+                    f"触发行{k}：行{h['i']+1}-{h['i']+int(rows_n)}({len(_base)}行): "
+                    f"上:{h['up']}({h['up_p']}期) 下:{h['dn']}({h['dn_p']}期)"
+                    f"　[{h['seg'][0][0]}~{h['seg'][-1][0]}]")
+                _lines.append(f"　　　　　{h['seg'][0][0]}：{_det}")
+            if _dist:
+                _lines.append("")
+                _lines.append("【触发行之后的位置分布】")
+                _lines.append("  " + "　".join(
+                    f"第{i}位:{_dist.get(i,0)}次({_dist.get(i,0)/_tot*100:.0f}%)"
+                    for i in range(1, 7)))
+            _report = "\n".join(_lines)
+            st.text_area("位置序列报告", value=_report, height=340,
+                         key="cv_seq_report", label_visibility="collapsed")
+            st.download_button("📥 下载报告", _report.encode("utf-8-sig"),
+                               file_name=f"位置序列_{_tgt}.txt", mime="text/plain",
+                               key="cv_seq_dl")
 
-        if _bt_go:
-            _r = backtest_period(seq, int(which), int(rows_n), _tgt, direction)
-            if _r is None:
-                st.error("没找到这一期")
-            elif _r.get("error"):
-                st.warning(_r["error"])
-            else:
-                st.markdown(f"**{_tgt} 期回测**")
-                st.write(f"基准排列（{len(_r['base'])}行）："
-                         + " → ".join(str(x) for x in _r["base"]))
-                _tpos = [x[0] for x in seq].index(_tgt)
-                _brows = [(seq[j][0], seq[j][1][int(which) - 1],
-                           seq[j][2][:6].index(seq[j][1][int(which) - 1]) + 1)
-                          for j in range(_tpos - int(rows_n), _tpos)]
-                st.markdown("**" + base_line(_brows, which, direction) + "**")
-                st.write(f"历史相同排列：**{len(_r['hits'])} 段**")
-                if _r["dist"]:
-                    _tot = sum(_r["dist"].values())
-                    st.write("后续位置分布：" + "　".join(
-                        f"第{i}位 {_r['dist'].get(i,0)}次({_r['dist'].get(i,0)/_tot*100:.0f}%)"
-                        for i in range(1, 7)))
-                    st.write(f"预测位置：**第{_r['pred']}位**　"
-                             f"实际位置：**第{_r['actual']}位**")
-                    if _r["hit"]:
-                        st.success("✅ 预测正确")
-                    else:
-                        st.error("❌ 预测不符")
-                    if _r["hits"]:
-                        _rows_h = []
-                        for k, h in enumerate(_r["hits"][:30], 1):
-                            _rows_h.append({
-                                "序": k,
-                                "期号范围": f"{h['periods'][0]} ~ {h['periods'][-1]}",
-                                "之后的位置": h["next"],
-                            })
-                        st.dataframe(pd.DataFrame(_rows_h), use_container_width=True,
-                                     hide_index=True)
-                else:
-                    st.warning("该期的基准排列在历史中没有出现过，无法回测")
-
-        if H.get("board_add"):
-                if st.button("📌 推送到 AI 推演看板", key="cv_seq_push"):
-                    txt = (f"【位置序列】升序第{which}球在按序中的位置\n"
-                           f"基准排列({len(base)}行)：{base}\n"
-                           f"历史出现 {len(hits)} 次\n")
-                    for k, (i, periods, pv, nv, _sm) in enumerate(hits[:30], 1):
-                        txt += (f"  触发行{k}: 行{i+1}-{i+len(base)} "
-                                f"({periods[-1]}~{periods[0]}) 上一行={pv} 下一行={nv}\n")
-                    H["board_add"]("位置序列", f"升序第{which}球 → 按序位置", txt)
-                    st.success("已推送到看板")
+            if _actual is not None:
+                _pred = _dist.most_common(1)[0][0] if _dist else None
+                st.markdown(f"**实际（{_act_p}）：第{_actual}位**　"
+                            f"**预测：第{_pred}位**　"
+                            + ("✅ 命中" if _pred == _actual else "❌ 不符"))
         else:
-            st.info("历史中没有出现过完全相同的排列，可以把行数调小或换一个球位试试。")
+            st.info("历史中没有出现 100% 相同的排列，可以把基准行数调小试试。")
 
     else:
         st.markdown("### 回测对比")
