@@ -279,7 +279,7 @@ def render(df_data, H):
             which = st.selectbox("看升序第几个球", [1, 2, 3, 4, 5, 6],
                                  index=0, key="cv_which")
         with _c2:
-            rows_n = st.number_input("基准行排列（几行）", 2, 20, 3, 1, key="cv_rows")
+            rows_n = st.number_input("基准行排列（几行）", 2, 20, 2, 1, key="cv_rows")
         with _c3:
             st.write("")
         ser = position_series(seq, int(which))
@@ -296,7 +296,7 @@ def render(df_data, H):
         st.markdown(f"**【触发行】**：历史中排列完全一致共出现 **{len(hits)}** 次")
         st.caption(f"（{len(base)} 行完全一致的期望出现次数约 {_expect:.2f} 次。"
                    "这个属性只有 6 个取值，实测：2 行约 12~30 次，3 行约 0~9 次，"
-                   "4 行以上基本为 0。所以行数建议 2~3 行。）")
+                   "4 行以上基本为 0。默认用 2 行，样本最多。）")
 
         if hits:
             rows_out = []
