@@ -4180,6 +4180,34 @@ def check_credentials(username, password):
     return True, "登录成功"
 
 
+def change_password(username, old_pass, new_pass):
+    """校验原密码后改密码；管理员走 Secrets，不在此处理"""
+    admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+    if username == admin_name:
+        return False, "管理员密码请在 Streamlit Secrets 的 ADMIN_PASSWORD 里修改，改完 Reboot app"
+    ok, msg = check_credentials(username, old_pass)
+    if not ok:
+        return False, f"原密码不对：{msg}"
+    if len(new_pass) < 6:
+        return False, "新密码至少 6 位"
+    if len(new_pass) > 128:
+        return False, "新密码过长"
+    if new_pass.lower() in ("123456", "password", "111111", "12345678", "abc123"):
+        return False, "这个密码太常见，请换一个"
+    if new_pass == old_pass:
+        return False, "新密码不能和原密码相同"
+    client = get_supabase_client()
+    if not client:
+        return False, "数据库连接失败"
+    try:
+        client.table("users").update(
+            {"password": hash_password(new_pass)}).eq("username", username).execute()
+        _audit_append("修改密码", f"user={username}")
+        return True, "密码已修改，下次登录请用新密码"
+    except Exception as e:
+        return False, f"修改失败：{str(e)[:200]}"
+
+
 def login_page():
     st.title("🔐 智能系统客户端登录")
     tab1, tab2 = st.tabs(["已有账号？登录", "没有账号？立即注册"])
@@ -4289,6 +4317,24 @@ def main_app():
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.rerun()
+
+        with st.expander("🔑 修改密码", expanded=False):
+            _cp1 = st.text_input("原密码", type="password", key="cp_old")
+            _cp2 = st.text_input("新密码", type="password", key="cp_new")
+            _cp3 = st.text_input("确认新密码", type="password", key="cp_new2")
+            if st.button("确认修改", key="cp_btn", use_container_width=True):
+                if not _cp1 or not _cp2 or not _cp3:
+                    st.warning("三项都要填")
+                elif _cp2 != _cp3:
+                    st.error("两次输入的新密码不一致")
+                else:
+                    _okp, _msgp = change_password(current_user, _cp1, _cp2)
+                    if _okp:
+                        st.success(_msgp)
+                        for _k in ("cp_old", "cp_new", "cp_new2"):
+                            st.session_state.pop(_k, None)
+                    else:
+                        st.error(_msgp)
         st.divider()
 
         menu_options = ["📊 主控台"]
