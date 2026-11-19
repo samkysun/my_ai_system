@@ -191,6 +191,27 @@ def _find_after(col, seq, skip=None):
     return res
 
 
+def target_period(texts):
+    """从写板标题里取期号（没有就返回空）"""
+    if isinstance(texts, str):
+        texts = [texts]
+    best = ""
+    for tx in texts:
+        for b in _blocks(tx):
+            head = b["head"]
+            m = _AUTO_T.search(head)
+            if m:
+                best = m.group(1)
+                break
+            m2 = _T_OLD.search(head)
+            if m2:
+                best = m2.group(2)
+                break
+        if best:
+            break
+    return best
+
+
 def _build_maps(rows, year):
     maps = {"生肖": {}, "数字五行": {}, "生肖五行": {}, "尾五行": {}}
     for r in rows[2:]:
@@ -310,15 +331,20 @@ def render(df_data, H):
         rows_up = load("升序全套.csv", None) or []
         rows_an = load("按序全套.csv", None) or []
 
-        # 当年映射表（查档就要用）
-        _r0 = rows_up[2] if rows_up and len(rows_up) > 2 else None
-        _yr = ""
-        if _r0 is not None:
+        # 映射表：以【被分析期号的年份】为准，不用最新年份
+        _tp = target_period(texts)
+        if _tp:
+            _yr = str(_tp)[:4]
+        else:
+            _r0 = rows_up[2] if rows_up and len(rows_up) > 2 else None
             try:
-                _yr = f"{_r0[213]}{_r0[0]}{_r0[1]}{_r0[2]}"[:4]
+                _yr = f"{_r0[213]}{_r0[0]}{_r0[1]}{_r0[2]}"[:4] if _r0 else ""
             except Exception:
                 _yr = ""
         zmap_early = _build_maps(rows_up, _yr)
+        _cov = len(zmap_early.get("生肖") or {})
+        st.caption(f"映射年份：{_yr or '未知'}（按被分析期号所属年份）"
+                   f"｜该年生肖映射覆盖 {_cov}/49 个号码")
 
         # 形态去重
         uniq = {}
