@@ -617,6 +617,10 @@ def _raw_report_for_ball(file_key, rows, ball_str, attrs, runner, fake):
         fake.session_state["multi_result_text"] = ""
         fake.session_state["multi_results_dict"] = {}
         fake.session_state["last_multi_signature"] = None
+        # 关键：把两个模式的存档槽也清空，否则算不出结果时会沿用上一个属性的内容
+        fake.session_state["text_single"] = ""
+        fake.session_state["text_all"] = ""
+        fake.session_state["full_scan_results"] = []
         fake.errors.clear()
         try:
             with _NoComp():
@@ -660,6 +664,10 @@ def _auto_run(file_key, rows, ball_str, attrs, runner, fake, period="", order="�
         fake.session_state["multi_result_text"] = ""
         fake.session_state["multi_results_dict"] = {}
         fake.session_state["last_multi_signature"] = None
+        # 关键：把两个模式的存档槽也清空，否则算不出结果时会沿用上一个属性的内容
+        fake.session_state["text_single"] = ""
+        fake.session_state["text_all"] = ""
+        fake.session_state["full_scan_results"] = []
         fake.errors.clear()
         try:
             with _NoComp():
