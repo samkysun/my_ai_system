@@ -2312,6 +2312,52 @@ def _pred_gh_restore(sha):
     return ok
 
 
+def _pred_sig(rec, prev_sig=""):
+    """记录指纹：内容 + 上一条指纹，任一处被改都会变"""
+    import hashlib as _h
+    raw = "|".join([
+        str(rec.get("period", "")),
+        str(rec.get("ball", "")),
+        str(rec.get("order", "")),
+        ",".join(str(n) for n in rec.get("nums", [])),
+        str(rec.get("ts", "")),
+        str(prev_sig or ""),
+    ])
+    return _h.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _pred_verify():
+    """校验全部记录 -> (通过数, 问题列表)"""
+    data = _pred_load_all()
+    keys = sorted(data.keys())
+    prev = ""
+    ok, bad = 0, []
+    for k in keys:
+        rec = data[k]
+        want = _pred_sig(rec, prev)
+        got = str(rec.get("sig", ""))
+        if not got:
+            bad.append((k, "缺少指纹（旧数据或未签名）"))
+        elif got != want:
+            bad.append((k, "指纹不匹配（内容被改动）"))
+        else:
+            ok += 1
+        prev = want
+    return ok, bad
+
+
+def _pred_sign_all():
+    """为全部记录补算指纹链（迁移旧数据用）"""
+    data = _pred_load_all()
+    prev = ""
+    for k in sorted(data.keys()):
+        rec = data[k]
+        rec["sig"] = _pred_sig(rec, prev)
+        prev = rec["sig"]
+    st.session_state["_pred_cache"] = data
+    return _pred_persist("重建完整性指纹")
+
+
 def _pred_has(period, ball, order_type):
     """该期该球该排序是否已有存档 -> 有则返回记录，否则 None"""
     return _pred_load_all().get(f"{period}|{ball}|{order_type or ''}")
@@ -2329,12 +2375,18 @@ def _pred_save(period, ball, order_type, nums, force=False):
         if _old:
             _hist.insert(0, {"nums": _old.get("nums", []), "ts": _old.get("ts", "")})
             _hist = _hist[:5]
-        data[_k] = {"period": str(period),
-                    "ball": str(ball),
-                    "order": str(order_type or ""),
-                    "nums": [int(n) for n in nums],
-                    "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "history": _hist}
+        _prev_sig = ""
+        for _kk in sorted(data.keys()):
+            if _kk < _k:
+                _prev_sig = str(data[_kk].get("sig", "")) or _prev_sig
+        _rec = {"period": str(period),
+                "ball": str(ball),
+                "order": str(order_type or ""),
+                "nums": [int(n) for n in nums],
+                "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "history": _hist}
+        _rec["sig"] = _pred_sig(_rec, _prev_sig)
+        data[_k] = _rec
         st.session_state["_pred_cache"] = data
         _pred_persist(f"推演存档：{period} {ball}")
         return True
@@ -2484,6 +2536,20 @@ def _pred_render_archive(df_data, default_period):
             _r["命中球位"] = _hit if _a else "-"
             _rows_all2.append(_r)
 
+    # 完整性校验
+    _ok_n, _bad = _pred_verify()
+    _is_admin_now = st.session_state.get("username") == st.secrets.get("ADMIN_USERNAME", "admin")
+    if _bad:
+        st.error(f"⚠️ 完整性校验异常：{len(_bad)} 条记录有问题"
+                 f"（通过 {_ok_n} 条）。可能被篡改或为旧数据："
+                 + "；".join(f"{k}（{why}）" for k, why in _bad[:3]))
+        if _is_admin_now and st.button("🔐 重建完整性指纹（管理员）", key="pred_resign"):
+            if _pred_sign_all():
+                st.success("已重建指纹")
+                st.rerun()
+    else:
+        st.caption(f"🔒 完整性校验：{_ok_n} 条记录全部通过（指纹链一致）")
+
     if _rows_all2:
         st.markdown("**【全部存档总表】**（一行 = 一期 + 一种排序；只算一个球，其余球位显示 -）")
         st.dataframe(pd.DataFrame(_rows_all2), use_container_width=True, hide_index=True)
@@ -2574,7 +2640,8 @@ def _pred_render_archive(df_data, default_period):
                 st.caption(f"历史第{_hi+1}版："
                            f"{' '.join('%02d' % n for n in _h.get('nums', []))}"
                            f"　（{_h.get('ts', '')}）")
-            if st.button(f"↩ 恢复 {_rb} 上一版", key="pred_restore_btn"):
+            if st.button(f"↩ 恢复 {_rb} 上一版", key="pred_restore_btn",
+                         disabled=not _is_admin_now):
                 if _pred_restore(sel, _rb, _ord):
                     st.success("已恢复上一版")
                     st.rerun()
@@ -2589,7 +2656,8 @@ def _pred_render_archive(df_data, default_period):
             _opts = {f"{c['date']}　{c['msg']}　{c['sha'][:7]}": c["sha"] for c in _cmts}
             _pick_c = st.selectbox("选择要恢复的版本", list(_opts.keys()),
                                    key="pred_hist_pick")
-            if st.button("↩ 恢复到这个版本", key="pred_hist_btn"):
+            if st.button("↩ 恢复到这个版本", key="pred_hist_btn",
+                         disabled=not _is_admin_now):
                 if _pred_gh_restore(_opts[_pick_c]):
                     st.success("已恢复到该历史版本")
                     st.rerun()
@@ -2600,12 +2668,13 @@ def _pred_render_archive(df_data, default_period):
     _op1, _op2 = st.columns(2)
     with _op1:
         if st.button(f"🗑 删除 {sel} 期【{_ord}】存档", use_container_width=True,
-                     key="pred_del_period"):
+                     key="pred_del_period", disabled=not _is_admin_now):
             if _pred_delete(period=sel, order=_ord):
                 st.success(f"已删除 {sel}（{_ord}）")
                 st.rerun()
     with _op2:
-        if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all"):
+        if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all",
+                     disabled=not _is_admin_now):
             if _pred_delete():
                 st.success("已清空")
                 st.rerun()
@@ -2815,7 +2884,10 @@ def render_ai(df_data):
                                         "可以展开下面的完整推演结果核对。")
 
         with b2:
-            st.checkbox("允许覆盖本球存档（重算）", key="ai_allow_dup")
+            if st.session_state.get("username") == st.secrets.get("ADMIN_USERNAME", "admin"):
+                st.checkbox("允许覆盖本球存档（重算）", key="ai_allow_dup")
+            else:
+                st.caption("🔒 只有管理员可以覆盖已存存档")
             if st.button("🗑️ 清理勾选", use_container_width=True):
                 st.session_state.reset_version += 1
                 st.session_state.ai_api_result = "等待推演..."
