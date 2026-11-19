@@ -2205,15 +2205,29 @@ def _pred_persist(msg="推演存档更新"):
     return ok
 
 
-def _pred_save(period, ball, order_type, nums):
-    """保存一条（同期同球覆盖）"""
+def _pred_has(period, ball, order_type):
+    """该期该球该排序是否已有存档 -> 有则返回记录，否则 None"""
+    return _pred_load_all().get(f"{period}|{ball}|{order_type or ''}")
+
+
+def _pred_save(period, ball, order_type, nums, force=False):
+    """保存一条；已存在时：force=True 才覆盖（旧版进 history）"""
     try:
         data = _pred_load_all()
-        data[f"{period}|{ball}|{order_type or ''}"] = {"period": str(period),
-                                    "ball": str(ball),
-                                    "order": str(order_type or ""),
-                                    "nums": [int(n) for n in nums],
-                                    "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        _k = f"{period}|{ball}|{order_type or ''}"
+        _old = data.get(_k)
+        if _old and not force:
+            return False
+        _hist = list(_old.get("history") or []) if _old else []
+        if _old:
+            _hist.insert(0, {"nums": _old.get("nums", []), "ts": _old.get("ts", "")})
+            _hist = _hist[:5]
+        data[_k] = {"period": str(period),
+                    "ball": str(ball),
+                    "order": str(order_type or ""),
+                    "nums": [int(n) for n in nums],
+                    "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "history": _hist}
         st.session_state["_pred_cache"] = data
         _pred_persist(f"推演存档：{period} {ball}")
         return True
@@ -2237,6 +2251,29 @@ def _pred_delete(period=None, ball=None, order=None):
             data.clear()
         st.session_state["_pred_cache"] = data
         _pred_persist("推演存档删除")
+        return True
+    except Exception:
+        return False
+
+
+def _pred_restore(period, ball, order_type):
+    """把上一版历史恢复为当前记录"""
+    try:
+        data = _pred_load_all()
+        _k = f"{period}|{ball}|{order_type or ''}"
+        v = data.get(_k)
+        if not v or not v.get("history"):
+            return False
+        _h = list(v["history"])
+        _prev = _h.pop(0)
+        _new_hist = _h[:5]
+        if v.get("nums"):
+            _new_hist.insert(0, {"nums": v.get("nums", []), "ts": v.get("ts", "")})
+        v["nums"] = _prev.get("nums", [])
+        v["ts"] = _prev.get("ts", "")
+        v["history"] = _new_hist[:5]
+        st.session_state["_pred_cache"] = data
+        _pred_persist(f"恢复存档 {period} {ball}")
         return True
     except Exception:
         return False
@@ -2403,6 +2440,29 @@ def _pred_render_archive(df_data, default_period):
         st.dataframe(pd.DataFrame(_rows_all), use_container_width=True, hide_index=True)
 
     # ---------- ⑤ 删除 ----------
+    # 历史版本恢复
+    _hist_balls = []
+    for i in range(1, 8):
+        _v = data.get(f"第{i}球")
+        if _v and _v[0]:
+            _raw = _pred_has(sel, f"第{i}球", _ord)
+            if _raw and _raw.get("history"):
+                _hist_balls.append(f"第{i}球")
+    if _hist_balls:
+        with st.expander(f"↩ 恢复上一版（{ '、'.join(_hist_balls) } 有历史）", expanded=False):
+            _rb = st.selectbox("选择球位", _hist_balls, key="pred_restore_ball")
+            _raw = _pred_has(sel, _rb, _ord) or {}
+            _hs = _raw.get("history") or []
+            for _hi, _h in enumerate(_hs):
+                st.caption(f"历史第{_hi+1}版：{' '.join('%02d' % n for n in _h.get('nums', []))}"
+                           f"　（{_h.get('ts', '')}）")
+            if st.button(f"↩ 恢复 {_rb} 上一版", key="pred_restore_btn"):
+                if _pred_restore(sel, _rb, _ord):
+                    st.success("已恢复上一版")
+                    st.rerun()
+                else:
+                    st.error("恢复失败：没有历史版本")
+
     _op1, _op2 = st.columns(2)
     with _op1:
         if st.button(f"🗑 删除 {sel} 期【{_ord}】存档", use_container_width=True,
@@ -2545,6 +2605,19 @@ def render_ai(df_data):
                     st.warning(f"⚠️ 请先确认核算模式：本次是按【{order_type}】计算吗？"
                                "请在「核算模式」里重新点选一次，避免算错方向。")
                     st.stop()
+                _exist_same = _pred_has(qishu, qiu, order_type)
+                _exist_period = _pred_load(qishu, order_type)
+                if _exist_period:
+                    _balls_have = "、".join(
+                        b for b in [f"第{i}球" for i in range(1, 8)] if b in _exist_period)
+                    st.info(f"ℹ️ {qishu} 期（{order_type}）已核算过：{_balls_have}")
+                if _exist_same and not st.session_state.get("ai_allow_dup", False):
+                    st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）已有存档"
+                               f"（推演于 {_exist_same.get('ts','')}，号码 "
+                               f"{' '.join('%02d' % n for n in _exist_same.get('nums', []))}）。"
+                               "再算会覆盖它——要覆盖请勾选右边「允许覆盖本球存档」；"
+                               "存档区也提供「恢复上一版」。")
+                    st.stop()
                 _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
                 if (_sig == st.session_state.get("ai_last_sig")
                         and not st.session_state.get("ai_allow_dup", False)):
@@ -2574,7 +2647,8 @@ def render_ai(df_data):
                                 _got = _ai_extract(answer)
                                 st.session_state.ai_ball_result = _got
                                 if _got:
-                                    _pred_save(qishu, qiu, order_type, _got)
+                                    _pred_save(qishu, qiu, order_type, _got,
+                                               force=st.session_state.get("ai_allow_dup", False))
                                 if len(_got) > 30:
                                     st.warning(
                                         f"提取到 {len(_got)} 个号码，偏多。"
@@ -2583,7 +2657,7 @@ def render_ai(df_data):
                                         "可以展开下面的完整推演结果核对。")
 
         with b2:
-            st.checkbox("允许重复计算同一球", key="ai_allow_dup")
+            st.checkbox("允许覆盖本球存档（重算）", key="ai_allow_dup")
             if st.button("🗑️ 清理勾选", use_container_width=True):
                 st.session_state.reset_version += 1
                 st.session_state.ai_api_result = "等待推演..."
