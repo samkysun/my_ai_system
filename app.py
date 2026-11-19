@@ -2085,136 +2085,178 @@ def _ai_extract(answer):
     return sorted(set(got))
 
 
+_PRED_JSON = "ai_pred_history.json"
+
+
 def _pred_db_path():
+    """本地兜底用的 sqlite 路径（GitHub 不可用时使用）"""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_pred_history.db")
 
 
-def _pred_db_init():
-    """建表：期号+球号 唯一，同期同球只留最新一次推演"""
+def _pred_gh_headers():
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    if not token or not repo:
+        return None, None, None
+    return token, repo, {"Authorization": f"Bearer {token}",
+                         "Accept": "application/vnd.github+json",
+                         "Content-Type": "application/json"}
+
+
+def _pred_gh_read():
+    """从仓库读存档 JSON -> (dict, sha)；失败返回 (None, None)"""
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return None, None
     try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred (",
-        )
-        conn.close()
+        url = f"https://api.github.com/repos/{repo}/contents/{_PRED_JSON}"
+        r = requests.get(url, headers=hdrs, timeout=20)
+        if r.status_code == 404:
+            return {}, None
+        if r.status_code != 200:
+            return None, None
+        info = r.json()
+        raw = base64.b64decode(info["content"]).decode("utf-8")
+        return (json.loads(raw) if raw.strip() else {}), info["sha"]
     except Exception:
-        pass
+        return None, None
+
+
+def _pred_gh_write(data, sha, msg="推演存档更新"):
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return False
+    try:
+        url = f"https://api.github.com/repos/{repo}/contents/{_PRED_JSON}"
+        body = {"message": msg,
+                "content": base64.b64encode(
+                    json.dumps(data, ensure_ascii=False, indent=1).encode("utf-8")).decode(),
+                "branch": "main"}
+        if sha:
+            body["sha"] = sha
+        r = requests.put(url, headers=hdrs, json=body, timeout=30)
+        if r.status_code in (200, 201):
+            st.session_state["_pred_sha"] = r.json()["content"]["sha"]
+            return True
+        # 冲突：重读后再写一次
+        if r.status_code == 409:
+            _d, _s = _pred_gh_read()
+            if _s:
+                body["sha"] = _s
+                r2 = requests.put(url, headers=hdrs, json=body, timeout=30)
+                if r2.status_code in (200, 201):
+                    st.session_state["_pred_sha"] = r2.json()["content"]["sha"]
+                    return True
+        return False
+    except Exception:
+        return False
+
+
+def _pred_load_all():
+    """全部存档 {f"{period}|{ball}": {"period","ball","order","nums","ts"}}"""
+    if "_pred_cache" not in st.session_state:
+        data, sha = _pred_gh_read()
+        if data is None:                      # GitHub 不可用 -> 本地 sqlite 兜底
+            data = {}
+            try:
+                conn = sqlite3.connect(_pred_db_path(), timeout=10)
+                conn.execute("CREATE TABLE IF NOT EXISTS ai_pred ("
+                             "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+                             "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))")
+                for p_, b_, o_, n_, t_ in conn.execute(
+                        "SELECT period, ball, order_type, nums, ts FROM ai_pred"):
+                    data[f"{p_}|{b_}"] = {"period": p_, "ball": b_, "order": o_,
+                                          "nums": [int(x) for x in str(n_ or "").split(",")
+                                                   if str(x).strip().isdigit()], "ts": t_}
+                conn.close()
+            except Exception:
+                data = {}
+        st.session_state["_pred_cache"] = data
+        if sha:
+            st.session_state["_pred_sha"] = sha
+    return st.session_state["_pred_cache"]
+
+
+def _pred_persist(msg="推演存档更新"):
+    data = st.session_state.get("_pred_cache") or {}
+    ok = _pred_gh_write(data, st.session_state.get("_pred_sha"), msg)
+    if not ok:                                # 兜底写本地
+        try:
+            conn = sqlite3.connect(_pred_db_path(), timeout=10)
+            conn.execute("CREATE TABLE IF NOT EXISTS ai_pred ("
+                         "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
+                         "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))")
+            conn.execute("DELETE FROM ai_pred")
+            for v in data.values():
+                conn.execute("INSERT OR REPLACE INTO ai_pred VALUES(?,?,?,?,?)",
+                             (v["period"], v["ball"], v.get("order", ""),
+                              ",".join(str(n) for n in v.get("nums", [])),
+                              v.get("ts", "")))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return ok
 
 
 def _pred_save(period, ball, order_type, nums):
-    """按期号+球号 upsert，同期同球覆盖为最新"""
+    """保存一条（同期同球覆盖）"""
     try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred ("
-            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
-            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
-        )
-        conn.execute(
-            "INSERT INTO ai_pred(period, ball, order_type, nums, ts) "
-            "VALUES(?,?,?,?,?) "
-            "ON CONFLICT(period, ball) DO UPDATE SET "
-            "order_type=excluded.order_type, nums=excluded.nums, ts=excluded.ts",
-            (str(period), str(ball), str(order_type),
-             ",".join(str(n) for n in nums),
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-        conn.commit()
-        conn.close()
+        data = _pred_load_all()
+        data[f"{period}|{ball}"] = {"period": str(period), "ball": str(ball),
+                                    "order": str(order_type or ""),
+                                    "nums": [int(n) for n in nums],
+                                    "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        st.session_state["_pred_cache"] = data
+        _pred_persist(f"推演存档：{period} {ball}")
         return True
     except Exception:
         return False
 
 
 def _pred_delete(period=None, ball=None):
-    """删除存档：period+ball 删单球；只给 period 删整期；都不给清空全部"""
+    """删除：period+ball 删单球；只给 period 删整期；都不给清空"""
     try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred ("
-            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
-            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
-        )
+        data = _pred_load_all()
         if period and ball:
-            conn.execute("DELETE FROM ai_pred WHERE period=? AND ball=?",
-                         (str(period), str(ball)))
+            data.pop(f"{period}|{ball}", None)
         elif period:
-            conn.execute("DELETE FROM ai_pred WHERE period=?", (str(period),))
+            for k in [k for k in data if k.startswith(f"{period}|")]:
+                data.pop(k, None)
         else:
-            conn.execute("DELETE FROM ai_pred")
-        conn.commit()
-        conn.close()
+            data.clear()
+        st.session_state["_pred_cache"] = data
+        _pred_persist("推演存档删除")
         return True
     except Exception:
         return False
 
 
 def _pred_load(period):
-    """取某期所有球号的推演结果 -> {ball: (nums_list, ts, order_type)}"""
+    """{ball: (nums, ts, order)}"""
     out = {}
-    try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred ("
-            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
-            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
-        )
-        rows = conn.execute(
-            "SELECT ball, nums, ts, order_type FROM ai_pred WHERE period=?",
-            (str(period),),
-        ).fetchall()
-        conn.close()
-        for ball, nums, ts, ot in rows:
-            lst = [int(x) for x in str(nums or "").split(",") if x.strip().isdigit()]
-            out[ball] = (lst, ts, ot)
-    except Exception:
-        pass
-    return out
-
-
-def _pred_rows():
-    """返回全部存档 [(期号, 球号, 时间, 号码串)]，按期号倒序"""
-    out = []
-    try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred ("
-            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
-            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
-        )
-        rows = conn.execute(
-            "SELECT period, ball, ts, nums, order_type FROM ai_pred "
-            "ORDER BY period DESC, ball"
-        ).fetchall()
-        conn.close()
-        out = rows
-    except Exception:
-        pass
+    for k, v in _pred_load_all().items():
+        if v.get("period") == str(period):
+            out[v["ball"]] = (v.get("nums", []), v.get("ts", ""), v.get("order", ""))
     return out
 
 
 def _pred_periods():
-    """库里已存的所有期号，新的在前"""
-    out = []
-    try:
-        conn = sqlite3.connect(_pred_db_path(), timeout=10)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS ai_pred ("
-            "period TEXT NOT NULL, ball TEXT NOT NULL, order_type TEXT, "
-            "nums TEXT, ts TEXT, PRIMARY KEY(period, ball))"
-        )
-        rows = conn.execute(
-            "SELECT DISTINCT period FROM ai_pred ORDER BY period DESC"
-        ).fetchall()
-        conn.close()
-        out = [r[0] for r in rows]
-    except Exception:
-        pass
-    return out
+    ps = {v.get("period") for v in _pred_load_all().values()}
+    return sorted([p for p in ps if p], reverse=True)
+
+
+def _pred_rows():
+    rows = []
+    for v in _pred_load_all().values():
+        rows.append((v.get("period"), v.get("ball"), v.get("ts"),
+                     ",".join(str(n) for n in v.get("nums", [])), v.get("order")))
+    rows.sort(key=lambda x: (str(x[0]), str(x[1])), reverse=True)
+    return rows
 
 
 def _pred_actual_nums(df_data, period):
-    """从总数据表取该期实际开奖号（6 平码 + 特码），未开奖返回 None"""
+    """从总数据表取该期实际开奖号；未开奖返回 None"""
     if df_data is None or isinstance(df_data, str):
         return None
     try:
