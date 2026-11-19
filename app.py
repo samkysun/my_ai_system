@@ -2205,6 +2205,55 @@ def _pred_persist(msg="推演存档更新"):
     return ok
 
 
+def _pred_gh_commits(limit=20):
+    """该存档文件的历史提交"""
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return []
+    try:
+        r = requests.get(f"https://api.github.com/repos/{repo}/commits",
+                         headers=hdrs, params={"path": _PRED_JSON, "per_page": limit},
+                         timeout=25)
+        if r.status_code != 200:
+            return []
+        out = []
+        for c in r.json():
+            out.append({"sha": c["sha"],
+                        "msg": (c["commit"]["message"] or "")[:40],
+                        "date": c["commit"]["committer"]["date"].replace("T", " ")[:19]})
+        return out
+    except Exception:
+        return []
+
+
+def _pred_gh_at(sha):
+    """取指定提交里的存档内容"""
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return None
+    try:
+        r = requests.get(f"https://api.github.com/repos/{repo}/contents/{_PRED_JSON}",
+                         headers=hdrs, params={"ref": sha}, timeout=25)
+        if r.status_code != 200:
+            return None
+        raw = base64.b64decode(r.json()["content"]).decode("utf-8")
+        return json.loads(raw) if raw.strip() else {}
+    except Exception:
+        return None
+
+
+def _pred_gh_restore(sha):
+    """把存档恢复成某个历史提交的版本"""
+    data = _pred_gh_at(sha)
+    if data is None:
+        return False
+    _cur, _sha = _pred_gh_read()
+    ok = _pred_gh_write(data, _sha, f"恢复存档到历史版本 {sha[:7]}")
+    if ok:
+        st.session_state.pop("_pred_cache", None)
+    return ok
+
+
 def _pred_has(period, ball, order_type):
     """该期该球该排序是否已有存档 -> 有则返回记录，否则 None"""
     return _pred_load_all().get(f"{period}|{ball}|{order_type or ''}")
@@ -2462,6 +2511,22 @@ def _pred_render_archive(df_data, default_period):
                     st.rerun()
                 else:
                     st.error("恢复失败：没有历史版本")
+
+    with st.expander("🕘 云端历史版本（可从任意一次提交恢复）", expanded=False):
+        _cmts = _pred_gh_commits(15)
+        if not _cmts:
+            st.caption("读不到历史提交（检查 GITHUB_TOKEN 权限）")
+        else:
+            _opts = {f"{c['date']}　{c['msg']}　{c['sha'][:7]}": c["sha"] for c in _cmts}
+            _pick_c = st.selectbox("选择要恢复的版本", list(_opts.keys()),
+                                   key="pred_hist_pick")
+            if st.button("↩ 恢复到这个版本", key="pred_hist_btn"):
+                if _pred_gh_restore(_opts[_pick_c]):
+                    st.success("已恢复到该历史版本")
+                    st.rerun()
+                else:
+                    st.error("恢复失败：可能没有权限或该版本无存档")
+            st.caption("每次保存/删除都会产生一次提交，这里列出最近 15 次。")
 
     _op1, _op2 = st.columns(2)
     with _op1:
