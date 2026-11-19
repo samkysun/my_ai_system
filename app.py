@@ -2383,6 +2383,12 @@ def _pred_render_archive(df_data, default_period):
 def render_ai(df_data):
     #=========AI页面标题===================
     st.title("🧠 AI 严谨推演系统")
+    try:
+        _n_arch = len(_pred_load_all())
+        _n_per = len(_pred_periods())
+        st.caption(f"📚 存档：{_n_per} 期 / {_n_arch} 条（存在云端 ai_pred_history.json，页面最下方可查看）")
+    except Exception as _ae:
+        st.caption(f"📚 存档读取异常：{type(_ae).__name__}: {_ae}")
     _board_render()
 
     if df_data is not None and not isinstance(df_data, str):
