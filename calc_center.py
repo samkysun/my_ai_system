@@ -252,11 +252,26 @@ def render(df_data, H):
     with c2:
         st.write(""); st.write("")
         go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
+    self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
+                           value=False, key="cc_self")
 
     if go:
-        texts = [board[int(p.split(".")[0]) - 1]["text"] for p in picks]
+        texts = []
+        if self_run and H.get("raw_report"):
+            _b = st.progress(0.0, text="正在计算 1-7 球…")
+            for _i in range(1, 8):
+                _b.progress(_i / 8, text=f"正在计算第{_i}球全部属性…")
+                try:
+                    _tx = H["raw_report"](f"第{_i}球")
+                    if _tx:
+                        texts.append(_tx)
+                except Exception as _e:
+                    st.warning(f"第{_i}球计算失败：{_e}")
+            _b.empty()
+        else:
+            texts = [board[int(p.split(".")[0]) - 1]["text"] for p in picks]
         if not texts:
-            st.warning("至少选一条")
+            st.warning("没有可分析的内容（可勾选上面的「自己跑 1-7 球」）")
             return
 
         kill, keep = collect(texts)
