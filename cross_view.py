@@ -80,6 +80,58 @@ def _cross(S, A):
     return filt
 
 
+def _bucket(v):
+    if v <= 9:
+        return "01-09"
+    if v <= 19:
+        return "10-19"
+    if v <= 29:
+        return "20-29"
+    if v <= 39:
+        return "30-39"
+    return "40-49"
+
+
+_BUCKETS = ["01-09", "10-19", "20-29", "30-39", "40-49"]
+
+
+def _rank_table(seq_hist):
+    """{区间: Counter(升序排名0-5)}"""
+    tab = {}
+    for bk in _BUCKETS:
+        tab[bk] = Counter()
+    for p, u, a in seq_hist:
+        srt = sorted(u[:6])
+        for i in range(6):
+            tab[_bucket(a[i])][srt.index(a[i])] += 1
+    return tab
+
+
+def rank_probs(seq_hist, A):
+    """给定按序各球位候选，推算每个球位的升序位置概率
+       返回 {(球位i, 排名r): 概率}"""
+    tab = _rank_table(seq_hist)
+    freq = {}
+    for i in range(6):
+        freq[i] = Counter(x[2][i] for x in seq_hist)
+    out = []
+    for i in range(6):
+        total = sum(freq[i].values()) or 1
+        probs = [0.0] * 6
+        for v in A.get(i, []):
+            w = freq[i].get(v, 0) / total
+            row = tab.get(_bucket(v))
+            if not row:
+                continue
+            s = sum(row.values()) or 1
+            for r in range(6):
+                probs[r] += w * (row.get(r, 0) / s)
+        sm = sum(probs) or 1
+        probs = [x / sm for x in probs]
+        out.append(probs)
+    return out
+
+
 def render(df_data, H):
     st.title("🔀 升降交集")
     st.caption("「升序」是 6 个平码从小到大排列 + 特码；「按序」是落球顺序。"
@@ -139,6 +191,32 @@ def render(df_data, H):
         rows2.append({"按序球位": "第7球(特码)", "按序候选": " ".join(f"{n:02d}" for n in A[6])})
         st.markdown("**按序各球位候选**")
         st.dataframe(pd.DataFrame(rows2), use_container_width=True, hide_index=True)
+
+        # ---------- 位置推断 ----------
+        st.markdown("**位置推断：这个球最可能处在升序第几位**")
+        probs = rank_probs(seq, A)
+        rows3 = []
+        for i in range(6):
+            pb = probs[i]
+            order = sorted(range(6), key=lambda r: -pb[r])
+            best1, best2 = order[0], order[1]
+            rows3.append({
+                "按序球位": f"第{i+1}球",
+                "最可能升序位": f"第{best1+1}位",
+                "把握": f"{pb[best1]*100:.0f}%",
+                "次选": f"第{best2+1}位",
+                "次选把握": f"{pb[best2]*100:.0f}%",
+                "前2合计": f"{(pb[best1]+pb[best2])*100:.0f}%",
+                "升1": f"{pb[0]*100:.0f}%",
+                "升2": f"{pb[1]*100:.0f}%",
+                "升3": f"{pb[2]*100:.0f}%",
+                "升4": f"{pb[3]*100:.0f}%",
+                "升5": f"{pb[4]*100:.0f}%",
+                "升6": f"{pb[5]*100:.0f}%",
+            })
+        st.dataframe(pd.DataFrame(rows3), use_container_width=True, hide_index=True)
+        st.caption("依据：该球位候选号码所在的区间（01-09/10-19/…）在历史上对应的升序排名比例。"
+                   "端区（1-9、40-49）把握最高，约 63~65%。")
 
         # 只在交叉里出现的（精度更高）
         only = sorted({n for j in range(6) for n in f[j]})
