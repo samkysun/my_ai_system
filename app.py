@@ -2403,7 +2403,34 @@ def _pred_render_archive(df_data, default_period):
         st.info("暂无存档。完成一次 AI 推演后会自动保存。")
         return
 
-    # ---------- ① 选择期号 ----------
+    # ---------- ① 全部存档总表（一行 = 一期 + 一种排序） ----------
+    _rows_all2 = []
+    for _p in periods:
+        for _o in ("升序", "按序"):
+            _d = _pred_load(_p, _o)
+            if not _d:
+                continue
+            _a = _pred_actual_nums(df_data, _p)
+            _r = {"期号": _p, "排序": _o}
+            _hit = 0
+            for i in range(1, 8):
+                _v = _d.get(f"第{i}球")
+                if not _v or not _v[0]:
+                    _r[f"第{i}球"] = "-"
+                elif _a and i - 1 < len(_a) and _a[i - 1] in _v[0]:
+                    _hit += 1
+                    _r[f"第{i}球"] = " ".join(
+                        (f"{n:02d}✓" if n == _a[i - 1] else f"{n:02d}") for n in _v[0])
+                else:
+                    _r[f"第{i}球"] = " ".join(f"{n:02d}" for n in _v[0])
+            _r["命中球位"] = _hit if _a else "-"
+            _rows_all2.append(_r)
+
+    if _rows_all2:
+        st.markdown("**【全部存档总表】**（一行 = 一期 + 一种排序；只算一个球，其余球位显示 -）")
+        st.dataframe(pd.DataFrame(_rows_all2), use_container_width=True, hide_index=True)
+
+    # ---------- ② 选择期号 ----------
     _sc1, _sc1b, _sc2 = st.columns([1, 1, 2])
     with _sc1:
         sel = st.selectbox("选择期号查看存档", periods, key="pred_arch_period")
