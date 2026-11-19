@@ -892,7 +892,10 @@ def render(df_data, H):
         if _ai_start in _periods_a:
             _pos0 = _periods_a.index(_ai_start)
             _targets = _periods_a[_pos0:_pos0 + int(_ai_n)]
-            _out, _ai_calls = [], 0
+            _out, _detail, _ai_calls = [], [], 0
+            _blocked = len(_periods_a) - _pos0 - 1
+            st.info(f"已屏蔽 {_ai_start} 之后的 {_blocked} 期数据；"
+                    f"每一期只用「该期之前」的历史计算。")
             _bar2 = st.progress(0.0, text="逐期计算中…")
             for _i, _tg in enumerate(_targets):
                 _bar2.progress(_i / max(1, len(_targets)), text=f"计算 {_tg} …")
@@ -906,6 +909,17 @@ def render(df_data, H):
                     _aip = {}
                 _p_hit = sum(1 for b in range(1, 8) if _act[b] in _rec[b])
                 _a_hit = sum(1 for b in range(1, 8) if _aip.get(b) and _act[b] in _aip[b])
+                for b in range(1, 8):
+                    _p_ok = _act[b] in _rec[b]
+                    _a_ok = bool(_aip.get(b)) and _act[b] in _aip[b]
+                    _detail.append({
+                        "期号": _tg, "球位": f"第{b}球",
+                        "程序推荐": " ".join(f"{n:02d}" for n in _rec[b]),
+                        "程序": "✅" if _p_ok else "❌",
+                        "AI推荐": " ".join(f"{n:02d}" for n in _aip.get(b, [])) or "-",
+                        "AI": "✅" if _a_ok else ("❌" if _aip.get(b) else "-"),
+                        "实际开出": f"{_act[b]:02d}",
+                    })
                 _out.append({
                     "期号": _tg,
                     "程序命中": f"{_p_hit}/7",
@@ -924,6 +938,15 @@ def render(df_data, H):
                            f"（AI 调用 {_ai_calls} 次）")
                 st.caption("命中 = 该球位实际开出的号在推荐的那几个号里。"
                            "两者同一口径，可直接比较。")
+                with st.expander(f"🔍 明细：每期每球位的推荐与命中（{len(_detail)} 行）",
+                                 expanded=True):
+                    st.dataframe(pd.DataFrame(_detail), use_container_width=True,
+                                 hide_index=True)
+                    st.download_button("📥 下载明细",
+                                       pd.DataFrame(_detail).to_csv(index=False)
+                                       .encode("utf-8-sig"),
+                                       file_name="程序vsAI明细.csv", mime="text/csv",
+                                       key="cc_ai_dl")
             else:
                 st.warning("没有可用的期号（可能期号太早，之前数据不足）")
 
