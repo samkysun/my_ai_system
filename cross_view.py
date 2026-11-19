@@ -132,25 +132,33 @@ def rank_probs(seq_hist, A):
     return out
 
 
-def position_series(seq, which=1):
-    """返回 [(期号, 号码, 该号在按序中的位置1-6)]，按时间从新到旧"""
+def position_series(seq, which=1, direction="up2an"):
+    """up2an：升序第N球的号码 → 它在按序中的位置
+       an2up：按序第N球的号码 → 它在升序中的排名(第几小)"""
     out = []
-    for p, u, a in reversed(seq):          # seq 是旧->新，反转成新->旧
+    for p, u, a in reversed(seq):
         try:
-            val = u[which - 1]
-            pos = a[:6].index(val) + 1
+            if direction == "up2an":
+                val = u[which - 1]
+                pos = a[:6].index(val) + 1
+            else:
+                val = a[which - 1]
+                pos = sorted(u[:6]).index(val) + 1
         except Exception:
             continue
         out.append((p, val, pos))
     return out
 
 
-def base_line(rows, which):
-    """2026120：期起始 基准列：升序1球20：按序2球，升序1球03：按序4球，…"""
+def base_line(rows, which, direction="up2an"):
+    """基准列：升序N球XX：按序M球 / 按序N球XX：升序第M位"""
     if not rows:
         return ""
     chrono = list(reversed(rows))          # 旧 -> 新 展示
-    seg = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球" for r in chrono)
+    if direction == "up2an":
+        seg = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球" for r in chrono)
+    else:
+        seg = "，".join(f"按序{which}球{r[1]:02d}：升序第{r[2]}位" for r in chrono)
     span = (chrono[0][0] if len(chrono) == 1
             else f"{chrono[0][0]} ~ {chrono[-1][0]}")
     return f"基准期 {span}（共{len(chrono)}期）：基准列：{seg}"
@@ -174,7 +182,7 @@ def find_patterns(series, base, allow_miss=0, top_n=30):
     return hits[:top_n]
 
 
-def backtest_period(seq, which, rows_n, target):
+def backtest_period(seq, which, rows_n, target, direction="up2an"):
     """用 target 之前的排列预测 target 的位置
        seq 是旧->新；返回 dict"""
     periods = [x[0] for x in seq]
@@ -186,7 +194,10 @@ def backtest_period(seq, which, rows_n, target):
     posv = []
     for q, u, a in seq:
         try:
-            posv.append(a[:6].index(u[which - 1]) + 1)
+            if direction == "up2an":
+                posv.append(a[:6].index(u[which - 1]) + 1)
+            else:
+                posv.append(sorted(u[:6]).index(a[which - 1]) + 1)
         except Exception:
             posv.append(None)
     base = posv[pos - rows_n:pos]
@@ -318,15 +329,20 @@ def render(df_data, H):
         st.caption("把「升序第 N 球落在按序第几位」当成属性列，"
                    "用基准行排列去历史里找同样的排列。")
 
-        _c1, _c2, _c3 = st.columns([1, 1, 1])
+        _c0, _c1, _c2, _c3 = st.columns([1, 1, 1, 1])
+        with _c0:
+            _dir_label = st.selectbox("方向", ["升序 → 按序", "按序 → 升序"],
+                                      index=0, key="cv_dir")
+        direction = "up2an" if _dir_label.startswith("升序") else "an2up"
         with _c1:
-            which = st.selectbox("看升序第几个球", [1, 2, 3, 4, 5, 6],
-                                 index=0, key="cv_which")
+            which = st.selectbox(
+                "看升序第几球" if direction == "up2an" else "看按序第几球",
+                [1, 2, 3, 4, 5, 6], index=0, key="cv_which")
         with _c2:
             rows_n = st.number_input("基准行排列（几行）", 2, 20, 2, 1, key="cv_rows")
         with _c3:
             st.write("")
-        ser = position_series(seq, int(which))
+        ser = position_series(seq, int(which), direction)
         if not ser:
             st.warning("没有可用的序列数据")
             return
@@ -335,7 +351,7 @@ def render(df_data, H):
         base = [x[2] for x in _base_rows]
         st.markdown(f"**【基准行排列】({len(base)}行)**："
                     + " → ".join(str(x) for x in base))
-        st.markdown("**" + base_line(_base_rows, which) + "**")
+        st.markdown("**" + base_line(_base_rows, which, direction) + "**")
 
         hits = find_patterns(ser, base, 0)
         _expect = len(ser) / (6 ** len(base))
@@ -368,8 +384,12 @@ def render(df_data, H):
             for k, (i, periods, pv, nv, _sm) in enumerate(hits, 1):
                 _rows_seg = ser[i:i + len(base)]
                 _seg = [x[2] for x in _rows_seg]
-                _det = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球"
-                                for r in reversed(_rows_seg))
+                if direction == "up2an":
+                    _det = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球"
+                                    for r in reversed(_rows_seg))
+                else:
+                    _det = "，".join(f"按序{which}球{r[1]:02d}：升序第{r[2]}位"
+                                    for r in reversed(_rows_seg))
                 _p_prev = ser[i - 1][0] if i - 1 >= 0 else "-"
                 _p_next = ser[i + len(base)][0] if i + len(base) < len(ser) else "-"
                 _lines.append(
@@ -430,7 +450,7 @@ def render(df_data, H):
             _bt_go = st.button("▶ 回测这一期", key="cv_seq_bt", use_container_width=True)
 
         if _bt_go:
-            _r = backtest_period(seq, int(which), int(rows_n), _tgt)
+            _r = backtest_period(seq, int(which), int(rows_n), _tgt, direction)
             if _r is None:
                 st.error("没找到这一期")
             elif _r.get("error"):
@@ -443,7 +463,7 @@ def render(df_data, H):
                 _brows = [(seq[j][0], seq[j][1][int(which) - 1],
                            seq[j][2][:6].index(seq[j][1][int(which) - 1]) + 1)
                           for j in range(_tpos - int(rows_n), _tpos)]
-                st.markdown("**" + base_line(_brows, which) + "**")
+                st.markdown("**" + base_line(_brows, which, direction) + "**")
                 st.write(f"历史相同排列：**{len(_r['hits'])} 段**")
                 if _r["dist"]:
                     _tot = sum(_r["dist"].values())
