@@ -429,6 +429,72 @@ def _threshold_sweep(rows, thresholds=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)):
     return out
 
 
+def _period_list(rows):
+    """按从旧到新返回 (期号列表, 各球开奖号序列)"""
+    periods, balls = [], {b: [] for b in range(1, 8)}
+    for r in rows[2:]:
+        if len(r) < 214:
+            continue
+        p = f"{r[213]}{r[0]}{r[1]}{r[2]}"
+        if not p.strip():
+            continue
+        periods.append(p)
+        for b in range(1, 8):
+            i10 = 3 + (b - 1) * 30
+            i1 = i10 + 1
+            try:
+                balls[b].append(int((r[i10].strip() + r[i1].strip()) or 0))
+            except Exception:
+                balls[b].append(0)
+    periods.reverse()
+    for b in balls:
+        balls[b].reverse()
+    return periods, balls
+
+
+def backtest_period(rows, target, k=3):
+    """回测指定期号：只用该期之前的数据"""
+    periods, balls = _period_list(rows)
+    if target not in periods:
+        return None, "数据里没有这个期号"
+    pos = periods.index(target)
+    if pos < 60:
+        return None, f"该期之前只有 {pos} 期数据，不足以回测"
+
+    out = []
+    for b in range(1, 8):
+        lo, hi = _RANGE[b]
+        hist = balls[b][:pos]
+        c = Counter(x for x in hist if x and lo <= x <= hi)
+        for n in range(lo, hi + 1):
+            c.setdefault(n, 0)
+        top = [n for n, _ in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[:k]]
+
+        # 遗漏
+        omi = {}
+        for n in range(lo, hi + 1):
+            d = len(hist)
+            for j in range(len(hist) - 1, -1, -1):
+                if hist[j] == n:
+                    d = len(hist) - 1 - j
+                    break
+            omi[n] = d
+
+        # 累计命中率（历史）
+        cum = sum(1 for v in hist if v in top) / (len(hist) or 1)
+        actual = balls[b][pos]
+        out.append({
+            "球位": f"第{b}球",
+            "推荐": " ".join(f"{n:02d}" for n in top),
+            "实际开出": f"{actual:02d}",
+            "命中": "✅" if actual in top else "❌",
+            "该组合历史命中率": f"{cum*100:.1f}%",
+            "推荐号遗漏": "／".join(f"{n:02d}:{omi[n]}" for n in top),
+        })
+    n_hit = sum(1 for r in out if r["命中"] == "✅")
+    return out, f"{target} 期：{n_hit}/7 个球位命中"
+
+
 def render(df_data, H):
     st.title("🧮 计算中心")
     st.caption("全量查档：把看板里所有触发行拿到历史里查「之后开出了什么」，"
@@ -774,6 +840,48 @@ def render(df_data, H):
         st.download_button("📥 下载统计与提示词", prompt.encode("utf-8-sig"),
                            file_name="计算中心_全量查档.txt", mime="text/plain",
                            use_container_width=True, key="cc_dl")
+
+    # ---------- 指定期号回测 ----------
+    st.divider()
+    st.markdown("### 🎯 指定期号回测")
+    st.caption("输入一个历史期号，程序只用「该期之前」的数据算推荐，再与该期实际开奖对照。")
+    _pc1, _pc2, _pc3 = st.columns([2, 1, 2])
+    with _pc1:
+        _tp_in = st.text_input("期号（如 2026068）", value="", key="cc_tp")
+    with _pc2:
+        st.write(""); st.write("")
+        _tp_go = st.button("▶ 回测这一期", use_container_width=True, key="cc_tp_go")
+    with _pc3:
+        _tp_k = st.number_input("每球看几个号", 1, 20, 3, 1, key="cc_tp_k")
+
+    if _tp_go and _tp_in.strip():
+        _rows_p = load("升序全套.csv", None) or []
+        _res, _msg = backtest_period(_rows_p, _tp_in.strip(), int(_tp_k))
+        if _res is None:
+            st.warning(_msg)
+        else:
+            st.success(_msg)
+            st.dataframe(pd.DataFrame(_res), use_container_width=True, hide_index=True)
+            st.session_state["cc_pred_save"] = {
+                "period": _tp_in.strip(),
+                "rows": _res,
+                "k": int(_tp_k),
+            }
+            if H.get("pred_save"):
+                if st.button("💾 存入推演档案", key="cc_tp_save"):
+                    _ok = 0
+                    for _r in _res:
+                        _nums = [int(x) for x in _r["推荐"].split() if x.isdigit()]
+                        try:
+                            _ok += 1 if H["pred_save"](_tp_in.strip(),
+                                                       _r["球位"], "升序", _nums) else 0
+                        except Exception:
+                            pass
+                    st.success(f"已存入 {_ok}/7 条（可在 AI推演页的存档区查看）")
+            st.download_button("📥 下载这一期结果",
+                               pd.DataFrame(_res).to_csv(index=False).encode("utf-8-sig"),
+                               file_name=f"回测_{_tp_in.strip()}.csv",
+                               mime="text/csv", key="cc_tp_dl")
 
     # ---------- 模型回测 ----------
     st.divider()
