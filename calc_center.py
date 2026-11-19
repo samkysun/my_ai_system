@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""计算中心 v3：综合评分
-   综合你原来的三套思路：
-     ① 写板信号（多维/深度联动的达标条数与指向）  权重 50%
-     ② 遗漏期数（该号码在该球位多久没开）          权重 30%
-     ③ 近30期出现频次（热度）                      权重 20%
-   程序算分，AI 只做总结。
+"""计算中心 v4 —— 按你的语义区分三种来源
+
+① 写板（全自动核算）= 删除法：某属性算出的行数越大 → 越要杀（该值对应的号码扣分）
+② 深度联动      = 保留法：算出的生肖/尾数/门数等 → 保留（对应号码加分）
+③ 遗漏          = 修正：用历史数据算出「当前遗漏为 K 期的号码，下一期出现率」，
+                   与基准（区间均分）比较，>1 加分，<1 减分
+
+最终分数 = 保留分 - 杀分 + 遗漏修正（可调权重）
 """
 import re
 from collections import Counter, defaultdict
@@ -15,6 +17,8 @@ import streamlit as st
 _RED = {1, 2, 7, 8, 12, 13, 18, 19, 23, 24, 29, 30, 34, 35, 40, 45, 46}
 _BLUE = {3, 4, 9, 10, 14, 15, 20, 25, 26, 31, 36, 37, 41, 42, 47, 48}
 _GREEN = {5, 6, 11, 16, 17, 21, 22, 27, 28, 32, 33, 38, 39, 43, 44, 49}
+_RANGE = {1: (1, 20), 2: (2, 25), 3: (3, 30), 4: (4, 40),
+          5: (15, 48), 6: (25, 49), 7: (1, 49)}
 
 
 def _wave(n):
@@ -27,11 +31,7 @@ def _wave(n):
     return ""
 
 
-def _sum_of(n):
-    return sum(int(c) for c in str(n))
-
-
-def _numbers_for(attr, value):
+def _numbers_for(attr, value, zmap=None):
     v = re.sub(r"[肖号尾]$", "", str(value).strip())
     out = []
     if attr == "尾数":
@@ -41,7 +41,7 @@ def _numbers_for(attr, value):
     elif attr == "数字合":
         t = re.sub(r"\D", "", v)
         if t:
-            out = [n for n in range(1, 50) if _sum_of(n) == int(t)]
+            out = [n for n in range(1, 50) if sum(map(int, str(n))) == int(t)]
     elif attr == "门数":
         t = re.sub(r"\D", "", v)
         if t:
@@ -56,6 +56,10 @@ def _numbers_for(attr, value):
             out = list(range(lo, min(lo + 6, 49) + 1))
     elif attr == "波色":
         out = [n for n in range(1, 50) if _wave(n) == v]
+    elif attr in ("生肖", "数字五行", "生肖五行", "尾五行") and zmap:
+        target = re.sub(r"[肖号尾]$", "", v)
+        out = [n for n, z in (zmap.get(attr) or {}).items()
+               if re.sub(r"[肖号尾]$", "", str(z)) == target]
     elif attr == "波单双":
         w = next((x for x in ("红波", "蓝波", "绿波") if v.startswith(x)), "")
         parity = "单" if "单" in v else ("双" if "双" in v else "")
@@ -64,42 +68,58 @@ def _numbers_for(attr, value):
     return out
 
 
-_T_NEW = re.compile(r"=+\s*(\d{5,8})期(升序|按序)-(.+?)(\d)球\s*=+")
-_T_OLD = re.compile(r"=+\s*(升序全套|按序全套)\s*-\s*(\d{5,8})\s*-\s*(.+?)\s*-\s*第(\d)球\s*=+")
-_BASE = re.compile(r"【基准行排列】\(\d+行\):\s*(.+)")
-_ITEM = re.compile(r"([A-Z]+)(\d+):([^,]+)")
-_LINE = re.compile(
-    r"触发行：(\d)球\(([A-Z]+)\)\s*行(\d+)-(\d+)\((\d+行)\)|"
-    r"触发行：(\d)球\(([A-Z]+)\)\s*行(\d+)-(\d+)\((\d+)行\)")
+# ---------------- 解析 ----------------
+_AUTO_T = re.compile(r"=+\s*(\d{5,8})期(升序|按序)-(.+?)(\d)球\s*=+")
+_LINK_T = re.compile(r"=+\s*(升序|按序)(.+?)\s*\d?码?联动分析\s*=+")
+_LINE_AUTO = re.compile(
+    r"触发行：(\d)球\([A-Z]+\)[^\n]*?\((\d+)行\)[^\n]*?下:(.*?)(?:\s*\[|$)")
+_LINE_LINK = re.compile(r"^第(\d)球[:：]\s*(.+?)(?:\||$)")
 
 
-def _parse_board(text):
-    sigs, cur = [], None
+def _split_blocks(text):
+    blocks, cur = [], None
     for ln in str(text).splitlines():
-        m = _T_NEW.search(ln) or _T_OLD.search(ln)
+        if ln.startswith("=========") or ln.startswith("=========="):
+            cur = {"head": ln, "lines": []}
+            blocks.append(cur)
+        elif cur is not None:
+            cur["lines"].append(ln)
+    return blocks
+
+
+def parse_signals(text):
+    """返回两类：kill(删除法，来自自动核算) / keep(保留法，来自深度联动)"""
+    out = []
+    for b in _split_blocks(text):
+        head = b["head"]
+        m = _AUTO_T.search(head)
         if m:
-            g = m.groups()
-            if g[0][:1].isdigit():
-                period, order, attr, ball = g[0], g[1], g[2], g[3]
-            else:
-                order = "升序" if g[0] == "升序全套" else "按序"
-                period, attr, ball = g[1], g[2], g[3]
-            cur = {"period": period, "order": order, "attr": attr.strip(),
-                   "ball": int(ball), "base": [], "lines": []}
-            sigs.append(cur)
+            period, order, attr, ball = m.group(1), m.group(2), m.group(3).strip(), int(m.group(4))
+            for ln in b["lines"]:
+                mm = _LINE_AUTO.search(ln)
+                if mm:
+                    out.append({"kind": "kill", "period": period, "order": order,
+                                "attr": attr, "ball": int(mm.group(1)),
+                                "value": mm.group(3).strip(),
+                                "weight": int(mm.group(2))})
             continue
-        if cur is None:
-            continue
-        mb = _BASE.search(ln)
-        if mb:
-            cur["base"] = [v.strip() for _, _, v in _ITEM.findall(mb.group(1))]
-            continue
-        if ln.startswith("触发行："):
-            mm = re.search(r"触发行：(\d)球\(([A-Z]+)\)\s*行(\d+)-(\d+)\((\d+)行\)", ln)
-            if mm:
-                cur["lines"].append({"ball": int(mm.group(1)), "col": mm.group(2),
-                                     "n": int(mm.group(5))})
-    return sigs
+        m = _LINK_T.search(head)
+        if m:
+            order, mode = m.group(1), m.group(2).strip()
+            for ln in b["lines"]:
+                mm = _LINE_LINK.search(ln.strip())
+                if mm:
+                    ball = int(mm.group(1))
+                    seg = mm.group(2)
+                    seg = seg.split("杀(")[0]
+                    vals = [v.strip() for v in re.split(r"[,，、]", seg) if v.strip()]
+                    for v in vals:
+                        v2 = re.sub(r"[✔✓\s]", "", v)
+                        if v2:
+                            out.append({"kind": "keep", "order": order,
+                                        "attr": mode, "ball": ball,
+                                        "value": v2, "weight": 1})
+    return out
 
 
 def _cell(rows, r1, col):
@@ -114,27 +134,7 @@ def _cell(rows, r1, col):
     return r[idx].strip() if idx < len(r) else ""
 
 
-def _backtest(rows, col, seq):
-    n = len(seq)
-    if n == 0 or not rows:
-        return 0, Counter()
-    hits, nxt = 0, Counter()
-    for i in range(2, len(rows) - n):
-        ok = True
-        for k in range(n):
-            if _cell(rows, i + k + 1, col) != seq[k]:
-                ok = False
-                break
-        if ok:
-            hits += 1
-            v = _cell(rows, i + n + 1, col)
-            if v:
-                nxt[v] += 1
-    return hits, nxt
-
-
 def _ball_series(rows, ball):
-    """某球位的开奖号码序列（从新到旧）"""
     i10 = 3 + (ball - 1) * 30
     i1 = i10 + 1
     out = []
@@ -149,27 +149,63 @@ def _ball_series(rows, ball):
     return out
 
 
-def _num_stats(series):
-    """每个号码的遗漏期数与近30期出现次数"""
-    omis, freq = {}, Counter()
-    total = len(series)
+def _build_maps(rows, year):
+    """从当年数据里推导 号码 -> 各属性值 的映射"""
+    maps = {"生肖": {}, "数字五行": {}, "生肖五行": {}, "尾五行": {}}
+    for r in rows[2:]:
+        if len(r) < 214:
+            continue
+        p = f"{r[213]}{r[0]}{r[1]}{r[2]}"
+        if year and not p.startswith(str(year)):
+            continue
+        for b in range(7):
+            i10 = 3 + (b - 1) * 30
+            i1 = i10 + 1
+            try:
+                num = int((r[i10].strip() + r[i1].strip()) or 0)
+            except Exception:
+                continue
+            if not num:
+                continue
+            for key, base in (("生肖", 6), ("数字五行", 5), ("生肖五行", 17), ("尾五行", 30)):
+                i = base + (b - 1) * 30
+                if i < len(r) and r[i].strip():
+                    maps[key].setdefault(num, r[i].strip())
+    return maps
+
+
+def _omission_rates(series):
+    """统计：某号码连续 K 期未出时，下一期出现的经验概率 -> {K: P}"""
+    stat = defaultdict(lambda: [0, 0])
+    omi = {n: 0 for n in range(1, 50)}
+    for v in series:
+        for n in range(1, 50):
+            k = omi[n]
+            stat[k][1] += 1
+            if v == n:
+                stat[k][0] += 1
+        for n in range(1, 50):
+            omi[n] = 0 if n == v else omi[n] + 1
+    return {k: (a / b if b else 0.0) for k, (a, b) in stat.items()}
+
+
+def _current_omission(series):
+    """当前每个号码的遗漏期数（0 = 最新一期刚出）"""
+    out = {}
     for n in range(1, 50):
-        omi = total
+        idx = len(series)
         for i, v in enumerate(series):
             if v == n:
-                omi = i
+                idx = i
                 break
-        omis[n] = omi
-    for v in series[:30]:
-        if v:
-            freq[v] += 1
-    return omis, freq
+        out[n] = idx
+    return out
 
 
 def render(df_data, H):
     st.title("🧮 计算中心")
-    st.caption("综合三套思路打分：① 写板信号 50%　② 遗漏期数 30%　③ 近30期热度 20%"
-               "　—— 程序算分，AI 只做总结。")
+    st.caption("写板=删除法（行数越大越要杀）｜深度联动=保留法（算出的保留）"
+               "｜遗漏=按历史出现率修正。程序算分，AI 只做总结。")
 
     load = H["load_excel_data"]
     call_ai = H["call_deepseek_api"]
@@ -192,105 +228,110 @@ def render(df_data, H):
         if not texts:
             st.warning("至少选一条")
             return
-        with st.spinner("解析写板 + 回测两个文件 + 计算遗漏与热度…"):
+        rows_up = load("升序全套.csv", None) or []
+        rows_an = load("按序全套.csv", None) or []
+
+        with st.spinner("解析写板 + 计算遗漏出现率…"):
             sigs = []
             for tx in texts:
-                sigs += _parse_board(tx)
+                sigs += parse_signals(tx)
             if not sigs:
-                st.error("没解析出信号，请确认写板是全自动核算格式。")
+                st.error("没解析出信号，请确认写板格式。")
                 return
 
-            rows_up = load("升序全套.csv", None) or []
-            rows_an = load("按序全套.csv", None) or []
-            files = {"升序": rows_up, "按序": rows_an}
+            # 从当年数据推导 号码->生肖/五行 映射
+            _year = ""
+            try:
+                _r = rows_up[2]
+                _year = f"{_r[213]}{_r[0]}{_r[1]}{_r[2]}"[:4]
+            except Exception:
+                pass
+            zmap = _build_maps(rows_up, _year)
 
-            detail, votes = [], defaultdict(Counter)
-            hits_all = Counter()
+            keep_s, kill_s = defaultdict(Counter), defaultdict(Counter)
+            n_keep = n_kill = 0
             for s in sigs:
-                if not s["lines"]:
+                nums = _numbers_for(s["attr"], s["value"], zmap)
+                if not nums:
                     continue
-                col = s["lines"][0]["col"]
-                seq = s["base"][:s["lines"][0]["n"]]
-                if not seq:
-                    continue
-                h1, c1_ = _backtest(files["升序"], col, seq)
-                h2, c2_ = _backtest(files["按序"], col, seq)
-                hits_all["升序"] += h1
-                hits_all["按序"] += h2
-                cnt = c1_ + c2_
-                nums = Counter()
-                for v, c in cnt.items():
-                    for num in _numbers_for(s["attr"], v):
-                        nums[num] += c
-                for num, c in nums.items():
-                    votes[s["ball"]][num] += c
-                detail.append({"属性": s["attr"], "球位": f"第{s['ball']}球",
-                               "匹配": "".join(seq), "触发行": len(s["lines"]),
-                               "升序命中": h1, "按序命中": h2,
-                               "倾向": "／".join(f"{v}×{c}" for v, c in cnt.most_common(3)) or "-"})
+                ball = s["ball"]
+                if s["kind"] == "keep":
+                    for n in nums:
+                        keep_s[ball][n] += s["weight"]
+                    n_keep += 1
+                else:
+                    for n in nums:
+                        kill_s[ball][n] += s["weight"]
+                    n_kill += 1
 
-            # 三因子综合评分
-            probs = {}
-            for ball, vc in votes.items():
-                tot_vote = sum(vc.values()) or 1
-                ser = _ball_series(rows_up, ball) if rows_up else []
-                omis, freq = _num_stats(ser) if ser else ({n: 0 for n in range(1, 50)}, Counter())
-                max_omi = max(omis.values()) or 1
-                max_freq = max(freq.values()) or 1
+            # 遗漏修正
+            rates, base_rate = {}, {}
+            for b in range(1, 8):
+                ser = _ball_series(rows_up, b) if rows_up else []
+                if not ser:
+                    continue
+                r, _stat = _omission_rates(ser)
+                rates[b] = r
+                lo, hi = _RANGE.get(b, (1, 49))
+                base_rate[b] = 1.0 / max(1, len([n for n in range(lo, hi + 1)]))
+
+            st.session_state["cc_counts"] = (n_keep, n_kill)
+            st.session_state["cc_scores"] = self_scores = {}
+            table = []
+            for b in range(1, 8):
+                ks, kls = keep_s.get(b, Counter()), kill_s.get(b, Counter())
+                tk = sum(ks.values()) or 1
+                tl = sum(kls.values()) or 1
+                ser = _ball_series(rows_up, b) if rows_up else []
+                cur = _current_omission(ser) if ser else {}
+                r = rates.get(b, {})
+                lo, hi = _RANGE.get(b, (1, 49))
+                cand = set(ks) | set(kls)
                 scored = []
-                for n, c in vc.items():
-                    s1 = c / tot_vote
-                    s2 = omis.get(n, 0) / max_omi
-                    s3 = freq.get(n, 0) / max_freq
-                    scored.append((n, s1 * 100, omis.get(n, 0), freq.get(n, 0),
-                                   s1 * 0.5 + s2 * 0.3 + s3 * 0.2))
-                scored.sort(key=lambda x: -x[4])
-                probs[ball] = scored[:8]
+                for n in cand:
+                    kp = ks.get(n, 0) / tk            # 0~1 保留分
+                    kl = kls.get(n, 0) / tl           # 0~1 杀分
+                    k = cur.get(n, len(ser) or 0)
+                    pr = r.get(k, 0.0)
+                    bc = base_rate.get(b, 0.02) or 0.02
+                    ratio = (pr / bc) if pr else 0.0  # 遗漏修正倍率
+                    adj = max(-1.0, min(1.0, ratio - 1.0))
+                    score = kp - kl + 0.3 * adj
+                    scored.append((n, kp, kl, k, pr, bc, ratio, score))
+                scored.sort(key=lambda x: -x[7])
+                self_scores[b] = scored[:8]
+                for it in scored[:6]:
+                    table.append({"球位": f"第{b}球", "号码": f"{it[0]:02d}",
+                                  "保留分": round(it[1], 2), "杀分": round(it[2], 2),
+                                  "当前遗漏": it[3], "该遗漏历史出现率": f"{it[4]*100:.1f}%",
+                                  "基准": f"{it[5]*100:.1f}%",
+                                  "遗漏倍率": round(it[6], 2),
+                                  "综合分": round(it[7], 3)})
+            st.session_state["cc_table"] = table
 
-            st.session_state["cc_detail"] = detail
-            st.session_state["cc_probs"] = probs
-            st.session_state["cc_hits"] = dict(hits_all)
-            st.session_state["cc_period"] = sigs[0]["period"]
-
-    detail = st.session_state.get("cc_detail")
-    if not detail:
+    table = st.session_state.get("cc_table")
+    if not table:
         return
 
-    period = st.session_state.get("cc_period", "")
-    hits = st.session_state.get("cc_hits") or {}
-    st.markdown(f"#### 期号 {period}　｜　历史命中：升序 {hits.get('升序',0)} 次、"
-                f"按序 {hits.get('按序',0)} 次")
+    n_keep, n_kill = st.session_state.get("cc_counts", (0, 0))
+    st.markdown(f"#### 解析结果：保留类信号 {n_keep} 条　·　删除类信号 {n_kill} 条")
 
-    st.markdown("**【达标信号】**")
-    st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True)
-
-    probs = st.session_state.get("cc_probs") or {}
     st.markdown("**【各球位综合评分】**")
-    if probs:
-        rows = []
-        for b in sorted(probs):
-            for n, sv, omi, fr, sc in probs[b][:6]:
-                rows.append({"球位": f"第{b}球", "号码": f"{n:02d}",
-                             "信号占比": f"{sv:.0f}%", "遗漏期数": omi,
-                             "近30期次数": fr, "综合分": round(sc, 3)})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-        st.caption("综合分 = 信号占比×0.5 + 遗漏归一×0.3 + 热度归一×0.2")
-    else:
-        st.caption("本次没有可映射成号码的信号（生肖/五行类需人工判断）。")
+    st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
+    st.caption("综合分 = 保留分 − 杀分 + 0.3×(遗漏倍率−1)；"
+               "遗漏倍率 = 该遗漏期数的历史出现率 ÷ 区间均分。")
 
-    # ---------- 提示词 ----------
-    lines = [f"期号 {period}", "", "【达标信号（程序已筛选）】"]
-    for d in detail:
-        lines.append(f"{d['属性']}｜{d['球位']}｜匹配 {d['匹配']}｜触发行 {d['触发行']} 条"
-                     f"｜升序命中 {d['升序命中']}、按序命中 {d['按序命中']}｜倾向 {d['倾向']}")
-    lines += ["", "【历史回测（升序+按序）】",
-              f"合计命中：升序 {hits.get('升序',0)} 期、按序 {hits.get('按序',0)} 期。"]
-    if probs:
-        lines.append("各球位综合评分（信号 50% + 遗漏 30% + 热度 20%）：")
-        for b in sorted(probs):
-            seg = "　".join(f"{n:02d}(分{sc:.2f}/遗漏{omi}/热度{fr})"
-                            for n, _sv, omi, fr, sc in probs[b][:6])
-            lines.append(f"  第{b}球：{seg}")
+    # 提示词
+    lines = ["【本页统计口径】",
+             "写板（全自动核算）= 删除法：行数越大越倾向于杀；",
+             "深度联动 = 保留法：算出的值就是保留；",
+             "遗漏修正 = 该遗漏期数的历史出现率 ÷ 区间均分（>1 加分，<1 减分）。",
+             "", "【各球位综合评分（程序算出）】"]
+    for b in sorted(st.session_state.get("cc_scores", {})):
+        seg = "　".join(f"{n:02d}(分{sc:.2f}/遗漏{k}/倍率{ratio:.2f})"
+                        for n, kp, kl, k, pr, bc, ratio, sc
+                        in st.session_state["cc_scores"][b][:6])
+        lines.append(f"  第{b}球：{seg}")
     lines += ["", "【任务】基于以上统计，输出：",
               "1. 哪些信号互相印证、哪些冲突",
               "2. 每球位建议关注的号码及理由（只能从评分列表里选，不得编造）",
@@ -305,11 +346,11 @@ def render(df_data, H):
         if st.button("🤖 让 AI 总结", type="primary", use_container_width=True, key="cc_ai"):
             with st.spinner("AI 总结中…"):
                 ans = call_ai(prompt, "你是严谨的数据分析助手。只依据给定数据作答，"
-                                      "号码只能从给出的评分列表里选，禁止编造。")
+                                      "号码只能从评分列表里选，禁止编造。")
             st.session_state["cc_answer"] = ans
     with b2:
         st.download_button("📥 下载统计与提示词", prompt.encode("utf-8-sig"),
-                           file_name=f"计算中心_{period}.txt", mime="text/plain",
+                           file_name="计算中心_统计.txt", mime="text/plain",
                            use_container_width=True, key="cc_dl")
 
     ans = st.session_state.get("cc_answer")
