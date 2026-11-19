@@ -4359,26 +4359,6 @@ def login_page():
 
 
 def main_app():
-    # 刷新后自动恢复登录（有有效令牌时）
-    if not st.session_state.get("logged_in"):
-        _tok = _qp_get("t")
-        _u = check_login_token(_tok) if _tok else ""
-        if _u:
-            _admin_n = st.secrets.get("ADMIN_USERNAME", "admin")
-            if _u == _admin_n:
-                st.session_state.logged_in = True
-                st.session_state.username = _u
-            else:
-                try:
-                    _c = get_supabase_client()
-                    _rows = _c.table("users").select("username").eq(
-                        "username", _u).execute().data if _c else []
-                    if _rows:
-                        st.session_state.logged_in = True
-                        st.session_state.username = _u
-                except Exception:
-                    pass
-
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
     is_admin = (current_user == admin_name)
@@ -4473,6 +4453,26 @@ def main_app():
             st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
     elif page == "⚙️ 后台管理": render_admin_panel()
 
+
+# ===== 刷新/重开后，用令牌自动恢复登录 =====
+if not st.session_state.get("logged_in"):
+    _tok0 = _qp_get("t")
+    _u0 = check_login_token(_tok0) if _tok0 else ""
+    if _u0:
+        _admin_n0 = st.secrets.get("ADMIN_USERNAME", "admin")
+        if _u0 == _admin_n0:
+            st.session_state.logged_in = True
+            st.session_state.username = _u0
+        else:
+            try:
+                _c0 = get_supabase_client()
+                _rows0 = (_c0.table("users").select("username")
+                          .eq("username", _u0).execute().data) if _c0 else []
+                if _rows0:
+                    st.session_state.logged_in = True
+                    st.session_state.username = _u0
+            except Exception:
+                pass
 
 if not st.session_state.logged_in:
     login_page()
