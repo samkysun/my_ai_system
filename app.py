@@ -2345,39 +2345,67 @@ def _pred_render_archive(df_data, default_period):
     else:
         st.info(f"{sel} 期尚未开奖，暂不做命中对照。")
 
-    ball_order = [f"第{i}球" for i in range(1, 8)]
-    for ball in ball_order:
+    # ---------- 紧凑表格：一期 7 球压成 7 行 ----------
+    import pandas as _pd_arch
+    _rows_arch = []
+    for i in range(1, 8):
+        ball = f"第{i}球"
         if ball not in data:
             continue
         nums, ts, ot = data[ball]
-        _lc, _rc = st.columns([6, 1])
-        with _lc:
-            st.markdown(f"**{ball}**（{ot or '-'}，推演于 {ts}）")
-        with _rc:
-            if st.button("🗑 删除", key=f"pred_del_{sel}_{ball}"):
-                if _pred_delete(period=sel, ball=ball):
-                    st.rerun()
-        if not nums:
-            st.caption("（空）")
-            continue
-        chips = []
-        for n in nums:
-            hit = bool(actual) and n in actual
-            if hit:
-                chips.append(
-                    f"<span style='display:inline-block;min-width:38px;text-align:center;"
-                    f"padding:4px 8px;margin:3px;border-radius:6px;background:#ef4444;"
-                    f"color:#fff;font-weight:700;'>{n:02d}</span>")
-            else:
-                chips.append(
-                    f"<span style='display:inline-block;min-width:38px;text-align:center;"
-                    f"padding:4px 8px;margin:3px;border-radius:6px;background:#e5e7eb;"
-                    f"color:#111827;'>{n:02d}</span>")
-        st.markdown("<div>" + "".join(chips) + "</div>", unsafe_allow_html=True)
         if actual:
             _hit = [n for n in nums if n in actual]
-            st.caption(f"命中 {len(_hit)} 个：" + (
-                " ".join(f"{n:02d}" for n in _hit) if _hit else "无"))
+            _mark = f"✅ 命中 {len(_hit)} 个：" + (
+                " ".join(f"{n:02d}" for n in _hit) if _hit else "无")
+        else:
+            _mark = "-"
+        _rows_arch.append({
+            "球位": ball,
+            "推荐号码": " ".join(f"{n:02d}" for n in nums) if nums else "（空）",
+            "个数": len(nums),
+            "实际开出": f"{actual[i-1]:02d}" if actual and i - 1 < len(actual) else "-",
+            "命中情况": _mark,
+            "推演时间": ts or "-",
+        })
+    if _rows_arch:
+        st.dataframe(_pd_arch.DataFrame(_rows_arch), use_container_width=True,
+                     hide_index=True)
+
+    # 号码球样式（默认折叠，想看再展开）
+    with st.expander("🎱 号码球视图（带命中高亮）", expanded=False):
+        for i in range(1, 8):
+            ball = f"第{i}球"
+            if ball not in data:
+                continue
+            nums, _ts, _ot = data[ball]
+            if not nums:
+                continue
+            chips = []
+            for n in nums:
+                if actual and n in actual:
+                    chips.append(
+                        f"<span style='display:inline-block;min-width:34px;text-align:center;"
+                        f"padding:3px 6px;margin:2px;border-radius:6px;background:#ef4444;"
+                        f"color:#fff;font-weight:700;'>{n:02d}</span>")
+                else:
+                    chips.append(
+                        f"<span style='display:inline-block;min-width:34px;text-align:center;"
+                        f"padding:3px 6px;margin:2px;border-radius:6px;background:#e5e7eb;"
+                        f"color:#111827;'>{n:02d}</span>")
+            st.markdown(f"**{ball}**　" + "".join(chips), unsafe_allow_html=True)
+
+    # 单球删除（折叠）
+    with st.expander("🧹 删除单球存档", expanded=False):
+        _bc = st.columns(7)
+        for i in range(1, 8):
+            ball = f"第{i}球"
+            if ball not in data:
+                continue
+            with _bc[i - 1]:
+                if st.button(f"删{ball}", key=f"pred_del_{sel}_{ball}",
+                             use_container_width=True):
+                    if _pred_delete(period=sel, ball=ball):
+                        st.rerun()
 
 
 def render_ai(df_data):
