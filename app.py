@@ -110,8 +110,43 @@ def get_supabase_client():
 
 
 # 密码加密（保持原样：已注册用户的哈希依赖它，不可随意改）
+import hmac as _hmac
+import os as _os_sec
+import time as _time_sec
+
+_PBKDF2_ITER = 120000
+
+
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    """PBKDF2-SHA256 + 随机盐；格式 pbkdf2$迭代$盐$散列"""
+    salt = _os_sec.urandom(16).hex()
+    dk = hashlib.pbkdf2_hmac("sha256", (password or "").encode(),
+                             bytes.fromhex(salt), _PBKDF2_ITER)
+    return f"pbkdf2${_PBKDF2_ITER}${salt}${dk.hex()}"
+
+
+def verify_password(password, stored):
+    """校验密码；兼容旧的纯 sha256 记录"""
+    stored = str(stored or "")
+    if not stored:
+        return False
+    if stored.startswith("pbkdf2$"):
+        try:
+            _, it, salt, h = stored.split("$")
+            dk = hashlib.pbkdf2_hmac("sha256", (password or "").encode(),
+                                     bytes.fromhex(salt), int(it))
+            return _hmac.compare_digest(dk.hex(), h)
+        except Exception:
+            return False
+    try:
+        return _hmac.compare_digest(
+            hashlib.sha256((password or "").encode()).hexdigest(), stored)
+    except Exception:
+        return False
+
+
+def is_legacy_hash(stored):
+    return bool(stored) and not str(stored).startswith("pbkdf2$")
 
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -3036,7 +3071,27 @@ def get_analysis_prompt(full_table):
 7. 注意用户是否选择升序还是按序作为条件限制。"""
 
 
+def _ai_rate_ok():
+    """AI 调用限流：间隔 >= 3 秒，单会话每日 <= 200 次"""
+    now = _time_sec.time()
+    last = st.session_state.get("_ai_last_call_ts", 0)
+    if now - last < 3:
+        return False, f"调用太快，请等 {int(3 - (now - last)) + 1} 秒后再试"
+    day = _time_sec.strftime("%Y-%m-%d")
+    if st.session_state.get("_ai_day") != day:
+        st.session_state["_ai_day"] = day
+        st.session_state["_ai_day_count"] = 0
+    if st.session_state.get("_ai_day_count", 0) >= 200:
+        return False, "今日 AI 调用已达上限（200 次），请明天再试"
+    st.session_state["_ai_last_call_ts"] = now
+    st.session_state["_ai_day_count"] = st.session_state.get("_ai_day_count", 0) + 1
+    return True, ""
+
+
 def call_deepseek_api(question, system_prompt):
+    _ok, _why = _ai_rate_ok()
+    if not _ok:
+        return f"运行错误：{_why}"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
     payload = {"model": "deepseek-chat", "temperature": 0, "messages": [{"role": "system", "content": "你是一个严谨的数据推演与集合运算助手。"}, {"role": "user", "content": question}, {"role": "system", "content": system_prompt}]}
     try:
@@ -3925,9 +3980,15 @@ def register_user(username, password):
         return False, "数据库连接失败：没读到 SUPABASE_URL / SUPABASE_KEY。改完 Secrets 必须 Reboot app。"
     u = (username or "").strip()
     p = password or ""
+    import re as _re_sec
     if len(u) < 2: return False, "用户名至少 2 个字符（首尾空格会被去掉）"
-    if len(p) < 4: return False, "密码至少 4 位"
-    if any(ch.isspace() for ch in u): return False, "用户名不能包含空格"
+    if len(u) > 32: return False, "用户名最多 32 个字符"
+    if len(p) < 6: return False, "密码至少 6 位"
+    if len(p) > 128: return False, "密码过长"
+    if not _re_sec.fullmatch(r"[\w\u4e00-\u9fa5.\-]{2,32}", u):
+        return False, "用户名只能用字母、数字、下划线、中文、点或横线"
+    if p.lower() in ("123456", "password", "111111", "12345678", "abc123"):
+        return False, "这个密码太常见，请换一个"
     try:
         client.table("users").insert({"username": u, "password": hash_password(p), "is_vip": False}).execute()
         return True, f"注册成功！请到【登录】页签用 {u} 登录。"
@@ -3957,7 +4018,16 @@ def check_credentials(username, password):
     except Exception as e:
         return False, f"查询出错（users 表是否存在？）: {str(e)[:200]}"
     if not rows: return False, "该用户名不存在，请先注册"
-    if rows[0].get("password") != hash_password(password or ""): return False, "密码错误"
+    _stored = rows[0].get("password")
+    if not verify_password(password or "", _stored):
+        return False, "密码错误"
+    # 旧哈希自动升级为 PBKDF2
+    if is_legacy_hash(_stored):
+        try:
+            client.table("users").update(
+                {"password": hash_password(password or "")}).eq("username", u).execute()
+        except Exception:
+            pass
     return True, "登录成功"
 
 
@@ -3972,29 +4042,52 @@ def login_page():
     with tab1:
         login_user = st.text_input("用户名", key="login_user")
         login_pass = st.text_input("密码", type="password", key="login_pass")
-        if st.button("登录", use_container_width=True, type="primary"):
+        # ---- 登录失败锁定 ----
+        _lock_until = st.session_state.get("_login_lock_until", 0)
+        _fails = st.session_state.get("_login_fails", 0)
+        if _lock_until and _time_sec.time() < _lock_until:
+            st.error(f"🚫 登录失败次数过多，已锁定，请等 "
+                     f"{int(_lock_until - _time_sec.time())} 秒后再试")
+        if st.button("登录", use_container_width=True, type="primary",
+                     disabled=bool(_lock_until and _time_sec.time() < _lock_until)):
             u = (login_user or "").strip()
             if not u or not login_pass:
                 st.warning("用户名和密码都要填")
-            elif u == admin_name:
-                if login_pass == admin_pass or hash_password(login_pass) == admin_pass:
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.success("👑 管理员登录成功！")
-                    time.sleep(0.6)
-                    st.rerun()
-                else:
-                    st.error("管理员密码错误")
             else:
-                ok, msg = check_credentials(u, login_pass)
-                if ok:
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.success("登录成功，正在进入系统…")
-                    time.sleep(0.6)
-                    st.rerun()
+                _ok = False
+                if u == admin_name:
+                    if login_pass == admin_pass or hash_password(login_pass) == admin_pass:
+                        _ok = True
+                        st.session_state.logged_in = True
+                        st.session_state.username = u
+                        st.session_state["_login_fails"] = 0
+                        st.success("👑 管理员登录成功！")
+                        time.sleep(0.6)
+                        st.rerun()
+                    else:
+                        st.error("管理员密码错误")
                 else:
-                    st.error(msg)
+                    ok, msg = check_credentials(u, login_pass)
+                    if ok:
+                        _ok = True
+                        st.session_state.logged_in = True
+                        st.session_state.username = u
+                        st.session_state["_login_fails"] = 0
+                        st.success("登录成功，正在进入系统…")
+                        time.sleep(0.6)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+                if not _ok:
+                    _fails = st.session_state.get("_login_fails", 0) + 1
+                    st.session_state["_login_fails"] = _fails
+                    if _fails >= 5:
+                        st.session_state["_login_lock_until"] = _time_sec.time() + 300
+                        st.session_state["_login_fails"] = 0
+                        st.error("🚫 连续失败 5 次，已锁定 5 分钟")
+                    else:
+                        st.caption(f"还可尝试 {5 - _fails} 次，超过将锁定 5 分钟")
+                    time.sleep(min(1.0, 0.2 * _fails))
 
     # ---- 注册
     # widget 一旦渲染就不能再改它的 session_state，所以清空表单要放在渲染之前
