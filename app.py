@@ -2499,8 +2499,15 @@ def render_ai(df_data):
         return f"这是{qishu}期{order_type}{qiu}的核算条件，{interval}"
 
     col1, col2, col3 = st.columns(3)
-    with col1: qishu = st.selectbox("选择期数：", unique_periods, index=0)
-    with col2: qiu = st.selectbox("选择球数：", ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"], index=0)
+    _BALLS = ["第1球", "第2球", "第3球", "第4球", "第5球", "第6球", "第7球"]
+    if st.session_state.get("ai_period_sel") not in unique_periods:
+        st.session_state["ai_period_sel"] = unique_periods[0] if unique_periods else ""
+    if st.session_state.get("ai_qiu_sel") not in _BALLS:
+        st.session_state["ai_qiu_sel"] = "第1球"
+    with col1:
+        qishu = st.selectbox("选择期数：", unique_periods, key="ai_period_sel")
+    with col2:
+        qiu = st.selectbox("选择球数：", _BALLS, key="ai_qiu_sel")
     with col3: order_type = st.radio("核算模式：", ["升序", "按序"], horizontal=True)
 
     st.divider()
@@ -2523,6 +2530,12 @@ def render_ai(df_data):
         b1, b2 = st.columns(2)
         with b1:
             if st.button("🚀 开始推演 (呼叫 API)", use_container_width=True, type="primary"):
+                _sig = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
+                if (_sig == st.session_state.get("ai_last_sig")
+                        and not st.session_state.get("ai_allow_dup", False)):
+                    st.warning(f"⚠️ {qishu} 期 {qiu}（{order_type}）刚刚计算过，"
+                               "已跳过重复调用。如需重算，请勾选右边「允许重复计算同一球」。")
+                    st.stop()
                 if not checked_texts: st.warning("请先勾选！")
                 else:
                     #==========给AI推演加入严厉的区间警告=============
@@ -2537,6 +2550,7 @@ def render_ai(df_data):
                             system_prompt = get_analysis_prompt(build_full_table_text(db))
                             answer = call_deepseek_api(question, system_prompt)
                             st.session_state.ai_api_result = answer
+                            st.session_state["ai_last_sig"] = f"{qishu}|{qiu}|{order_type}|{len(checked_texts)}"
                             if "请求失败" in answer or "运行错误" in answer:
                                 st.error(f"AI 接口报错：{answer}")
                                 st.session_state.ai_ball_result = []
@@ -2554,6 +2568,7 @@ def render_ai(df_data):
                                         "可以展开下面的完整推演结果核对。")
 
         with b2:
+            st.checkbox("允许重复计算同一球", key="ai_allow_dup")
             if st.button("🗑️ 清理勾选", use_container_width=True):
                 st.session_state.reset_version += 1
                 st.session_state.ai_api_result = "等待推演..."
