@@ -2514,7 +2514,10 @@ def render_ai(df_data):
         extra = st.session_state.get("ai_extra_condition", "")
 
         full_text = get_prefix(qishu, qiu, order_type) + "".join(checked_texts) + extra
-        st.text_area("已选核算条件：", value=full_text, height=200, disabled=True)
+        st.text_area("已选核算条件：", value=full_text, height=420, disabled=True)
+        st.markdown(
+            '<style>div[data-testid="stTextArea"] textarea { font-size: 17px !important;'
+            ' line-height: 1.8 !important; }</style>', unsafe_allow_html=True)
 
 
         b1, b2 = st.columns(2)
