@@ -584,6 +584,7 @@ def render(df_data, H):
         _DEF_UP = {1: [3, 5], 2: [1, 2, 3, 4], 3: [4], 4: [2], 5: [1], 6: [1, 2, 6]}
         _DEF_AN = {1: [5], 2: [1, 2], 3: [2, 3, 4, 5], 4: [3], 5: [1, 4], 6: [6]}
 
+        _ver = st.session_state.get("cv_ver", 0)
         st.markdown("**升序各球位：不能落在按序的哪几球**")
         _cols = st.columns(6)
         _f_up = {}
@@ -591,7 +592,7 @@ def render(df_data, H):
             with _cols[j - 1]:
                 _f_up[j] = st.multiselect(
                     f"升序{j}球", [1, 2, 3, 4, 5, 6],
-                    default=_DEF_UP.get(j, []), key=f"cv_fu{j}")
+                    default=_DEF_UP.get(j, []), key=f"cv_fu{j}_{_ver}")
 
         st.markdown("**按序各球位：不能落在升序的哪几球**")
         _cols2 = st.columns(6)
@@ -600,7 +601,7 @@ def render(df_data, H):
             with _cols2[i - 1]:
                 _f_an[i] = st.multiselect(
                     f"按序{i}球", [1, 2, 3, 4, 5, 6],
-                    default=_DEF_AN.get(i, []), key=f"cv_fa{i}")
+                    default=_DEF_AN.get(i, []), key=f"cv_fa{i}_{_ver}")
 
         st.markdown("**正向约束：某升序位必须落在按序第几球（可选）**")
         _cols3 = st.columns(6)
@@ -608,7 +609,7 @@ def render(df_data, H):
         for j in range(1, 7):
             with _cols3[j - 1]:
                 _v = st.selectbox(f"升序{j}位", ["任意", 1, 2, 3, 4, 5, 6],
-                                  index=0, key=f"cv_rq{j}")
+                                  index=0, key=f"cv_rq{j}_{_ver}")
                 _req[j] = 0 if _v == "任意" else int(_v)
 
         st.markdown("**反向约束：某按序位必须来自升序第几球（可选）**")
@@ -617,7 +618,7 @@ def render(df_data, H):
         for i in range(1, 7):
             with _cols4[i - 1]:
                 _v2 = st.selectbox(f"按序{i}位", ["任意", 1, 2, 3, 4, 5, 6],
-                                   index=0, key=f"cv_ra{i}")
+                                   index=0, key=f"cv_ra{i}_{_ver}")
                 _req_an[i] = 0 if _v2 == "任意" else int(_v2)
 
         _a, _b = st.columns(2)
@@ -643,10 +644,7 @@ def render(df_data, H):
                 st.session_state["cv_banned"] = len(_banned)
         with _b:
             if st.button("↩ 恢复示例条件", key="cv_reset", use_container_width=True):
-                for j in range(1, 7):
-                    st.session_state[f"cv_fu{j}"] = _DEF_UP.get(j, [])
-                for i in range(1, 7):
-                    st.session_state[f"cv_fa{i}"] = _DEF_AN.get(i, [])
+                st.session_state["cv_ver"] = st.session_state.get("cv_ver", 0) + 1
                 st.rerun()
 
         _sols = st.session_state.get("cv_sols")
