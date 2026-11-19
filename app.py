@@ -1953,10 +1953,10 @@ def render_deep_linkage(df_data):
         _dlh = st.session_state.deep_linkage_html
         _lines = max(6, _dlh.count("<div"))
         _dlcomp.html(
-            "<style>html,body{margin:0;padding:6px;background:transparent;"
-            "font-family:Consolas,'Microsoft YaHei',monospace;font-size:15px;"
-            "line-height:1.9;color:#e5e7eb;}"
-            "b{color:#93c5fd;}</style>" + _dlh,
+            "<style>html,body{margin:0;padding:8px;background:#ffffff;"
+            "font-family:Consolas,'Microsoft YaHei',monospace;font-size:16px;"
+            "font-weight:600;line-height:2.0;color:#111827;}"
+            "b{color:#1d4ed8;}span{color:inherit;}</style>" + _dlh,
             height=min(900, 60 + 26 * _lines), scrolling=True)
 
         with st.expander("📄 查看纯文本版报告", expanded=False):
