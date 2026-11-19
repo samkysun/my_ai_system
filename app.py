@@ -4208,6 +4208,68 @@ def change_password(username, old_pass, new_pass):
         return False, f"修改失败：{str(e)[:200]}"
 
 
+_LOGIN_TTL_DAYS = 7
+
+
+def _login_secret():
+    """签名密钥：优先 SECRET_KEY，否则用 ADMIN_PASSWORD 派生"""
+    s = st.secrets.get("SECRET_KEY", "") or ""
+    if not s:
+        s = "dsh|" + str(st.secrets.get("ADMIN_PASSWORD", "")) + "|login-token"
+    return s.encode("utf-8")
+
+
+def make_login_token(username):
+    """生成 用户名|到期时间戳.签名"""
+    import base64 as _b64
+    import hmac as _hm
+    import hashlib as _hl
+    exp = int(_time_sec.time()) + _LOGIN_TTL_DAYS * 86400
+    raw = f"{username}|{exp}".encode("utf-8")
+    payload = _b64.urlsafe_b64encode(raw).decode().rstrip("=")
+    sig = _hm.new(_login_secret(), payload.encode(), _hl.sha256).hexdigest()[:32]
+    return f"{payload}.{sig}"
+
+
+def check_login_token(tok):
+    """校验令牌 -> 用户名 或 空"""
+    import base64 as _b64
+    import hmac as _hm
+    import hashlib as _hl
+    try:
+        if not tok or "." not in tok:
+            return ""
+        payload, sig = tok.rsplit(".", 1)
+        want = _hm.new(_login_secret(), payload.encode(), _hl.sha256).hexdigest()[:32]
+        if not _hm.compare_digest(sig, want):
+            return ""
+        raw = _b64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
+        user, exp = raw.rsplit("|", 1)
+        if int(exp) < int(_time_sec.time()):
+            return ""
+        return user
+    except Exception:
+        return ""
+
+
+def _qp_set(key, val):
+    try:
+        st.query_params[key] = val
+    except Exception:
+        try:
+            st.experimental_set_query_params(**{key: val})
+        except Exception:
+            pass
+
+
+def _qp_get(key):
+    try:
+        v = st.query_params.get(key, "")
+        return v if isinstance(v, str) else (v[0] if v else "")
+    except Exception:
+        return ""
+
+
 def login_page():
     st.title("🔐 智能系统客户端登录")
     tab1, tab2 = st.tabs(["已有账号？登录", "没有账号？立即注册"])
@@ -4238,6 +4300,7 @@ def login_page():
                         st.session_state.logged_in = True
                         st.session_state.username = u
                         st.session_state["_login_fails"] = 0
+                        _qp_set("t", make_login_token(u))
                         st.success("👑 管理员登录成功！")
                         time.sleep(0.6)
                         st.rerun()
@@ -4250,6 +4313,7 @@ def login_page():
                         st.session_state.logged_in = True
                         st.session_state.username = u
                         st.session_state["_login_fails"] = 0
+                        _qp_set("t", make_login_token(u))
                         st.success("登录成功，正在进入系统…")
                         time.sleep(0.6)
                         st.rerun()
@@ -4295,6 +4359,26 @@ def login_page():
 
 
 def main_app():
+    # 刷新后自动恢复登录（有有效令牌时）
+    if not st.session_state.get("logged_in"):
+        _tok = _qp_get("t")
+        _u = check_login_token(_tok) if _tok else ""
+        if _u:
+            _admin_n = st.secrets.get("ADMIN_USERNAME", "admin")
+            if _u == _admin_n:
+                st.session_state.logged_in = True
+                st.session_state.username = _u
+            else:
+                try:
+                    _c = get_supabase_client()
+                    _rows = _c.table("users").select("username").eq(
+                        "username", _u).execute().data if _c else []
+                    if _rows:
+                        st.session_state.logged_in = True
+                        st.session_state.username = _u
+                except Exception:
+                    pass
+
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
     is_admin = (current_user == admin_name)
@@ -4316,6 +4400,10 @@ def main_app():
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.username = ""
+            try:
+                st.query_params.clear()
+            except Exception:
+                pass
             st.rerun()
 
         with st.expander("🔑 修改密码", expanded=False):
