@@ -355,7 +355,8 @@ def render(df_data, H):
 
         hits = find_patterns(ser, base, 0, top_n=None)   # 完全一致，取全部
         _expect = len(ser) / (6 ** len(base))
-        st.markdown(f"**【触发行】**：历史中排列完全一致共出现 **{len(hits)}** 次")
+        st.markdown(f"**【触发行】**：历史中排列 **100% 完全一致**共出现 **{len(hits)}** 次"
+                    f"（不允许任何错位）")
         st.caption(f"（{len(base)} 行完全一致的期望出现次数约 {_expect:.2f} 次。"
                    "这个属性只有 6 个取值，实测：2 行约 12~30 次，3 行约 0~9 次，"
                    "4 行以上基本为 0。默认用 2 行，样本最多。）")
@@ -365,7 +366,6 @@ def render(df_data, H):
             for k, (i, periods, prev_val, next_val, _sm) in enumerate(hits[:60], 1):
                 rows_out.append({
                     "序": k,
-                    "吻合": f"{hits[k-1][4]}/{len(base)}",
                     "行号": f"{i+1}-{i+len(base)}",
                     "期号范围": f"{periods[-1]} ~ {periods[0]}",
                     "更近一期(上一行)": prev_val if prev_val is not None else "-",
