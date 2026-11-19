@@ -819,6 +819,51 @@ def render(df_data, H):
         st.session_state["cc_patterns"] = pattern_rows
         st.session_state["cc_counts"] = (len(kill), len(uniq), len(keep))
 
+    # ---------- 仅看杀号结果 ----------
+    st.divider()
+    st.markdown("### 🚫 仅看杀号结果")
+    st.caption("不跑全量分析，直接按当前阈值列出每个球位「杀掉哪些、留下哪些」。")
+    _kc1, _kc2 = st.columns([1, 3])
+    with _kc1:
+        _kill_only = st.button("🎯 只算杀号", use_container_width=True, key="cc_kill_only")
+    with _kc2:
+        st.caption(f"当前阈值：出现率 < 区间均分 × {kill_th:g} → 判杀（可用上方滑块调整）")
+
+    if _kill_only:
+        _rows_k = load("升序全套.csv", None) or []
+        if not _rows_k:
+            st.error("读不到 升序全套.csv")
+        else:
+            _cols_k = _ball_cols(_rows_k)
+            _kr = []
+            _tot_kill = 0
+            for b in range(1, 8):
+                lo, hi = _RANGE[b]
+                ser = [x for x in (_cols_k.get(b) or []) if x]
+                if not ser:
+                    continue
+                _rate = _omission_rates(ser)
+                _cur = _cur_omission(ser)
+                _base = 1.0 / max(1, hi - lo + 1)
+                killed = []
+                for n in range(lo, hi + 1):
+                    pv = _rate.get(_cur.get(n, 0))
+                    if pv is not None and pv < _base * kill_th:
+                        killed.append(n)
+                kept = [n for n in range(lo, hi + 1) if n not in killed]
+                _tot_kill += len(killed)
+                _kr.append({
+                    "球位": f"第{b}球",
+                    "区间": f"{lo}-{hi}",
+                    "杀掉": " ".join(f"{n:02d}" for n in killed) or "（无）",
+                    "杀号数": len(killed),
+                    "留下": " ".join(f"{n:02d}" for n in kept) or "（全杀）",
+                    "留下数": len(kept),
+                })
+            st.dataframe(pd.DataFrame(_kr), use_container_width=True, hide_index=True)
+            st.success(f"共杀 {_tot_kill} 个号；阈值 {kill_th:g}，"
+                       f"阈值越大杀得越多，可在上方滑块调整后重新点此按钮。")
+
     # ---------- 指定期号回测 ----------
     st.divider()
     st.markdown("### 🎯 指定期号回测")
