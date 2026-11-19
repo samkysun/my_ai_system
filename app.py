@@ -2407,6 +2407,10 @@ def _pred_render_archive(df_data, default_period):
     _sc1, _sc1b, _sc2 = st.columns([1, 1, 2])
     with _sc1:
         sel = st.selectbox("选择期号查看存档", periods, key="pred_arch_period")
+    _cnt_s = len(_pred_load(sel, "升序"))
+    _cnt_a = len(_pred_load(sel, "按序"))
+    st.caption(f"本期存档：升序 {_cnt_s} 个球位　｜　按序 {_cnt_a} 个球位"
+               f"（下方「排序方式」切换查看）")
     _ords = _pred_orders(sel) or ["升序"]
     with _sc1b:
         _ord = st.selectbox("排序方式", _ords, key="pred_arch_order")
@@ -2737,6 +2741,9 @@ def render_ai(df_data):
                                 if _got:
                                     _pred_save(qishu, qiu, order_type, _got,
                                                force=st.session_state.get("ai_allow_dup", False))
+                                    # 存档区自动跳到刚保存的期号+排序
+                                    st.session_state["pred_arch_period"] = qishu
+                                    st.session_state["pred_arch_order"] = order_type
                                 if len(_got) > 30:
                                     st.warning(
                                         f"提取到 {len(_got)} 个号码，偏多。"
