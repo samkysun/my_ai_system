@@ -466,6 +466,10 @@ def render(df_data, H):
         full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
                                 value=True, key="cc_full")
 
+    pick_k = st.slider(
+        "每球推荐几个号（想看几个就滑到几个）",
+        min_value=1, max_value=12, value=3, step=1, key="cc_pick_k")
+
     kill_th = st.slider(
         "杀号阈值（×区间均分）：越高杀得越多　—　回测显示 0.8~0.9 性价比较好",
         min_value=0.3, max_value=1.2, value=0.8, step=0.05, key="cc_kill_th")
@@ -790,6 +794,53 @@ def render(df_data, H):
     if _sw:
         st.dataframe(pd.DataFrame(_sw), use_container_width=True, hide_index=True)
         st.caption("「杀对率」= 杀掉的号里确实没开出的比例；每期平均杀得多、杀对率又不掉，越好。")
+
+    # ---------- 覆盖模式：每球 K 个号，累计命中率 ----------
+    if _bl:
+        _cols3 = _ball_cols(load("升序全套.csv", None) or [])
+        _rows3 = []
+        _tops = {}
+        for b in sorted(_scores_now):
+            arr = [x for x in _scores_now[b] if not x[9]] or _scores_now[b]
+            topk = [x[0] for x in arr[:pick_k]]
+            topk = [n for n in topk if _RANGE.get(b, (1, 49))[0] <= n <= _RANGE.get(b, (1, 49))[1]]
+            if not topk:
+                continue
+            _tops[b] = topk
+            ser = [x for x in (_cols3.get(b) or []) if x]
+            n_hist = len(ser) or 1
+            cum = []
+            for k in range(1, len(topk) + 1):
+                cum.append(sum(1 for v in ser if v in topk[:k]) / n_hist)
+            _rows3.append({
+                "球位": f"第{b}球",
+                "推荐（累计命中率）": "　".join(
+                    f"{n:02d}({c*100:.0f}%)" for n, c in zip(topk, cum)),
+                "号码数": len(topk),
+                "累计命中率": f"{cum[-1]*100:.1f}%",
+            })
+
+        if _rows3:
+            st.markdown(f"**【每球 {pick_k} 个号 · 累计命中率】**")
+            st.dataframe(pd.DataFrame(_rows3), use_container_width=True, hide_index=True)
+
+            # 历史上「至少中一个」的实际占比
+            _lens = min((len(_cols3.get(b) or []) for b in _tops), default=0)
+            _hit = 0
+            _cnt = 0
+            for i in range(_lens):
+                _cnt += 1
+                for b, tk in _tops.items():
+                    ser = _cols3.get(b) or []
+                    if i < len(ser) and ser[i] in tk:
+                        _hit += 1
+                        break
+            if _cnt:
+                st.success(f"7 个球各押 {pick_k} 个号（共 {sum(len(v) for v in _tops.values())} 注）"
+                           f" → 历史上「至少中一个」的期数占比 = {_hit/_cnt*100:.1f}%"
+                           f"（样本 {_cnt} 期）")
+            st.caption("累计命中率 = 该球位历史上开出「这几个号里任意一个」的期数 ÷ 总期数。"
+                       "最后一行的百分比 = 这几注在历史上真的中过的比例。")
 
     _bt = st.session_state.get("cc_bt_table")
     if _bt:
