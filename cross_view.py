@@ -229,6 +229,30 @@ def backtest_period(seq, which, rows_n, target, direction="up2an"):
             "hit": (pred == actual) if pred is not None else False}
 
 
+def solve_matching(forbid_up, forbid_an=None):
+    """forbid_up: {升序位1-6: [不能落的按序位...]}
+       返回 (合法排列列表, 信息)  排列 = 升序位1..6 各自落在的按序位"""
+    import itertools as _it
+    banned = set()
+    for j, lst in (forbid_up or {}).items():
+        for i in lst:
+            banned.add((int(j), int(i)))
+    for i, lst in (forbid_an or {}).items():
+        for j in lst:
+            banned.add((int(j), int(i)))
+
+    sols = []
+    for perm in _it.permutations(range(1, 7)):
+        ok = True
+        for j in range(1, 7):
+            if (j, perm[j - 1]) in banned:
+                ok = False
+                break
+        if ok:
+            sols.append(perm)
+    return sols, banned
+
+
 def render(df_data, H):
     st.title("🔀 升降交集")
     st.caption("「升序」是 6 个平码从小到大排列 + 特码；「按序」是落球顺序。"
@@ -283,7 +307,7 @@ def render(df_data, H):
     with c1:
         k = st.slider("每个位置取前几个候选", 3, 20, 8, 1, key="cv_k")
     with c2:
-        mode = st.radio("模式", ["预测下一期", "回测对比", "位置序列"],
+        mode = st.radio("模式", ["预测下一期", "回测对比", "位置序列", "配位求解"],
                         horizontal=True, key="cv_mode")
 
     if mode == "预测下一期":
@@ -511,6 +535,98 @@ def render(df_data, H):
                             + ("✅ 命中" if _pred == _actual else "❌ 不符"))
         else:
             st.info("历史中没有出现 100% 相同的排列，可以把基准行数调小试试。")
+
+    elif mode == "配位求解":
+        st.markdown("### 配位求解")
+        st.caption("6 个升序位置对应 6 个按序位置（一个排列，共 720 种）。"
+                   "下面填「不能落在」的条件，程序枚举出所有合法排列。")
+
+        _DEF_UP = {1: [3, 5], 2: [1, 2, 3, 4], 3: [4], 4: [2], 5: [1], 6: [1, 2, 6]}
+        _DEF_AN = {1: [5], 2: [1, 2], 3: [2, 3, 4, 5], 4: [3], 5: [1, 4], 6: [6]}
+
+        st.markdown("**升序各球位：不能落在按序的哪几球**")
+        _cols = st.columns(6)
+        _f_up = {}
+        for j in range(1, 7):
+            with _cols[j - 1]:
+                _f_up[j] = st.multiselect(
+                    f"升序{j}球", [1, 2, 3, 4, 5, 6],
+                    default=_DEF_UP.get(j, []), key=f"cv_fu{j}")
+
+        st.markdown("**按序各球位：不能落在升序的哪几球**")
+        _cols2 = st.columns(6)
+        _f_an = {}
+        for i in range(1, 7):
+            with _cols2[i - 1]:
+                _f_an[i] = st.multiselect(
+                    f"按序{i}球", [1, 2, 3, 4, 5, 6],
+                    default=_DEF_AN.get(i, []), key=f"cv_fa{i}")
+
+        _a, _b = st.columns(2)
+        with _a:
+            if st.button("🔍 计算合法排列", type="primary", key="cv_solve",
+                         use_container_width=True):
+                _sols, _banned = solve_matching(_f_up, _f_an)
+                st.session_state["cv_sols"] = _sols
+                st.session_state["cv_banned"] = len(_banned)
+        with _b:
+            if st.button("↩ 恢复示例条件", key="cv_reset", use_container_width=True):
+                for j in range(1, 7):
+                    st.session_state[f"cv_fu{j}"] = _DEF_UP.get(j, [])
+                for i in range(1, 7):
+                    st.session_state[f"cv_fa{i}"] = _DEF_AN.get(i, [])
+                st.rerun()
+
+        _sols = st.session_state.get("cv_sols")
+        if _sols is not None:
+            st.divider()
+            if not _sols:
+                st.error("没有合法排列：这些条件互相冲突，请放宽其中几条")
+            else:
+                st.success(f"共 {len(_sols)} 种合法排列（禁用组合 {st.session_state.get('cv_banned',0)} 条）")
+
+                # 每个升序位可落在哪些按序位
+                _rows1 = []
+                for j in range(1, 7):
+                    _can = sorted({p[j - 1] for p in _sols})
+                    _rows1.append({
+                        "升序位": f"第{j}位",
+                        "可能落在按序": " ".join(f"第{i}球" for i in _can) or "无",
+                        "候选数": len(_can),
+                    })
+                st.markdown("**【升序位 → 按序候选】**")
+                st.dataframe(pd.DataFrame(_rows1), use_container_width=True, hide_index=True)
+
+                # 每个按序位可来自哪些升序位
+                _rows2 = []
+                for i in range(1, 7):
+                    _can = sorted({j for j in range(1, 7)
+                                   for p in _sols if p[j - 1] == i})
+                    _rows2.append({
+                        "按序位": f"第{i}球",
+                        "可能来自升序": " ".join(f"第{j}位" for j in _can) or "无",
+                        "候选数": len(_can),
+                    })
+                st.markdown("**【按序位 ← 升序来源】**")
+                st.dataframe(pd.DataFrame(_rows2), use_container_width=True, hide_index=True)
+
+                # 明细
+                with st.expander(f"全部 {len(_sols)} 种合法排列", expanded=False):
+                    _rows3 = []
+                    for k, p in enumerate(_sols[:200], 1):
+                        _rows3.append({"序": k,
+                                       **{f"升序{j}": f"按序{p[j-1]}"
+                                          for j in range(1, 7)}})
+                    st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
+                                 hide_index=True)
+
+                if H.get("board_add"):
+                    if st.button("📌 推送到 AI 推演看板", key="cv_solve_push"):
+                        _txt = f"【配位求解】合法排列 {len(_sols)} 种\n"
+                        for r in _rows1:
+                            _txt += f"  {r['升序位']} → {r['可能落在按序']}\n"
+                        H["board_add"]("配位求解", f"{len(_sols)} 种合法排列", _txt)
+                        st.success("已推送到看板")
 
     else:
         st.markdown("### 回测对比")
