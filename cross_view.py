@@ -237,21 +237,47 @@ def render(df_data, H):
     load = H["load_excel_data"]
     netok = H.get("netok")
 
-    rows_up = load(_UP_FILE, None) or []
-    rows_an = load(_AN_FILE, None) or []
-    if not rows_up or not rows_an:
-        st.error("读不到数据文件")
-        return
+    # ---------- 数据缓存：同一会话只解析一次 ----------
+    import time as _t
+    _ck = "cv_cache_v1"
+    _ttl = 1800
+    _c = st.session_state.get(_ck)
+    _need = (_c is None) or (_t.time() - _c.get("ts", 0) > _ttl)
 
-    up, an = _parse(rows_up), _parse(rows_an)
-    _rowno_up = _row_index(rows_up)
-    _rowno_an = _row_index(rows_an)
-    seq = _aligned(up, an)
+    _c1, _c2 = st.columns([3, 1])
+    with _c2:
+        if st.button("🔄 重新载入数据", key="cv_reload", use_container_width=True):
+            st.session_state.pop(_ck, None)
+            st.rerun()
+
+    if _need:
+        with st.spinner("首次载入数据（约 5~15 秒，之后会变快）…"):
+            rows_up = load(_UP_FILE, None) or []
+            rows_an = load(_AN_FILE, None) or []
+            if not rows_up or not rows_an:
+                st.error("读不到数据文件")
+                return
+            up, an = _parse(rows_up), _parse(rows_an)
+            _rowno_up = _row_index(rows_up)
+            _rowno_an = _row_index(rows_an)
+            seq = _aligned(up, an)
+            st.session_state[_ck] = {
+                "seq": seq, "row_up": _rowno_up, "row_an": _rowno_an,
+                "up": up, "an": an, "ts": _t.time(),
+            }
+    _c = st.session_state.get(_ck)
+    if not _c:
+        st.error("数据载入失败")
+        return
+    seq = _c["seq"]
+    _rowno_up, _rowno_an = _c["row_up"], _c["row_an"]
     if not seq:
         st.error("两套数据没有可对齐的期")
         return
 
-    st.caption(f"可对齐期数：{len(seq)}（{seq[0][0]} ~ {seq[-1][0]}）")
+    st.caption(f"可对齐期数：{len(seq)}（{seq[0][0]} ~ {seq[-1][0]}）"
+               f"　｜　数据缓存 {int(_t.time()-_c['ts'])} 秒前"
+               f"（30 分钟自动过期）")
 
     c1, c2 = st.columns([1, 1])
     with c1:
