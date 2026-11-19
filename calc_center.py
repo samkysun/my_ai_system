@@ -621,6 +621,7 @@ def render(df_data, H):
             lo, hi = _RANGE.get(b, (1, 49))
             base_rate[b] = 1.0 / max(1, hi - lo + 1)
 
+        cols_up = _ball_cols(rows_up) if rows_up else {}
         # 全历史边际频次（每球位每个号码的历史出现率，归一化）
         marg = {}
         for b in range(1, 8):
@@ -631,7 +632,6 @@ def render(df_data, H):
 
         # 综合
         scores, table = {}, []
-        cols_up = _ball_cols(rows_up) if rows_up else {}
         for b in range(1, 8):
             hs, ks, kls = heat.get(b, Counter()), keep_s.get(b, Counter()), kill_s.get(b, Counter())
             th = sum(hs.values()) or 1
