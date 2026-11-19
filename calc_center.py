@@ -466,6 +466,10 @@ def render(df_data, H):
         full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
                                 value=True, key="cc_full")
 
+    kill_th = st.slider(
+        "杀号阈值（×区间均分）：越高杀得越多　—　回测显示 0.8~0.9 性价比较好",
+        min_value=0.3, max_value=1.2, value=0.8, step=0.05, key="cc_kill_th")
+
     if one_click and H.get("raw_report"):
         go = True
         self_run = True
@@ -631,7 +635,7 @@ def render(df_data, H):
                 om = kk / _max_omi
                 _p = rr.get(kk) or 0.0          # 该遗漏期数的历史出现率
                 _base = bc
-                _kill = 1 if (_p and _p < _base * 0.6) else 0
+                _kill = 1 if (_p and _p < _base * kill_th) else 0
                 sc = 0.05 * h_ + 0.65 * mg + 0.15 * k_ - 0.10 * l_ - 0.05 * om
                 if _kill:
                     sc -= 0.15                   # 冷号额外扣分（决定要杀）
@@ -693,7 +697,7 @@ def render(df_data, H):
     if _kill_rows:
         st.markdown("**【杀号策略：宁可杀错，换多次正确】**")
         st.dataframe(pd.DataFrame(_kill_rows), use_container_width=True, hide_index=True)
-        st.caption("判定规则：该号码当前遗漏的历史出现率 < 区间均分×0.6 → 判杀；"
+        st.caption(f"判定规则：该号码当前遗漏的历史出现率 < 区间均分×{kill_th:g} → 判杀；"
                    "「杀错率」= 这种遗漏状态下它实际开出的概率，越低说明杀得越值。")
 
     _bl = []
