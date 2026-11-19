@@ -270,8 +270,13 @@ def render(df_data, H):
     with c2:
         st.write(""); st.write("")
         go = st.button("🔎 全量查档并评分", type="primary", use_container_width=True, key="cc_go")
-    self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
-                           value=False, key="cc_self")
+    _c1, _c2 = st.columns([1, 1])
+    with _c1:
+        self_run = st.checkbox("自己跑 1-7 球全部属性（不依赖看板，约 20~40 秒）",
+                               value=True, key="cc_self")
+    with _c2:
+        full_mode = st.checkbox("全量模式：全部形态都查档（约 1 分钟）",
+                                value=True, key="cc_full")
 
     if one_click and H.get("raw_report"):
         go = True
@@ -327,16 +332,19 @@ def render(df_data, H):
             uniq[key]["downs"][k["down"]] += 1
             uniq[key]["windows"].append((k["a"], k["b"], k["period"]))
 
-        # 瘦身：出现次数 >= MIN_OCC，按出现次数排序取前 MAX_PAT
-        MIN_OCC, MAX_PAT = 3, 800
-        _filtered = {k: v for k, v in uniq.items() if v["times"] >= MIN_OCC}
-        if not _filtered:
-            _filtered = uniq
-        keys = sorted(_filtered.keys(), key=lambda k: -_filtered[k]["times"])[:MAX_PAT]
-        st.caption(f"形态 {len(uniq)} 个 → 保留出现≥{MIN_OCC}次的前 {len(keys)} 个（查档提速）")
+        # 全量模式：全部形态；快速模式：出现≥3次的前800个
+        if full_mode:
+            keys = sorted(uniq.keys(), key=lambda k: -uniq[k]["times"])
+            st.caption(f"全量模式：{len(keys)} 个形态全部查档（较慢）")
+        else:
+            MIN_OCC, MAX_PAT = 3, 800
+            _f = {k: v for k, v in uniq.items() if v["times"] >= MIN_OCC} or uniq
+            keys = sorted(_f.keys(), key=lambda k: -_f[k]["times"])[:MAX_PAT]
+            st.caption(f"快速模式：{len(uniq)} 个形态 → 出现≥{MIN_OCC}次的前 {len(keys)} 个")
         total = max(1, len(keys))
         _colcache = {}
         heat = defaultdict(Counter)          # ball -> Counter(number)
+        evid = defaultdict(lambda: defaultdict(list))
         pattern_rows = []
         for idx, key in enumerate(keys):
             bar.progress(idx / total, text=f"查档 {idx+1}/{total}：第{key[0]}球 {key[2][:14]}")
@@ -360,12 +368,16 @@ def render(df_data, H):
             cnt = Counter(got)
             if not cnt:
                 continue
+            _hits = sum(cnt.values())
+            # 收缩权重：命中次数少的形态权重打折，避免偶然命中放大
+            _w = _hits / (_hits + 2.0)
             nums = Counter()
             for v, c in cnt.items():
                 for num in _numbers_for(u["attr"], v, zmap_early):
                     nums[num] += c
             for num, c in nums.items():
-                heat[ball][num] += c
+                heat[ball][num] += c * _w
+                evid[ball][num].append((u["attr"], u["match"][:14], _hits))
             pattern_rows.append({
                 "球位": f"第{ball}球", "属性": u["attr"], "匹配": u["match"][:24],
                 "写板出现": u["times"], "历史命中": sum(cnt.values()),
@@ -420,11 +432,15 @@ def render(df_data, H):
             arr.sort(key=lambda x: -x[7])
             scores[b] = arr[:8]
             for it in arr[:6]:
+                _ev = evid.get(b, {}).get(it[0], [])
                 table.append({"球位": f"第{b}球", "号码": f"{it[0]:02d}",
-                              "热度分": round(it[1], 2), "保留分": round(it[2], 2),
+                              "热度分": round(it[1], 3), "保留分": round(it[2], 2),
                               "杀分": round(it[3], 2), "当前遗漏": it[4],
                               "遗漏倍率": round(it[5], 2),
-                              "综合分": round(it[7], 3)})
+                              "命中形态": len(_ev),
+                              "综合分": round(it[7], 3),
+                              "证据": "；".join(f"{a}·{m}({h}次)" for a, m, h in
+                                              sorted(_ev, key=lambda x: -x[2])[:2])})
 
         st.session_state["cc_scores"] = scores
         st.session_state["cc_table"] = table
@@ -440,7 +456,25 @@ def render(df_data, H):
 
     st.markdown("**【各球位综合评分】**")
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
-    st.caption("综合分 = 热度×0.50 + 保留×0.25 − 杀×0.25 + 遗漏修正×0.15")
+    st.caption("综合分 = 热度×0.50 + 保留×0.25 − 杀×0.25 + 遗漏修正×0.15；"
+               "形态权重已按命中次数收缩（命中少的打折）。")
+
+    _bl = []
+    for b in sorted(st.session_state.get("cc_scores", {})):
+        arr = st.session_state["cc_scores"][b]
+        if not arr:
+            continue
+        top = arr[0][7]
+        avg = sum(x[7] for x in arr) / len(arr)
+        lo_, hi_ = _RANGE.get(b, (1, 49))
+        _bl.append({"球位": f"第{b}球", "最高分": round(top, 3),
+                    "平均分": round(avg, 3),
+                    "集中度": round(top / avg, 2) if avg else 0,
+                    "随机基线": f"{100.0/(hi_-lo_+1):.1f}%"})
+    if _bl:
+        st.markdown("**【信号集中度 vs 随机基线】**")
+        st.dataframe(pd.DataFrame(_bl), use_container_width=True, hide_index=True)
+        st.caption("集中度越高，说明该球位有几个号码被多个形态共同指向；接近 1 表示完全分散。")
 
     pats = st.session_state.get("cc_patterns") or []
     if pats:
