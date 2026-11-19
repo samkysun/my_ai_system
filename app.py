@@ -3714,17 +3714,20 @@ def main_app():
             st.error("缺少 calc_center.py，请把它一起上传到仓库根目录。")
         else:
             def _cc_raw(ball_str, file_key="升序全套"):
+                import ast as _ast
                 _f = "升序全套.csv" if file_key == "升序全套" else "按序全套.csv"
                 _rows = load_excel_data(_f, None) or []
                 _r, _fk = _scan_build_runner()
-                _attrs = []
-                for _n in _ast.parse(open(__file__, encoding="utf-8").read()).body:
+                _attrs = st.session_state.get("_cc_attrs_cache") or []
+                for _n in ([] if _attrs else _ast.parse(open(__file__, encoding="utf-8").read()).body):
                     if isinstance(_n, _ast.FunctionDef) and _n.name == "render_multi_analysis":
                         for _m in _ast.walk(_n):
                             if (isinstance(_m, _ast.Assign) and _m.targets
                                     and isinstance(_m.targets[0], _ast.Name)
                                     and _m.targets[0].id == "show_attrs"):
                                 _attrs = _ast.literal_eval(_m.value)
+                if _attrs:
+                    st.session_state["_cc_attrs_cache"] = _attrs
                 return _raw_report_for_ball(file_key, _rows, ball_str, _attrs, _r, _fk)
 
             try:
