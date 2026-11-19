@@ -151,7 +151,9 @@ def base_line(rows, which):
         return ""
     chrono = list(reversed(rows))          # 旧 -> 新 展示
     seg = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球" for r in chrono)
-    return f"{chrono[0][0]}：期起始 基准列：{seg}"
+    span = (chrono[0][0] if len(chrono) == 1
+            else f"{chrono[0][0]} ~ {chrono[-1][0]}")
+    return f"基准期 {span}（共{len(chrono)}期）：基准列：{seg}"
 
 
 def find_patterns(series, base, allow_miss=0, top_n=30):
