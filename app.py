@@ -2171,6 +2171,12 @@ def _pred_load_all():
                 conn.close()
             except Exception:
                 data = {}
+        # 规范化键：period|ball|order（兼容旧的 period|ball）
+        _norm = {}
+        for _k, _v in data.items():
+            _nk = (f"{_v.get('period')}|{_v.get('ball')}|{_v.get('order', '')}")
+            _norm[_nk] = _v
+        data = _norm
         st.session_state["_pred_cache"] = data
         if sha:
             st.session_state["_pred_sha"] = sha
@@ -2203,7 +2209,8 @@ def _pred_save(period, ball, order_type, nums):
     """保存一条（同期同球覆盖）"""
     try:
         data = _pred_load_all()
-        data[f"{period}|{ball}"] = {"period": str(period), "ball": str(ball),
+        data[f"{period}|{ball}|{order_type or ''}"] = {"period": str(period),
+                                    "ball": str(ball),
                                     "order": str(order_type or ""),
                                     "nums": [int(n) for n in nums],
                                     "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -2214,12 +2221,15 @@ def _pred_save(period, ball, order_type, nums):
         return False
 
 
-def _pred_delete(period=None, ball=None):
-    """删除：period+ball 删单球；只给 period 删整期；都不给清空"""
+def _pred_delete(period=None, ball=None, order=None):
+    """删除：period+ball(+order) 删单球；只给 period 删整期；都不给清空"""
     try:
         data = _pred_load_all()
         if period and ball:
-            data.pop(f"{period}|{ball}", None)
+            for k in [k for k in data
+                      if k.startswith(f"{period}|{ball}|")
+                      and (order is None or k.endswith(f"|{order}"))]:
+                data.pop(k, None)
         elif period:
             for k in [k for k in data if k.startswith(f"{period}|")]:
                 data.pop(k, None)
@@ -2232,13 +2242,30 @@ def _pred_delete(period=None, ball=None):
         return False
 
 
-def _pred_load(period):
-    """{ball: (nums, ts, order)}"""
-    out = {}
+def _pred_load(period, order=None):
+    """{ball: (nums, ts, order)}；order 不给则合并（同球多排序取最新）"""
+    out, _ts = {}, {}
     for k, v in _pred_load_all().items():
-        if v.get("period") == str(period):
-            out[v["ball"]] = (v.get("nums", []), v.get("ts", ""), v.get("order", ""))
+        if v.get("period") != str(period):
+            continue
+        if order and v.get("order") != order:
+            continue
+        b = v["ball"]
+        if b in out and str(_ts.get(b, "")) > str(v.get("ts", "")):
+            continue
+        out[b] = (v.get("nums", []), v.get("ts", ""), v.get("order", ""))
+        _ts[b] = v.get("ts", "")
     return out
+
+
+def _pred_orders(period=None):
+    """存档里出现过的排序类型"""
+    s = set()
+    for v in _pred_load_all().values():
+        if period and v.get("period") != str(period):
+            continue
+        s.add(v.get("order") or "升序")
+    return sorted(s)
 
 
 def _pred_periods():
@@ -2285,47 +2312,27 @@ def _pred_render_archive(df_data, default_period):
     st.caption("按期号+球号保存 AI 推演结果（同期同球只留最新一次）。"
                "开奖后自动从总数据表读取实际开奖号，命中的球号高亮显示。")
 
-    _all_rows = _pred_rows()
-    if _all_rows:
-        _agg = {}
-        for _p, _b, _ts, _nums, _ot in _all_rows:
-            d = _agg.setdefault(_p, {"balls": [], "last": ""})
-            d["balls"].append(_b)
-            if _ts and _ts > d["last"]:
-                d["last"] = _ts
-        with st.expander(f"📜 全部期号总览（已累积 {len(_agg)} 期）", expanded=False):
-            import pandas as _pdp
-            _rows = []
-            for _p in sorted(_agg.keys(), reverse=True):
-                d = _agg[_p]
-                _rows.append({
-                    "期号": _p,
-                    "已存档球位": "、".join(
-                        sorted(d["balls"], key=lambda x: int(str(x).replace("第", "").replace("球", "") or 0))),
-                    "球位数": len(d["balls"]),
-                    "最近推演": d["last"] or "-",
-                })
-            st.dataframe(_pdp.DataFrame(_rows), use_container_width=True, hide_index=True)
-            st.caption("每期按球位累积；同一期同一球再推演会覆盖为最新一次。")
-
     periods = _pred_periods()
     if not periods:
         st.info("暂无存档。完成一次 AI 推演后会自动保存。")
         return
 
     # ---------- ① 选择期号 ----------
-    _sc1, _sc2 = st.columns([1, 2])
+    _sc1, _sc1b, _sc2 = st.columns([1, 1, 2])
     with _sc1:
         sel = st.selectbox("选择期号查看存档", periods, key="pred_arch_period")
+    _ords = _pred_orders(sel) or ["升序"]
+    with _sc1b:
+        _ord = st.selectbox("排序方式", _ords, key="pred_arch_order")
     with _sc2:
         st.write("")
         _drawn_n = sum(1 for _p in periods if _pred_actual_nums(df_data, _p))
         st.caption(f"共 {len(periods)} 期存档、{_drawn_n} 期已开奖；"
                    f"选中的期会自动带上实际开奖号做命中标记")
 
-    data = _pred_load(sel)
+    data = _pred_load(sel, _ord)
     if not data:
-        st.warning(f"{sel} 期暂无存档。")
+        st.warning(f"{sel} 期（{_ord}）暂无存档。")
         return
 
     actual = _pred_actual_nums(df_data, sel)
@@ -2351,7 +2358,7 @@ def _pred_render_archive(df_data, default_period):
     st.dataframe(pd.DataFrame([_row]), use_container_width=True, hide_index=True)
 
     if actual:
-        st.success(f"{sel} 期已开奖，实际开奖号：" +
+        st.success(f"{sel} 期【{_ord}】已开奖，实际开奖号：" +
                    " ".join(f"{n:02d}" for n in actual) +
                    f"　｜　7 个球位命中 {_hit_balls} 个")
     else:
@@ -2382,7 +2389,7 @@ def _pred_render_archive(df_data, default_period):
         for _p in periods:
             _d = _pred_load(_p)
             _a = _pred_actual_nums(df_data, _p)
-            _r = {"期号": _p}
+            _r = {"期号": _p, "排序": _d.get("第1球", ("", "", "升序"))[2] or "升序"}
             for i in range(1, 8):
                 _v = _d.get(f"第{i}球")
                 if not _v or not _v[0]:
@@ -2398,10 +2405,10 @@ def _pred_render_archive(df_data, default_period):
     # ---------- ⑤ 删除 ----------
     _op1, _op2 = st.columns(2)
     with _op1:
-        if st.button(f"🗑 删除 {sel} 期全部存档", use_container_width=True,
+        if st.button(f"🗑 删除 {sel} 期【{_ord}】存档", use_container_width=True,
                      key="pred_del_period"):
-            if _pred_delete(period=sel):
-                st.success(f"已删除 {sel}")
+            if _pred_delete(period=sel, order=_ord):
+                st.success(f"已删除 {sel}（{_ord}）")
                 st.rerun()
     with _op2:
         if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all"):
