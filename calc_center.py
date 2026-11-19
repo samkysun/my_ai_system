@@ -462,7 +462,7 @@ def render(df_data, H):
                 mg = marg.get(b, {}).get(n, 0.0)
                 kk = cur.get(n, 0)
                 om = kk / _max_omi
-                sc = 0.35 * h_ + 0.30 * mg + 0.20 * k_ - 0.15 * l_ - 0.10 * om
+                sc = 0.05 * h_ + 0.65 * mg + 0.15 * k_ - 0.10 * l_ - 0.05 * om
                 arr.append((n, h_, k_, l_, kk, mg, om, sc))
             arr.sort(key=lambda x: -x[7])
             scores[b] = arr[:8]
@@ -491,8 +491,9 @@ def render(df_data, H):
 
     st.markdown("**【各球位综合评分】**")
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
-    st.caption("综合分 = 查档热度×0.35 + 边际频次×0.30 + 保留×0.20 − 杀×0.15 − 遗漏×0.10"
-               "　（8400 期回测：边际频次 18.5%，追冷仅 4.1%，故遗漏改为扣分）")
+    st.caption("综合分 = 边际频次×0.65 + 保留×0.15 + 查档×0.05 − 杀×0.10 − 遗漏×0.05"
+               "　｜回测实据：边际热 18.6% ＞ 组合 17.9% ＞ 查档 9.3% ＜ 随机 10.5%；"
+               "查档权重压到 0.05，仅用于展示证据链")
 
     _bl = []
     for b in sorted(st.session_state.get("cc_scores", {})):
