@@ -429,7 +429,7 @@ def _threshold_sweep(rows, thresholds=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)):
     return out
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def _period_options(rows_key: str, _rows):
     """从数据里取期号（新→旧），供下拉框用"""
     seen, out = set(), []
