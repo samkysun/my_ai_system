@@ -355,6 +355,80 @@ def _backtest_table(rows, n_test=600, start=300, prog=None):
     return out
 
 
+def _threshold_sweep(rows, thresholds=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)):
+    """阈值扫描（无前视：用前 70% 建表，后 30% 评估）"""
+    RNG = _RANGE
+
+    def series(ball):
+        i10 = 3 + (ball - 1) * 30
+        i1 = i10 + 1
+        out = []
+        for r in rows[2:]:
+            if len(r) <= i1:
+                continue
+            try:
+                out.append(int((r[i10].strip() + r[i1].strip()) or 0))
+            except Exception:
+                pass
+        return out
+
+    stat_all = {th: {"kill": 0, "wrong": 0, "periods": 0} for th in thresholds}
+
+    for b in range(1, 8):
+        seq = series(b)
+        if len(seq) < 200:
+            continue
+        lo, hi = RNG[b]
+        base = 1.0 / max(1, hi - lo + 1)
+        cut = int(len(seq) * 0.7)
+
+        # 用前 cut 期建「遗漏 K -> 出现率」表
+        rate_stat = {}
+        cur = {n: 0 for n in range(lo, hi + 1)}
+        for v in seq[:cut]:
+            for n in range(lo, hi + 1):
+                k = cur[n]
+                a, bb = rate_stat.get(k, (0, 0))
+                rate_stat[k] = (a + (1 if v == n else 0), bb + 1)
+            for n in range(lo, hi + 1):
+                cur[n] = 0 if v == n else cur[n] + 1
+        rate = {k: (a / c if c >= 5 else None) for k, (a, c) in rate_stat.items()}
+
+        # 后 30% 评估
+        omi = {n: 0 for n in range(lo, hi + 1)}
+        for idx in range(cut, len(seq)):
+            actual = seq[idx]
+            if not actual:
+                continue
+            for th in thresholds:
+                killed = [n for n in range(lo, hi + 1)
+                          if rate.get(omi[n]) is not None and rate[omi[n]] < base * th]
+                if killed:
+                    stat_all[th]["periods"] += 1
+                    stat_all[th]["kill"] += len(killed)
+                    if actual in killed:
+                        stat_all[th]["wrong"] += 1
+            for n in range(lo, hi + 1):
+                omi[n] = 0 if n == actual else omi[n] + 1
+
+    out = []
+    for th in thresholds:
+        s = stat_all[th]
+        if not s["periods"]:
+            continue
+        avg_kill = s["kill"] / s["periods"]
+        prec = 1 - s["wrong"] / s["periods"] / avg_kill if avg_kill else 0
+        out.append({
+            "阈值(×均分)": th,
+            "每期平均杀": round(avg_kill, 1),
+            "杀错期数": s["wrong"],
+            "总评估期": s["periods"],
+            "杀对率": f"{prec*100:.1f}%",
+            "杀错率": f"{(1-prec)*100:.1f}%",
+        })
+    return out
+
+
 def render(df_data, H):
     st.title("🧮 计算中心")
     st.caption("全量查档：把看板里所有触发行拿到历史里查「之后开出了什么」，"
@@ -698,6 +772,21 @@ def render(df_data, H):
             _tab = _backtest_table(_rows_all, n_test=int(_bt_n), prog=_pb.progress)
             _pb.empty()
             st.session_state["cc_bt_table"] = _tab
+    _tc1, _tc2 = st.columns([1, 2])
+    with _tc1:
+        do_sw = st.button("🎯 扫描杀号阈值", use_container_width=True, key="cc_sw")
+    with _tc2:
+        st.caption("用前 70% 历史建立「遗漏→出现率」表，在后 30% 上评估："
+                   "阈值越高杀得越多，杀对率会下降——找一个平衡点。")
+    if do_sw:
+        _rows_all = load("升序全套.csv", None) or []
+        if _rows_all:
+            st.session_state["cc_sw_table"] = _threshold_sweep(_rows_all)
+    _sw = st.session_state.get("cc_sw_table")
+    if _sw:
+        st.dataframe(pd.DataFrame(_sw), use_container_width=True, hide_index=True)
+        st.caption("「杀对率」= 杀掉的号里确实没开出的比例；每期平均杀得多、杀对率又不掉，越好。")
+
     _bt = st.session_state.get("cc_bt_table")
     if _bt:
         st.dataframe(pd.DataFrame(_bt), use_container_width=True, hide_index=True)
