@@ -229,7 +229,7 @@ def backtest_period(seq, which, rows_n, target, direction="up2an"):
             "hit": (pred == actual) if pred is not None else False}
 
 
-def solve_matching(forbid_up, forbid_an=None):
+def solve_matching(forbid_up, forbid_an=None, required=None):
     """forbid_up: {升序位1-6: [不能落的按序位...]}
        返回 (合法排列列表, 信息)  排列 = 升序位1..6 各自落在的按序位"""
     import itertools as _it
@@ -241,11 +241,15 @@ def solve_matching(forbid_up, forbid_an=None):
         for j in lst:
             banned.add((int(j), int(i)))
 
+    req = {int(j): int(i) for j, i in (required or {}).items() if i}
     sols = []
     for perm in _it.permutations(range(1, 7)):
         ok = True
         for j in range(1, 7):
             if (j, perm[j - 1]) in banned:
+                ok = False
+                break
+            if j in req and perm[j - 1] != req[j]:
                 ok = False
                 break
         if ok:
@@ -562,11 +566,20 @@ def render(df_data, H):
                     f"按序{i}球", [1, 2, 3, 4, 5, 6],
                     default=_DEF_AN.get(i, []), key=f"cv_fa{i}")
 
+        st.markdown("**正向约束：某升序位必须落在按序第几球（可选）**")
+        _cols3 = st.columns(6)
+        _req = {}
+        for j in range(1, 7):
+            with _cols3[j - 1]:
+                _v = st.selectbox(f"升序{j}位", ["任意", 1, 2, 3, 4, 5, 6],
+                                  index=0, key=f"cv_rq{j}")
+                _req[j] = 0 if _v == "任意" else int(_v)
+
         _a, _b = st.columns(2)
         with _a:
             if st.button("🔍 计算合法排列", type="primary", key="cv_solve",
                          use_container_width=True):
-                _sols, _banned = solve_matching(_f_up, _f_an)
+                _sols, _banned = solve_matching(_f_up, _f_an, _req)
                 st.session_state["cv_sols"] = _sols
                 st.session_state["cv_banned"] = len(_banned)
         with _b:
@@ -619,6 +632,44 @@ def render(df_data, H):
                                           for j in range(1, 7)}})
                     st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
                                  hide_index=True)
+
+                # ---------- 历史回测 ----------
+                st.markdown("**历史回测：这些约束在历史上成立多少期**")
+                _bc1, _bc2 = st.columns([1, 2])
+                with _bc1:
+                    _bt_n = st.number_input("回测期数", 20, 1000, 200, 20,
+                                            key="cv_solve_bt_n")
+                with _bc2:
+                    st.write("")
+                    _bt = st.button("▶ 开始回测", key="cv_solve_bt")
+
+                if _bt:
+                    _set = set(_sols)
+                    _tot = 0
+                    _ok = 0
+                    _rows_bt = []
+                    _seq_now = st.session_state.get("cv_cache_v1", {}).get("seq") or seq
+                    for _p, _u, _a in list(reversed(_seq_now))[:int(_bt_n)]:
+                        try:
+                            _perm = tuple(_a[:6].index(_u[j - 1]) + 1 for j in range(1, 7))
+                        except Exception:
+                            continue
+                        _tot += 1
+                        _in = _perm in _set
+                        if _in:
+                            _ok += 1
+                        _rows_bt.append({
+                            "期号": _p,
+                            "实际排列": " ".join(str(x) for x in _perm),
+                            "符合约束": "✅" if _in else "❌",
+                        })
+                    if _tot:
+                        _rand = len(_sols) / 720 * 100
+                        st.success(f"最近 {_tot} 期：符合约束 {_ok} 期 = "
+                                   f"{_ok/_tot*100:.1f}%（随机基线 {_rand:.1f}%）")
+                        with st.expander("逐期明细", expanded=False):
+                            st.dataframe(pd.DataFrame(_rows_bt),
+                                         use_container_width=True, hide_index=True)
 
                 if H.get("board_add"):
                     if st.button("📌 推送到 AI 推演看板", key="cv_solve_push"):
