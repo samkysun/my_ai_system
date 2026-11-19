@@ -344,6 +344,8 @@ def render(df_data, H):
                 })
             st.dataframe(pd.DataFrame(rows_out), use_container_width=True,
                          hide_index=True)
+            from collections import Counter as _C2
+            nxt = _C2(h[3] for h in hits if h[3] is not None)
 
             # ---------- 多维分析风格的文本报告 ----------
             _lines = [f"========== 升序第{which}球 在按序中的位置序列 ==========",
@@ -375,7 +377,6 @@ def render(df_data, H):
                                mime="text/plain", key="cv_seq_dl")
 
             from collections import Counter as _C
-            nxt = _C(h[3] for h in hits if h[3] is not None)
             if nxt:
                 st.markdown("**【触发行之后的取值分布】**（位置 1~6 出现次数）")
                 dist = [{"位置": f"第{i}位", "次数": nxt.get(i, 0),
