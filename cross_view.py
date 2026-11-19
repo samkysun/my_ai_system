@@ -133,7 +133,7 @@ def rank_probs(seq_hist, A):
 
 
 def position_series(seq, which=1):
-    """返回 [(期号, 该升序球在按序中的位置1-6)]，按时间从新到旧"""
+    """返回 [(期号, 号码, 该号在按序中的位置1-6)]，按时间从新到旧"""
     out = []
     for p, u, a in reversed(seq):          # seq 是旧->新，反转成新->旧
         try:
@@ -141,8 +141,17 @@ def position_series(seq, which=1):
             pos = a[:6].index(val) + 1
         except Exception:
             continue
-        out.append((p, pos))
+        out.append((p, val, pos))
     return out
+
+
+def base_line(rows, which):
+    """2026120：期起始 基准列：升序1球20：按序2球，升序1球03：按序4球，…"""
+    if not rows:
+        return ""
+    chrono = list(reversed(rows))          # 旧 -> 新 展示
+    seg = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球" for r in chrono)
+    return f"{chrono[0][0]}：期起始 基准列：{seg}"
 
 
 def find_patterns(series, base, allow_miss=0, top_n=30):
@@ -152,12 +161,12 @@ def find_patterns(series, base, allow_miss=0, top_n=30):
     n = len(base)
     hits = []
     for i in range(1, len(series) - n):          # i=0 是当前基准本身，跳过
-        seg = [x[1] for x in series[i:i + n]]
+        seg = [x[2] for x in series[i:i + n]]
         same = sum(1 for a, b in zip(seg, base) if a == b)
         if same < n - allow_miss:
             continue
-        prev_val = series[i - 1][1] if i - 1 >= 0 else None
-        next_val = series[i + n][1] if i + n < len(series) else None
+        prev_val = series[i - 1][2] if i - 1 >= 0 else None
+        next_val = series[i + n][2] if i + n < len(series) else None
         hits.append((i, [x[0] for x in series[i:i + n]], prev_val, next_val, same))
     hits.sort(key=lambda x: (-x[4], x[0]))
     return hits[:top_n]
@@ -320,9 +329,11 @@ def render(df_data, H):
             st.warning("没有可用的序列数据")
             return
 
-        base = [x[1] for x in ser[:int(rows_n)]]
-        st.markdown(f"**【基准行排列】({len(base)}行)**：" + " → ".join(str(x) for x in base))
-        st.caption("（左为最新一期，按号码在按序中的位置 1~6）")
+        _base_rows = ser[:int(rows_n)]
+        base = [x[2] for x in _base_rows]
+        st.markdown(f"**【基准行排列】({len(base)}行)**："
+                    + " → ".join(str(x) for x in base))
+        st.markdown("**" + base_line(_base_rows, which) + "**")
 
         hits = find_patterns(ser, base, 0)
         _expect = len(ser) / (6 ** len(base))
@@ -353,13 +364,17 @@ def render(df_data, H):
                       f"【历史命中】: 共找到 {len(hits)} 段完全一致",
                       ""]
             for k, (i, periods, pv, nv, _sm) in enumerate(hits, 1):
-                _seg = [x[1] for x in ser[i:i + len(base)]]
+                _rows_seg = ser[i:i + len(base)]
+                _seg = [x[2] for x in _rows_seg]
+                _det = "，".join(f"升序{which}球{r[1]:02d}：按序{r[2]}球"
+                                for r in reversed(_rows_seg))
                 _lines.append(
                     f"触发行：行{i+1}-{i+len(base)}({len(base)}行): "
                     f"上:{pv if pv is not None else '-'} "
                     f"(匹配:{' '.join(str(x) for x in _seg)}) "
                     f"下:{nv if nv is not None else '-'}"
                     f"　[{periods[-1]}~{periods[0]}]")
+                _lines.append(f"　　　　　{periods[-1]}：期起始 基准列：{_det}")
             if nxt:
                 _lines.append("")
                 _lines.append("【触发行之后的位置分布】")
@@ -407,6 +422,11 @@ def render(df_data, H):
                 st.markdown(f"**{_tgt} 期回测**")
                 st.write(f"基准排列（{len(_r['base'])}行）："
                          + " → ".join(str(x) for x in _r["base"]))
+                _tpos = [x[0] for x in seq].index(_tgt)
+                _brows = [(seq[j][0], seq[j][1][int(which) - 1],
+                           seq[j][2][:6].index(seq[j][1][int(which) - 1]) + 1)
+                          for j in range(_tpos - int(rows_n), _tpos)]
+                st.markdown("**" + base_line(_brows, which) + "**")
                 st.write(f"历史相同排列：**{len(_r['hits'])} 段**")
                 if _r["dist"]:
                     _tot = sum(_r["dist"].values())
