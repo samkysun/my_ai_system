@@ -432,6 +432,14 @@ def render(df_data, H):
             lo, hi = _RANGE.get(b, (1, 49))
             base_rate[b] = 1.0 / max(1, hi - lo + 1)
 
+        # 全历史边际频次（每球位每个号码的历史出现率，归一化）
+        marg = {}
+        for b in range(1, 8):
+            _c = Counter(x for x in (cols_up.get(b) or []) if x)
+            lo_, hi_ = _RANGE.get(b, (1, 49))
+            _mx = max([_c.get(n, 0) for n in range(lo_, hi_ + 1)] or [1]) or 1
+            marg[b] = {n: _c.get(n, 0) / _mx for n in range(lo_, hi_ + 1)}
+
         # 综合
         scores, table = {}, []
         cols_up = _ball_cols(rows_up) if rows_up else {}
@@ -446,23 +454,24 @@ def render(df_data, H):
             lo_, hi_ = _RANGE.get(b, (1, 49))
             cand = [n for n in (set(hs) | set(ks) | set(kls)) if lo_ <= n <= hi_]
             arr = []
+            _max_omi = max([cur.get(n, 0) for n in cand] or [1]) or 1
             for n in cand:
                 h_ = hs.get(n, 0) / th
                 k_ = ks.get(n, 0) / tk
                 l_ = kls.get(n, 0) / tl
+                mg = marg.get(b, {}).get(n, 0.0)
                 kk = cur.get(n, 0)
-                ratio = (rr.get(kk, 0.0) / bc) if rr.get(kk) else 0.0
-                adj = max(-1.0, min(1.0, ratio - 1.0)) if ratio else 0.0
-                sc = 0.50 * h_ + 0.25 * k_ - 0.25 * l_ + 0.15 * adj
-                arr.append((n, h_, k_, l_, kk, ratio, adj, sc))
+                om = kk / _max_omi
+                sc = 0.35 * h_ + 0.30 * mg + 0.20 * k_ - 0.15 * l_ - 0.10 * om
+                arr.append((n, h_, k_, l_, kk, mg, om, sc))
             arr.sort(key=lambda x: -x[7])
             scores[b] = arr[:8]
             for it in arr[:6]:
                 _ev = evid.get(b, {}).get(it[0], [])
                 table.append({"球位": f"第{b}球", "号码": f"{it[0]:02d}",
-                              "热度分": round(it[1], 3), "保留分": round(it[2], 2),
-                              "杀分": round(it[3], 2), "当前遗漏": it[4],
-                              "遗漏倍率": round(it[5], 2),
+                              "查档热度": round(it[1], 3), "边际频次": round(it[5], 2),
+                              "保留分": round(it[2], 2), "杀分": round(it[3], 2),
+                              "当前遗漏": it[4],
                               "命中形态": len(_ev),
                               "综合分": round(it[7], 3),
                               "证据": "；".join(f"{a}·{m}({h}次)" for a, m, h in
@@ -482,8 +491,8 @@ def render(df_data, H):
 
     st.markdown("**【各球位综合评分】**")
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
-    st.caption("综合分 = 热度×0.50 + 保留×0.25 − 杀×0.25 + 遗漏修正×0.15；"
-               "形态权重已按命中次数收缩（命中少的打折）。")
+    st.caption("综合分 = 查档热度×0.35 + 边际频次×0.30 + 保留×0.20 − 杀×0.15 − 遗漏×0.10"
+               "　（8400 期回测：边际频次 18.5%，追冷仅 4.1%，故遗漏改为扣分）")
 
     _bl = []
     for b in sorted(st.session_state.get("cc_scores", {})):
@@ -515,7 +524,7 @@ def render(df_data, H):
              "④ 遗漏修正 = 该遗漏期数历史出现率 ÷ 区间均分",
              "", "【各球位评分】"]
     for b in sorted(st.session_state.get("cc_scores", {})):
-        seg = "　".join(f"{n:02d}(分{sc:.2f})" for n, h_, k_, l_, kk, ratio, adj, sc
+        seg = "　".join(f"{n:02d}(分{sc:.2f})" for n, h_, k_, l_, kk, mg, om, sc
                         in st.session_state["cc_scores"][b][:6])
         lines.append(f"  第{b}球：{seg}")
     lines += ["", "【任务】基于以上统计，输出：",
