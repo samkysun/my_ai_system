@@ -35,6 +35,18 @@ def _parse(rows):
     return out
 
 
+def _row_index(rows):
+    """期号 -> 该期在文件里的行号（从 1 开始，含表头行）"""
+    out = {}
+    for i, r in enumerate(rows):
+        if len(r) < 214:
+            continue
+        p = f"{r[213]}{r[0]}{r[1]}{r[2]}".strip()
+        if p and p not in out:
+            out[p] = i + 1
+    return out
+
+
 def _aligned(up, an):
     """取两套一致（前6同集合且无重复）的期，按时间升序"""
     seq = []
@@ -232,6 +244,8 @@ def render(df_data, H):
         return
 
     up, an = _parse(rows_up), _parse(rows_an)
+    _rowno_up = _row_index(rows_up)
+    _rowno_an = _row_index(rows_an)
     seq = _aligned(up, an)
     if not seq:
         st.error("两套数据没有可对齐的期")
@@ -401,9 +415,12 @@ def render(df_data, H):
         if _hits:
             _rows_t = []
             for k, h in enumerate(_hits[:60], 1):
+                _ro = (_rowno_up if direction == "up2an" else _rowno_an)
+                _r1 = _ro.get(h["seg"][0][0], "-")
+                _r2 = _ro.get(h["seg"][-1][0], "-")
                 _rows_t.append({
                     "序": k,
-                    "序列行": f"{h['i']+1}-{h['i']+int(rows_n)}",
+                    "文件行号": f"{_r1}~{_r2}" if _r1 != "-" and _r2 != "-" else "-",
                     "期数": "、".join(r[0] for r in h["seg"]),
                     "上": f"{h['up']}({h['up_p']}期)" if h["up"] is not None else "-",
                     "下": f"{h['dn']}({h['dn_p']}期)" if h["dn"] is not None else "-",
@@ -429,8 +446,11 @@ def render(df_data, H):
                 _det = ("，".join(
                     (f"升序{which}球{r[1]:02d}：按序{r[2]}球" if direction == "up2an"
                      else f"按序{which}球{r[1]:02d}：升序第{r[2]}位") for r in reversed(h["seg"])))
+                _ro2 = (_rowno_up if direction == "up2an" else _rowno_an)
+                _rr1 = _ro2.get(h["seg"][0][0], "-")
+                _rr2 = _ro2.get(h["seg"][-1][0], "-")
                 _lines.append(
-                    f"触发行{k}：序列行{h['i']+1}-{h['i']+int(rows_n)}({len(_base)}行): "
+                    f"触发行{k}：行{_rr1}~{_rr2}({len(_base)}期): "
                     f"上:{h['up']}({h['up_p']}期) 下:{h['dn']}({h['dn_p']}期)"
                     f"　[{'、'.join(r[0] for r in h['seg'])}]")
                 _lines.append(f"　　　　　{h['seg'][0][0]}：{_det}")
