@@ -3727,9 +3727,14 @@ def main_app():
                                 _attrs = _ast.literal_eval(_m.value)
                 return _raw_report_for_ball(file_key, _rows, ball_str, _attrs, _r, _fk)
 
-            render_calc_center(df_data, {"load_excel_data": load_excel_data,
-                                        "call_deepseek_api": call_deepseek_api,
-                                        "raw_report": _cc_raw})
+            try:
+                render_calc_center(df_data, {"load_excel_data": load_excel_data,
+                                            "call_deepseek_api": call_deepseek_api,
+                                            "raw_report": _cc_raw})
+            except Exception as _cc_e:
+                st.error(f"计算中心运行出错：{type(_cc_e).__name__}: {_cc_e}")
+                import traceback as _tb
+                st.code(_tb.format_exc()[-2000:])
     elif page == "📉 遗漏统计":
         if render_omission_page:
             render_omission_page()
