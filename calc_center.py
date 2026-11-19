@@ -429,6 +429,20 @@ def _threshold_sweep(rows, thresholds=(0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)):
     return out
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _period_options(rows_key: str, _rows):
+    """从数据里取期号（新→旧），供下拉框用"""
+    seen, out = set(), []
+    for r in _rows[2:]:
+        if len(r) < 214:
+            continue
+        p = f"{r[213]}{r[0]}{r[1]}{r[2]}".strip()
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
 def _period_list(rows):
     """按从旧到新返回 (期号列表, 各球开奖号序列)"""
     periods, balls = [], {b: [] for b in range(1, 8)}
@@ -748,16 +762,25 @@ def render(df_data, H):
     st.divider()
     st.markdown("### 🎯 指定期号回测")
     st.caption("输入一个历史期号，程序只用「该期之前」的数据算推荐，再与该期实际开奖对照。")
+    _rows_sel = load("升序全套.csv", None) or []
+    _opts = _period_options("升序全套", _rows_sel) if _rows_sel else []
     _pc1, _pc2, _pc3 = st.columns([2, 1, 2])
     with _pc1:
-        _tp_in = st.text_input("期号（如 2026068）", value="", key="cc_tp")
+        if _opts:
+            _tp_in = st.selectbox("选择期号（来自升序全套，与多维分析同源）",
+                                  _opts, index=0, key="cc_tp")
+        else:
+            _tp_in = ""
+            st.warning("读不到升序全套.csv，无法列出期号")
     with _pc2:
         st.write(""); st.write("")
         _tp_go = st.button("▶ 回测这一期", use_container_width=True, key="cc_tp_go")
     with _pc3:
         _tp_k = st.number_input("每球看几个号", 1, 20, 3, 1, key="cc_tp_k")
 
-    if _tp_go and _tp_in.strip():
+    st.caption(f"共 {len(_opts)} 个期号可选，最新在列表顶部")
+
+    if _tp_go and str(_tp_in).strip():
         _rows_p = load("升序全套.csv", None) or []
         _res, _msg = backtest_period(_rows_p, _tp_in.strip(), int(_tp_k))
         if _res is None:
