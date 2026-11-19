@@ -602,6 +602,93 @@ def _cfg():
     return sec("DEEPSEEK_API_KEY"), sec("GITHUB_TOKEN"), sec("GITHUB_REPO")
 
 
+# ================================================================ 本机文件模式
+def _app_dir():
+    """正在被 Streamlit 运行的脚本所在目录"""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        ctx = get_script_run_ctx()
+        p = getattr(ctx, "main_script_path", None) if ctx else None
+        if p:
+            return os.path.dirname(os.path.abspath(p))
+    except Exception:
+        pass
+    try:
+        import sys
+        if sys.argv and str(sys.argv[0]).endswith(".py"):
+            return os.path.dirname(os.path.abspath(sys.argv[0]))
+    except Exception:
+        pass
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def local_available():
+    """本机模式是否可用：目录存在且可写"""
+    d = _app_dir()
+    if not os.path.isdir(d):
+        return False, d, "目录不存在"
+    try:
+        probe = os.path.join(d, "_write_probe.tmp")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(probe)
+        return True, d, ""
+    except Exception as e:
+        return False, d, f"{type(e).__name__}: {e}"
+
+
+def local_read(name):
+    """读本机文件，返回文本或 None"""
+    p = os.path.join(_app_dir(), name)
+    try:
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def local_write(files, stamp):
+    """写本机文件，先备份成 .bak_<时间>。返回 (成功文件, 失败信息)"""
+    d = _app_dir()
+    done, errs = [], []
+    for name, text in files.items():
+        p = os.path.join(d, name)
+        try:
+            if os.path.exists(p):
+                bak = f"{p}.bak_{stamp}"
+                if not os.path.exists(bak):
+                    with open(p, "rb") as src, open(bak, "wb") as dst:
+                        dst.write(src.read())
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+            os.replace(tmp, p)
+            done.append(name)
+        except Exception as e:
+            errs.append(f"{name}: {type(e).__name__}: {e}")
+    return done, errs
+
+
+def local_load_history():
+    try:
+        p = os.path.join(_app_dir(), HISTORY_FILE)
+        if not os.path.exists(p):
+            return []
+        import json as _json
+        with open(p, encoding="utf-8") as f:
+            data = _json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def local_save_history(entries):
+    import json as _json
+    p = os.path.join(_app_dir(), HISTORY_FILE)
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_json.dumps(list(entries)[:HISTORY_MAX], ensure_ascii=False, indent=1))
+
+
 def _diff_text(old, new, path):
     import difflib
     return "".join(difflib.unified_diff(
@@ -615,10 +702,15 @@ def render_upgrade_tab():
                "任何一步失败都不会改动仓库。")
 
     dkey, gtoken, grepo = _cfg()
-    if not dkey or not gtoken or not grepo:
-        missing = [n for n, v in (("DEEPSEEK_API_KEY", dkey), ("GITHUB_TOKEN", gtoken),
-                                  ("GITHUB_REPO", grepo)) if not v]
-        st.error("Secrets 里缺：" + "、".join(missing) + "。补上并 Reboot app。")
+    _local_ok, _local_dir, _local_err = local_available()
+    _gh_ok = bool(gtoken and grepo)
+
+    if not dkey:
+        st.error("Secrets 里缺 DEEPSEEK_API_KEY。补上并 Reboot app。")
+        return
+    if not (_gh_ok or _local_ok):
+        st.error(f"既读不到 GitHub 仓库（缺 GITHUB_TOKEN/GITHUB_REPO），"
+                 f"本机目录也不可写：{_local_err}")
         return
 
     st.session_state.setdefault("ug_candidate", None)
@@ -627,18 +719,35 @@ def render_upgrade_tab():
     st.session_state.setdefault("ug_selftest", [])
     st.session_state.setdefault("ug_chat", [])
 
-    # ---------- 0. 连接自检 ----------
-    sc1, sc2 = st.columns([1, 4])
-    with sc1:
-        if st.button("🔍 连接自检", use_container_width=True,
-                     help="只读检查分支、commit、blob 写权限。不会创建提交，不改任何文件。"):
-            st.session_state.ug_selftest = gh_selftest(grepo, gtoken)
-    with sc2:
+    # ---------- 0. 写入位置 ----------
+    mode_opts = []
+    if _local_ok:
+        mode_opts.append("本机文件")
+    if _gh_ok:
+        mode_opts.append("GitHub 仓库")
+    default_mode = "本机文件" if _local_ok else "GitHub 仓库"
+    mode = st.radio("写入位置", mode_opts, index=mode_opts.index(default_mode),
+                    horizontal=True, key="ug_mode",
+                    help="本机文件：直接改你电脑上的 app.py，改完网页自动重载，不用上传。"
+                         "GitHub 仓库：提交到云端，用户能看到，但每次要等 1~3 分钟部署。")
+    if mode == "本机文件":
+        st.caption(f"📁 将写入：`{_local_dir}`（每次先自动备份成 `.bak_时间`，可回滚）")
+    else:
+        st.caption(f"☁️ 将提交到：`{grepo}`（走四道闸门 + 原子提交）")
+
+    # ---------- 0.1 连接自检（仅 GitHub 模式） ----------
+    if mode == "GitHub 仓库":
+        sc1, sc2 = st.columns([1, 4])
+        with sc1:
+            if st.button("🔍 连接自检", use_container_width=True,
+                         help="只读检查分支、commit、blob 写权限。不会创建提交，不改任何文件。"):
+                st.session_state.ug_selftest = gh_selftest(grepo, gtoken)
+        with sc2:
+            if st.session_state.ug_selftest:
+                st.caption("自检结果（最后一行决定能不能提交）")
         if st.session_state.ug_selftest:
-            st.caption("自检结果（最后一行决定能不能提交）")
-    if st.session_state.ug_selftest:
-        with st.expander("自检详细日志", expanded=True):
-            st.code("\n".join(st.session_state.ug_selftest), language="text")
+            with st.expander("自检详细日志", expanded=True):
+                st.code("\n".join(st.session_state.ug_selftest), language="text")
 
     # ---------- 1. 参考文件与模型 ----------
     c1, c2 = st.columns([2, 1])
@@ -709,13 +818,17 @@ def render_upgrade_tab():
 
             src_map, missing = {}, []
             for p in targets:
-                _, text = gh_read(grepo, gtoken, p)
+                if mode == "本机文件":
+                    text = local_read(p)
+                else:
+                    _, text = gh_read(grepo, gtoken, p)
                 if text is None:
                     missing.append(p)
                 else:
                     src_map[p] = text
             if missing:
-                st.error(f"仓库里读不到：{missing}")
+                where = "本机目录" if mode == "本机文件" else "仓库里"
+                st.error(f"{where}读不到：{missing}")
             else:
                 ctx = "\n\n".join(f"=== 文件 {p} 全文 ===\n```python\n{t}\n```"
                                   for p, t in src_map.items())
@@ -836,34 +949,55 @@ def render_upgrade_tab():
                             "files": list(files),
                         }
 
-                        # 第一步：提交代码本体。只有这一步失败才算提交失败。
-                        sha = None
-                        try:
-                            with st.spinner("提交代码到 GitHub…"):
-                                sha, head_before = gh_commit(
-                                    grepo, gtoken, files,
-                                    f"自动升级 {stamp}: {patch.get('summary', '')[:60] or 'patch'}",
-                                    branch="main")
-                            entry["commit"] = sha
-                            entry["head_before"] = head_before
-                        except Exception as e:
-                            st.error(f"❌ 代码提交失败，仓库未改动：{type(e).__name__}: {e}")
+                        # 第一步：落盘 / 提交。只有这一步失败才算应用失败。
+                        if mode == "本机文件":
+                            done, errs = local_write(files, stamp)
+                            if errs:
+                                st.error("❌ 写入本机失败：\n" + "\n".join(errs))
+                            else:
+                                try:
+                                    hist = local_load_history()
+                                    entry["commit"] = f"local_{stamp}"
+                                    entry["head_before"] = ""
+                                    hist.insert(0, entry)
+                                    local_save_history(hist)
+                                except Exception as e2:
+                                    st.warning(f"已写入本机，但历史存档失败：{e2}")
 
-                        if sha:
-                            # 第二步：存档。失败只警告，绝不影响已成功的提交。
+                                st.session_state.ug_last = entry
+                                st.session_state.ug_candidate = None
+                                st.success(f"✅ 已写入本机：{', '.join(done)}\n\n"
+                                           f"备份：同名文件 + `.bak_{stamp}`\n\n"
+                                           f"Streamlit 会自动重载；没反应就在网页右上角点一次 **Rerun**。")
+                                st.rerun()
+                        else:
+                            sha = None
                             try:
-                                hist = load_history(grepo, gtoken)
-                                hist.insert(0, entry)
-                                save_history(grepo, gtoken, hist, f"记录升级历史 {stamp}")
-                            except Exception as e2:
-                                st.warning(f"代码已提交成功，但存档失败（不影响使用）："
-                                           f"{type(e2).__name__}: {str(e2)[:200]}")
+                                with st.spinner("提交代码到 GitHub…"):
+                                    sha, head_before = gh_commit(
+                                        grepo, gtoken, files,
+                                        f"自动升级 {stamp}: {patch.get('summary', '')[:60] or 'patch'}",
+                                        branch="main")
+                                entry["commit"] = sha
+                                entry["head_before"] = head_before
+                            except Exception as e:
+                                st.error(f"❌ 代码提交失败，仓库未改动：{type(e).__name__}: {e}")
 
-                            st.session_state.ug_last = entry
-                            st.session_state.ug_candidate = None
-                            st.success(f"✅ 已提交 {sha[:7]}。Streamlit Cloud 会在 1~3 分钟内重新部署。"
-                                       f"\n\n改动文件：{', '.join(files)}")
-                            st.rerun()
+                            if sha:
+                                # 第二步：存档。失败只警告，绝不影响已成功的提交。
+                                try:
+                                    hist = load_history(grepo, gtoken)
+                                    hist.insert(0, entry)
+                                    save_history(grepo, gtoken, hist, f"记录升级历史 {stamp}")
+                                except Exception as e2:
+                                    st.warning(f"代码已提交成功，但存档失败（不影响使用）："
+                                               f"{type(e2).__name__}: {str(e2)[:200]}")
+
+                                st.session_state.ug_last = entry
+                                st.session_state.ug_candidate = None
+                                st.success(f"✅ 已提交 {sha[:7]}。Streamlit Cloud 会在 1~3 分钟内重新部署。"
+                                           f"\n\n改动文件：{', '.join(files)}")
+                                st.rerun()
 
     if st.session_state.get("ug_tests"):
         with st.expander("查看测试输出", expanded=False):
@@ -872,9 +1006,10 @@ def render_upgrade_tab():
     # ---------- 3. 历史与回滚 ----------
     st.divider()
     with st.expander("🗂️ 升级历史与回滚", expanded=False):
-        hist = load_history(grepo, gtoken)
+        hist = local_load_history() if mode == "本机文件" else load_history(grepo, gtoken)
         if not hist:
-            st.info("还没有升级记录。每次成功应用后，需求原文与补丁都会存档到仓库的 "
+            _where = "本机目录" if mode == "本机文件" else "仓库"
+            st.info(f"还没有升级记录。每次成功应用后，需求原文与补丁都会存档到{_where}的 "
                     f"`{HISTORY_FILE}`。")
         else:
             hc1, hc2 = st.columns([1, 3])
@@ -927,7 +1062,8 @@ def render_upgrade_tab():
                         else:
                             src_map = {}
                             for p in e.get("files", []):
-                                _, t = gh_read(grepo, gtoken, p)
+                                t = (local_read(p) if mode == "本机文件"
+                                     else gh_read(grepo, gtoken, p)[1])
                                 if t is not None:
                                     src_map[p] = t
                             ok1, m1 = validate_edits(src_map, ed)
@@ -989,6 +1125,20 @@ def render_upgrade_tab():
                    "不会改写历史，随时可以再回滚回来。")
 
         st.markdown("---")
+        if mode == "本机文件":
+            st.markdown("**本机模式：用备份回滚**")
+            st.caption("每次写入都会生成 `文件名.bak_时间`。要退回某版：先关掉网站，"
+                       "把那个 .bak_xxx 改名回原文件名。")
+            _baks = []
+            try:
+                import glob as _glob
+                _baks = sorted(_glob.glob(os.path.join(_local_dir, "*.bak_*")), reverse=True)[:12]
+            except Exception:
+                pass
+            if _baks:
+                st.code("\n".join(os.path.basename(b) for b in _baks), language="text")
+            else:
+                st.caption("（还没有备份文件）")
         st.markdown("**最近提交（直接从 GitHub 读，不依赖存档文件）**")
         st.caption("存档写失败时，用这里回滚。回滚 = 把该提交改过的文件恢复到它的上一个版本。")
         recent = gh_recent_commits(grepo, gtoken, 8)
