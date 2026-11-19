@@ -312,6 +312,35 @@ def render(df_data, H):
             st.dataframe(pd.DataFrame(rows_out), use_container_width=True,
                          hide_index=True)
 
+            # ---------- 多维分析风格的文本报告 ----------
+            _lines = [f"========== 升序第{which}球 在按序中的位置序列 ==========",
+                      f"【基准行排列】({len(base)}行): " + " → ".join(str(x) for x in base),
+                      f"【历史命中】: 共找到 {len(hits)} 段完全一致",
+                      ""]
+            for k, (i, periods, pv, nv, _sm) in enumerate(hits, 1):
+                _seg = [x[1] for x in ser[i:i + len(base)]]
+                _lines.append(
+                    f"触发行：行{i+1}-{i+len(base)}({len(base)}行): "
+                    f"上:{pv if pv is not None else '-'} "
+                    f"(匹配:{' '.join(str(x) for x in _seg)}) "
+                    f"下:{nv if nv is not None else '-'}"
+                    f"　[{periods[-1]}~{periods[0]}]")
+            if nxt:
+                _lines.append("")
+                _lines.append("【触发行之后的位置分布】")
+                _tot_n = sum(nxt.values()) or 1
+                _lines.append("  " + "　".join(
+                    f"第{i}位:{nxt.get(i,0)}次({nxt.get(i,0)/_tot_n*100:.0f}%)"
+                    for i in range(1, 7)))
+            _report = "\n".join(_lines)
+
+            st.markdown("**文本报告（可复制/保存）**")
+            st.text_area("位置序列报告", value=_report, height=320,
+                         key="cv_seq_report", label_visibility="collapsed")
+            st.download_button("📥 下载报告", _report.encode("utf-8-sig"),
+                               file_name=f"位置序列_升序第{which}球.txt",
+                               mime="text/plain", key="cv_seq_dl")
+
             from collections import Counter as _C
             nxt = _C(h[3] for h in hits if h[3] is not None)
             if nxt:
