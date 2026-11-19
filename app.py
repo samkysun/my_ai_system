@@ -3733,7 +3733,8 @@ def main_app():
             try:
                 render_calc_center(df_data, {"load_excel_data": load_excel_data,
                                             "call_deepseek_api": call_deepseek_api,
-                                            "raw_report": _cc_raw})
+                                            "raw_report": _cc_raw,
+                                            "pred_save": _pred_save})
             except Exception as _cc_e:
                 st.error(f"计算中心运行出错：{type(_cc_e).__name__}: {_cc_e}")
                 import traceback as _tb
