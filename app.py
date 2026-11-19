@@ -3073,6 +3073,10 @@ def get_analysis_prompt(full_table):
 
 def _ai_rate_ok():
     """AI 调用限流：间隔 >= 3 秒，单会话每日 <= 200 次"""
+    # 管理员不限制
+    _admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
+    if st.session_state.get("username") == _admin_name:
+        return True, ""
     now = _time_sec.time()
     last = st.session_state.get("_ai_last_call_ts", 0)
     if now - last < 3:
