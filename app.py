@@ -2313,76 +2313,67 @@ def _pred_render_archive(df_data, default_period):
         st.info("暂无存档。完成一次 AI 推演后会自动保存。")
         return
 
-    _idx = 0
-    if default_period in periods:
-        _idx = periods.index(default_period)
-    sel = st.selectbox("选择期号查看存档", periods, index=_idx, key="pred_arch_period")
-
-    _dc1, _dc2, _dc3 = st.columns([1, 1, 2])
-    with _dc1:
-        if st.button(f"🗑 删除 {sel} 期", use_container_width=True, key="pred_del_period"):
-            if _pred_delete(period=sel):
-                st.success(f"已删除 {sel} 期全部存档")
-                st.rerun()
-            else:
-                st.error("删除失败（数据库被占用或不可写）")
-    with _dc2:
-        if st.button("🧹 清空全部存档", use_container_width=True, key="pred_del_all"):
-            if _pred_delete():
-                st.success("已清空全部存档")
-                st.rerun()
-            else:
-                st.error("清空失败（数据库被占用或不可写）")
-
-    data = _pred_load(sel)
-    if not data:
-        st.warning(f"{sel} 期暂无存档。")
-        return
-
-    actual = _pred_actual_nums(df_data, sel)
-    if actual:
-        st.success(f"{sel} 期已开奖，实际开奖号：" + " ".join(f"{n:02d}" for n in actual))
-    else:
-        st.info(f"{sel} 期尚未开奖，暂不做命中对照。")
-
-    # ---------- 紧凑表格：一期 7 球压成 7 行 ----------
-    import pandas as _pd_arch
-    _rows_arch = []
-    for i in range(1, 8):
-        ball = f"第{i}球"
-        if ball not in data:
-            continue
-        nums, ts, ot = data[ball]
-        if actual:
-            _hit = [n for n in nums if n in actual]
-            _mark = f"✅ 命中 {len(_hit)} 个：" + (
-                " ".join(f"{n:02d}" for n in _hit) if _hit else "无")
-        else:
-            _mark = "-"
-        _rows_arch.append({
-            "球位": ball,
-            "推荐号码": " ".join(f"{n:02d}" for n in nums) if nums else "（空）",
-            "个数": len(nums),
-            "实际开出": f"{actual[i-1]:02d}" if actual and i - 1 < len(actual) else "-",
-            "命中情况": _mark,
-            "推演时间": ts or "-",
-        })
-    if _rows_arch:
-        st.dataframe(_pd_arch.DataFrame(_rows_arch), use_container_width=True,
-                     hide_index=True)
-
-    # 号码球样式（默认折叠，想看再展开）
-    with st.expander("🎱 号码球视图（带命中高亮）", expanded=False):
+    # ---------- 主表：一期一行，期号 + 7 个球位 = 8 列 ----------
+    _rows_tbl = []
+    for _p in periods:
+        _d = _pred_load(_p)
+        _act = _pred_actual_nums(df_data, _p)
+        _row = {"期号": _p}
         for i in range(1, 8):
-            ball = f"第{i}球"
-            if ball not in data:
+            _v = _d.get(f"第{i}球")
+            if not _v or not _v[0]:
+                _row[f"第{i}球"] = "-"
                 continue
-            nums, _ts, _ot = data[ball]
-            if not nums:
+            _nums = _v[0]
+            if _act and i - 1 < len(_act):
+                _hitn = _act[i - 1]
+                _row[f"第{i}球"] = " ".join(
+                    (f"{n:02d}✓" if n == _hitn else f"{n:02d}") for n in _nums)
+            else:
+                _row[f"第{i}球"] = " ".join(f"{n:02d}" for n in _nums)
+        _rows_tbl.append(_row)
+
+    st.markdown("**【存档总表】**（✓ = 该球位实际开出的号，空表示未开奖）")
+    st.dataframe(pd.DataFrame(_rows_tbl), use_container_width=True, hide_index=True)
+
+    _drawn = [r["期号"] for r in _rows_tbl
+              if _pred_actual_nums(df_data, r["期号"])]
+    st.caption(f"共 {len(_rows_tbl)} 期存档｜已开奖 {len(_drawn)} 期"
+               + (f"（{_drawn[0]} ~ {_drawn[-1]}）" if _drawn else ""))
+
+    # ---------- 操作 ----------
+    _op1, _op2, _op3 = st.columns([1, 1, 2])
+    with _op1:
+        _del = st.selectbox("选择要删除的期号", periods, key="pred_del_sel")
+    with _op2:
+        st.write(""); st.write("")
+        if st.button(f"🗑 删除 {_del} 期", use_container_width=True, key="pred_del_period"):
+            if _pred_delete(period=_del):
+                st.success(f"已删除 {_del}")
+                st.rerun()
+    with _op3:
+        st.write(""); st.write("")
+        if st.button("🧹 清空全部存档", key="pred_del_all"):
+            if _pred_delete():
+                st.success("已清空")
+                st.rerun()
+
+    # ---------- 选中期的号码球视图（折叠） ----------
+    with st.expander("🎱 查看某一期的号码球（带命中高亮）", expanded=False):
+        _pick = st.selectbox("期号", periods, key="pred_chip_sel")
+        _pd = _pred_load(_pick)
+        _pact = _pred_actual_nums(df_data, _pick)
+        if _pact:
+            st.success(f"{_pick} 期已开奖：" + " ".join(f"{n:02d}" for n in _pact))
+        else:
+            st.info(f"{_pick} 期尚未开奖")
+        for i in range(1, 8):
+            _v = _pd.get(f"第{i}球")
+            if not _v or not _v[0]:
                 continue
             chips = []
-            for n in nums:
-                if actual and n in actual:
+            for n in _v[0]:
+                if _pact and n in _pact:
                     chips.append(
                         f"<span style='display:inline-block;min-width:34px;text-align:center;"
                         f"padding:3px 6px;margin:2px;border-radius:6px;background:#ef4444;"
@@ -2392,20 +2383,7 @@ def _pred_render_archive(df_data, default_period):
                         f"<span style='display:inline-block;min-width:34px;text-align:center;"
                         f"padding:3px 6px;margin:2px;border-radius:6px;background:#e5e7eb;"
                         f"color:#111827;'>{n:02d}</span>")
-            st.markdown(f"**{ball}**　" + "".join(chips), unsafe_allow_html=True)
-
-    # 单球删除（折叠）
-    with st.expander("🧹 删除单球存档", expanded=False):
-        _bc = st.columns(7)
-        for i in range(1, 8):
-            ball = f"第{i}球"
-            if ball not in data:
-                continue
-            with _bc[i - 1]:
-                if st.button(f"删{ball}", key=f"pred_del_{sel}_{ball}",
-                             use_container_width=True):
-                    if _pred_delete(period=sel, ball=ball):
-                        st.rerun()
+            st.markdown(f"**第{i}球**　" + "".join(chips), unsafe_allow_html=True)
 
 
 def render_ai(df_data):
