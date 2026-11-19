@@ -1772,7 +1772,8 @@ def render_deep_linkage(df_data):
     st.markdown("### 分析参数设置")
     col1, col2, col3, col4 = st.columns(4)
     with col1: mode = st.selectbox("分析模式", ["升序生肖", "按序生肖", "升序尾数", "按序尾数",
-                                        "升序数字", "按序数字", "升序门数", "按序门数"])
+                                        "升序数字", "按序数字", "升序门数", "按序门数",
+                                        "升序段数", "按序段数"])
     _target_file_early = "升序全套.csv" if "升序" in mode else "按序全套.csv"
     with col2:
         _file_periods = _periods_of_file(_target_file_early)
@@ -1789,6 +1790,9 @@ def render_deep_linkage(df_data):
             _lo, _hi = (1, 3) if "升序" in mode else (1, 5)
             pick_num = st.number_input(f"预测前N名（门数可选 {_lo}~{_hi}）",
                                        min_value=_lo, max_value=_hi, value=min(3, _hi))
+        elif "段数" in mode:
+            pick_num = st.number_input("预测前N名（段数可选 1~7）",
+                                       min_value=1, max_value=7, value=5)
         elif "生肖" in mode:
             pick_num = st.number_input("预测前N名（1~9）", min_value=1, max_value=9, value=5)
         else:
@@ -1817,6 +1821,7 @@ def render_deep_linkage(df_data):
                 if "生肖" in mode: col_names = ['G', 'AK', 'BO', 'CS', 'DW', 'FA', 'GE']
                 elif "尾数" in mode: col_names = ['H', 'AL', 'BP', 'CT', 'DX', 'FB', 'GF']
                 elif "门数" in mode: col_names = ['J', 'AN', 'BR', 'CV', 'DZ', 'FD', 'GH']
+                elif "段数" in mode: col_names = ['K', 'AO', 'BS', 'CW', 'EA', 'FE', 'GI']
                 else: col_names = ['D', 'AH', 'BL', 'CP', 'DT', 'EX', 'GB']
 
                 for r_idx in range(2, len(all_rows)):
@@ -1851,6 +1856,7 @@ def render_deep_linkage(df_data):
                 if "生肖" in mode: all_possible = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
                 elif "尾数" in mode: all_possible = [str(i) for i in range(10)]
                 elif "门数" in mode: all_possible = [f"{i}门" for i in range(1, 6)]
+                elif "段数" in mode: all_possible = [f"{i}段" for i in range(1, 8)]
                 else: all_possible = [f"{i:02d}" for i in range(1, 50)]
 
                 freq_dict = {i: {attr: 0 for attr in all_possible} for i in range(7)}
