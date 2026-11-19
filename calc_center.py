@@ -509,6 +509,46 @@ def backtest_period(rows, target, k=3):
     return out, f"{target} 期：{n_hit}/7 个球位命中"
 
 
+def _prog_rec(balls, periods, target, k=3):
+    """用目标期之前的数据给出各球推荐"""
+    if target not in periods:
+        return None, None
+    pos = periods.index(target)
+    if pos < 60:
+        return None, None
+    rec = {}
+    for b in range(1, 8):
+        lo, hi = _RANGE[b]
+        hist = balls[b][:pos]
+        c = Counter(x for x in hist if x and lo <= x <= hi)
+        for n in range(lo, hi + 1):
+            c.setdefault(n, 0)
+        rec[b] = [n for n, _ in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[:k]]
+    actual = {b: balls[b][pos] for b in range(1, 8)}
+    return rec, actual
+
+
+def _ai_picks(call_ai, period, rec):
+    """让 AI 按固定格式给每球号码，返回 {球位: [号]}"""
+    lines = [f"期号 {period} 的号码推演。以下是程序统计出的各球位历史最常出现的号码："]
+    for b in range(1, 8):
+        lines.append(f"第{b}球：{' '.join(f'{n:02d}' for n in rec[b])}")
+    lines += ["", "请据此给出你的最终推荐，严格按下面格式输出，每行一个球位，只写号码：",
+              "第1球: 05 09 12",
+              "第2球: …",
+              "不要写任何解释、标题或其它内容。"]
+    prompt = "\n".join(lines)
+    ans = call_ai(prompt, "你是严谨的数据助手，只按指定格式输出，不解释。")
+    out = {}
+    for ln in str(ans).splitlines():
+        m = re.match(r"\s*第\s*([1-7])\s*球\s*[:：]\s*(.+)", ln)
+        if m:
+            b = int(m.group(1))
+            out[b] = [int(x) for x in re.findall(r"(?<!\d)(\d{1,2})(?!\d)", m.group(2))
+                      if 1 <= int(x) <= 49]
+    return out
+
+
 def render(df_data, H):
     st.title("🧮 计算中心")
     st.caption("全量查档：把看板里所有触发行拿到历史里查「之后开出了什么」，"
@@ -829,6 +869,63 @@ def render(df_data, H):
                                pd.DataFrame(_res).to_csv(index=False).encode("utf-8-sig"),
                                file_name=f"回测_{_tp_in.strip()}.csv",
                                mime="text/csv", key="cc_tp_dl")
+
+    # ---------- 逐期对照：程序 vs AI ----------
+    st.divider()
+    st.markdown("### 🤖 程序 vs AI 逐期对照")
+    st.caption("对每一期：只用该期之前的数据算程序推荐 → 交给 AI 总结 → 与该期实际开奖对照。"
+               "用来量出「AI 总结」到底有没有增益。注意：每期调用一次 AI，费用随期数线性增加。")
+
+    _ac1, _ac2, _ac3 = st.columns([2, 1, 1])
+    with _ac1:
+        _ai_start = st.selectbox("从哪一期开始", _opts[:200] if _opts else ["-"], index=0,
+                                 key="cc_ai_start")
+    with _ac2:
+        _ai_n = st.number_input("连续验证几期", 1, 30, 3, 1, key="cc_ai_n")
+    with _ac3:
+        st.write(""); st.write("")
+        _ai_go = st.button("▶ 开始逐期对照", use_container_width=True, key="cc_ai_go")
+
+    if _ai_go and _opts:
+        _rows_a = load("升序全套.csv", None) or []
+        _periods_a, _balls_a = _period_list(_rows_a)
+        if _ai_start in _periods_a:
+            _pos0 = _periods_a.index(_ai_start)
+            _targets = _periods_a[_pos0:_pos0 + int(_ai_n)]
+            _out, _ai_calls = [], 0
+            _bar2 = st.progress(0.0, text="逐期计算中…")
+            for _i, _tg in enumerate(_targets):
+                _bar2.progress(_i / max(1, len(_targets)), text=f"计算 {_tg} …")
+                _rec, _act = _prog_rec(_balls_a, _periods_a, _tg, int(pick_k))
+                if _rec is None:
+                    continue
+                try:
+                    _aip = _ai_picks(call_ai, _tg, _rec)
+                    _ai_calls += 1
+                except Exception:
+                    _aip = {}
+                _p_hit = sum(1 for b in range(1, 8) if _act[b] in _rec[b])
+                _a_hit = sum(1 for b in range(1, 8) if _aip.get(b) and _act[b] in _aip[b])
+                _out.append({
+                    "期号": _tg,
+                    "程序命中": f"{_p_hit}/7",
+                    "AI命中": f"{_a_hit}/7" if _aip else "无返回",
+                    "程序推荐(第1球)": " ".join(f"{n:02d}" for n in _rec[1]),
+                    "AI推荐(第1球)": " ".join(f"{n:02d}" for n in _aip.get(1, [])) or "-",
+                    "第1球实际": f"{_act[1]:02d}",
+                })
+            _bar2.progress(1.0, text="完成")
+            if _out:
+                st.dataframe(pd.DataFrame(_out), use_container_width=True, hide_index=True)
+                _sp = sum(int(r["程序命中"].split("/")[0]) for r in _out)
+                _sa = sum(int(r["AI命中"].split("/")[0]) for r in _out
+                          if r["AI命中"] != "无返回")
+                st.success(f"{len(_out)} 期合计：程序命中 {_sp} 个球位，AI 命中 {_sa} 个球位"
+                           f"（AI 调用 {_ai_calls} 次）")
+                st.caption("命中 = 该球位实际开出的号在推荐的那几个号里。"
+                           "两者同一口径，可直接比较。")
+            else:
+                st.warning("没有可用的期号（可能期号太早，之前数据不足）")
 
     # ---------- 模型回测 ----------
     st.divider()
