@@ -1942,7 +1942,16 @@ def render_deep_linkage(df_data):
 
     if st.session_state.get("deep_linkage_html"):
         st.markdown("### 深度联动分析报告（回测命中高亮）")
-        st.markdown(st.session_state.deep_linkage_html, unsafe_allow_html=True)
+        # 用 iframe 隔离渲染，避免 Streamlit 前端 removeChild 报错
+        import streamlit.components.v1 as _dlcomp
+        _dlh = st.session_state.deep_linkage_html
+        _lines = max(6, _dlh.count("<div"))
+        _dlcomp.html(
+            "<style>html,body{margin:0;padding:6px;background:transparent;"
+            "font-family:Consolas,'Microsoft YaHei',monospace;font-size:15px;"
+            "line-height:1.9;color:#e5e7eb;}"
+            "b{color:#93c5fd;}</style>" + _dlh,
+            height=min(900, 60 + 26 * _lines), scrolling=True)
 
         with st.expander("📄 查看纯文本版报告", expanded=False):
             st.text_area("深度联动分析报告", value=st.session_state.get("deep_linkage_result", ""), height=300)
