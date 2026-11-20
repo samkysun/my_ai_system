@@ -250,54 +250,7 @@ def render(df_data, H):
                        file_name=f"三码组合池_{pick}.csv", mime="text/csv",
                        key="c2_dl")
 
-    # ---------- 收益测算与风险提示 ----------
-    st.markdown("### 六、收益测算与风险提示")
-    _c1, _c2 = st.columns([1, 3])
-    with _c1:
-        _odds = st.number_input("每组中奖赔率", 1, 100000, 655, 1, key="c2_odds")
-    with _c2:
-        st.write("")
-        st.caption("三中三的理论概率：C(46,3)/C(49,6) = 0.1086% = 1/921，"
-                   "即公平赔率应为 921 倍。")
-
-    _n = len(r["items"])              # 每期投注注数
-    _fair = 921.0                     # 公平赔率
-    _ev_per_bet = _odds / _fair       # 每注期望回收
-    _per_draw_cost = _n
-    _per_draw_back = _n * _odds / _fair
-    _per_draw_net = _per_draw_back - _per_draw_cost
-
-    _rows_e = [
-        {"项目": "每期投注注数", "数值": f"{_n} 注"},
-        {"项目": "单注命中概率", "数值": "0.1086%（1/921，理论值）"},
-        {"项目": f"每注期望回收（赔率 {int(_odds)}）", "数值": f"{_ev_per_bet:.3f} 倍"},
-        {"项目": "每期期望投入", "数值": f"{_per_draw_cost:.0f} 注"},
-        {"项目": "每期期望回收", "数值": f"{_per_draw_back:.1f} 注"},
-        {"项目": "每期期望盈亏", "数值": f"{_per_draw_net:+.1f} 注"},
-        {"项目": "100 期期望盈亏", "数值": f"{_per_draw_net*100:+.0f} 注"},
-        {"项目": "不亏所需的赔率", "数值": "921 倍"},
-    ]
-    st.dataframe(pd.DataFrame(_rows_e), use_container_width=True, hide_index=True)
-
-    if _ev_per_bet < 1:
-        st.error(
-            f"⚠️ 按 {int(_odds)} 倍赔率，每投 1 注期望只收回 {_ev_per_bet:.3f} 注，"
-            f"长期亏损 {(1-_ev_per_bet)*100:.1f}%。\n\n"
-            f"每期投 {_n} 注的话，100 期预计亏 {-_per_draw_net*100:.0f} 注。\n"
-            f"要提高胜率只能提高赔率——低于 921 倍的玩法在数学上必亏。"
-        )
-    elif _ev_per_bet > 1:
-        st.success(f"按 {int(_odds)} 倍赔率，每注期望回收 {_ev_per_bet:.3f} 注，"
-                   f"理论上有 {(_ev_per_bet-1)*100:.1f}% 正期望。"
-                   "但这需要赔率真实且能兑现。")
-    else:
-        st.warning("赔率刚好等于公平值，长期不赚不亏（不含手续费）。")
-
-    st.info(
-        "**重要提醒**：组合池只是把历史出现过的组合列出来，"
-        "并不能改变每个组合 1/921 的中奖概率。"
-        "任何选号方法都无法降低庄家的抽水比例。"
-    )
+    st.caption("说明：三中三理论中奖概率 0.1086%（1/921）。")
 
     # ---------- 号码频次排行 ----------
     st.markdown("### 五、号码出现频次排行（由多到少）")
