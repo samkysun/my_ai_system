@@ -644,8 +644,7 @@ def render(df_data, H):
                     f"第{i}位:{_dist.get(i,0)}次({_dist.get(i,0)/_tot*100:.0f}%)"
                     for i in range(1, 7)))
             _report = "\n".join(_lines)
-            st.text_area("位置序列报告", value=_report, height=340,
-                         key="cv_seq_report", label_visibility="collapsed")
+            st.code(_report, language=None)
             st.download_button("📥 下载报告", _report.encode("utf-8-sig"),
                                file_name=f"位置序列_{_tgt}.txt", mime="text/plain",
                                key="cv_seq_dl")
@@ -726,8 +725,7 @@ def render(df_data, H):
                 else:
                     _l1.append(f"　按序第{k+1}球 → 升序" +
                                " / ".join(f"第{c}位" for c in _cs))
-            st.text_area("下一期清单", value="\n".join(_l1), height=190,
-                         key="cv_next_list", label_visibility="collapsed")
+            st.code("\n".join(_l1), language=None)
 
             # 历史回测
             st.markdown("#### 二、历史回测清单")
@@ -777,8 +775,7 @@ def render(df_data, H):
             _avg2 = _sum_hit / _cnt if _cnt else 0
             _l2.append(f"合计 {_cnt} 期：平均对上 {_avg2:.2f}/6"
                        f"（随机 {int(_N2):.2f}/6）；6 位全对 {_full} 期")
-            st.text_area("历史回测清单", value="\n".join(_l2), height=380,
-                         key="cv_bt_list", label_visibility="collapsed")
+            st.code("\n".join(_l2), language=None)
         else:
             st.info("设置好上面的参数后，点「🚀 开始预测（生成清单）」")
 
