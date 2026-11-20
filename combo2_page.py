@@ -247,11 +247,32 @@ def render(df_data, H):
     else:
         _order = sorted(_nscore.keys(),
                         key=lambda v: (-_ncombo[v], -_nscore[v], v))
+        _win_set = set(win) if win else set()
         rows_n = [{"排名": i, "号码": f"{v:02d}",
-                   "出现次数（含该号的组合数）": _ncombo[v], "累计出现（按组合次数加权）": _nscore[v]}
+                   "出现次数（含该号的组合数）": _ncombo[v],
+                   "累计出现（按组合次数加权）": _nscore[v],
+                   "本期命中": ("✅ 开出" if v in _win_set else "")}
                   for i, v in enumerate(_order, 1)]
         df_n = pd.DataFrame(rows_n)
-        st.dataframe(df_n, use_container_width=True, hide_index=True, height=380)
+
+        def _hl(row):
+            if row["本期命中"]:
+                return ["background-color:#ffe08a;font-weight:700"] * len(row)
+            return [""] * len(row)
+
+        try:
+            st.dataframe(df_n.style.apply(_hl, axis=1),
+                         use_container_width=True, hide_index=True, height=380)
+        except Exception:
+            st.dataframe(df_n, use_container_width=True, hide_index=True, height=380)
+
+        if _win_set:
+            _hit_nums = [v for v in _order if v in _win_set]
+            if _hit_nums:
+                st.success(f"本期开出并出现在排行中的号码："
+                           + " ".join(f"{v:02d}" for v in _hit_nums))
+            else:
+                st.warning("本期开出的号码都不在排行里")
         st.download_button("📥 下载号码排行",
                            df_n.to_csv(index=False).encode("utf-8-sig"),
                            file_name=f"号码排行_{pick}.csv", mime="text/csv",
