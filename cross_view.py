@@ -760,7 +760,27 @@ def render(df_data, H):
                 else:
                     _l1.append(f"　按序第{k+1}球 → 升序" +
                                " / ".join(f"第{c}位" for c in _cs))
-            st.code("\n".join(_l1), language=None)
+            _next_txt = "\n".join(_l1)
+            st.code(_next_txt, language=None)
+
+            _pb1, _pb2 = st.columns(2)
+            with _pb1:
+                st.download_button(
+                    "📥 下载清单",
+                    _next_txt.encode("utf-8-sig"),
+                    file_name=f"下一期清单_{_np2}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="cv_next_dl",
+                )
+            with _pb2:
+                try:
+                    print_block(f"========== {_np2} 期 位置匹配清单 ==========\n"
+                                f"方向：{_dir2}　每期 {_N2} 个候选\n\n" + _next_txt)
+                except Exception:
+                    if st.button("🖨️ 打印", key="cv_next_print_fb",
+                                 use_container_width=True):
+                        st.info("打印组件不可用，请先下载 TXT 再打印")
 
             # 历史回测
             st.markdown("#### 二、历史回测清单")
