@@ -92,7 +92,7 @@ def analyze(data, sel_period, k, min_count=1):
 
     # ② 历史对碰（只看选中期之前）
     triggers = []
-    next_periods = []
+    next_map = {}                        # 下一期去重：期号 -> 6 个平码
     for i in range(si):
         p, nums = data[i]
         ns = {v for v in nums[:6] if v}
@@ -104,7 +104,9 @@ def analyze(data, sel_period, k, min_count=1):
             continue
         np_, nn = data[ni]
         triggers.append(p)
-        next_periods.append((np_, [v for v in nn[:6] if v]))
+        if np_ not in next_map:          # ★ 同一期只记一次
+            next_map[np_] = [v for v in nn[:6] if v]
+    next_periods = list(next_map.items())
 
     # ④ 下一期再拆 k 码，全局统计
     cnt = Counter()
