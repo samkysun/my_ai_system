@@ -161,9 +161,11 @@ def render(df_data, H):
     per_list = [p for p, _ in reversed(data)]
     with c1:
         pick = st.selectbox("选一期（已开奖）", per_list, index=0, key="c2_period")
+    k = 3          # 固定：6 个平码三三组合
+    _minc = 1      # 固定：全部列出
     with c2:
-        k = st.selectbox("几码一组", [2, 3, 4, 5], index=1, key="c2_k")
-        _minc = st.number_input("最少出现几次", 1, 10, 1, 1, key="c2_minc")
+        st.write("")
+        st.caption("6 个平码 → 三三组合 20 组")
     with c3:
         st.write("")
         st.caption(f"{k} 码组合数：C(6,{k}) = {len(combos_of(list(range(1, 7)), k))}")
