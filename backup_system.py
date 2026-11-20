@@ -24,10 +24,26 @@ except Exception:
     pass
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-BACKUP_DIR = os.path.join(BASE, "_backups")
+
+# 备份目录：可在 _backup_dir.txt 里写一个绝对路径来改（一行搞定）
+_CFG = os.path.join(BASE, "_backup_dir.txt")
+if os.path.exists(_CFG):
+    try:
+        _custom = open(_CFG, encoding="utf-8-sig").read().strip().strip("\ufeff")
+        BACKUP_DIR = _custom if _custom else os.path.join(BASE, "_backups")
+    except Exception:
+        BACKUP_DIR = os.path.join(BASE, "_backups")
+else:
+    BACKUP_DIR = os.path.join(BASE, "_backups")
+
 KEEP = 30
 
 INCLUDE_EXT = {".py", ".json", ".txt", ".bat", ".csv", ".xlsx", ".toml", ".md"}
+
+# 需要随备份一起保存的数据文件（从云端仓库镜像）
+DATA_FILES = ["升序全套.csv", "按序全套.csv", "升序源文件.xlsx",
+              "按序源文件.xlsx", "总数据.xlsx"]
+DATA_TTL = 3 * 86400          # 镜像超过 3 天则重新下载
 SKIP_DIRS = {"_backups", "__pycache__", ".git", "_data"}
 
 
@@ -53,6 +69,68 @@ def sha256(path, limit=None):
                 break
             h.update(b)
     return h.hexdigest()
+
+
+def _gh():
+    import re
+    sec = os.path.join(BASE, ".streamlit", "secrets.toml")
+    if not os.path.exists(sec):
+        return "", ""
+    raw = open(sec, encoding="utf-8-sig").read()
+    tk = re.search(r'^\s*GITHUB_TOKEN\s*=\s*"([^"]*)"', raw, re.M)
+    rp = re.search(r'^\s*GITHUB_REPO\s*=\s*"([^"]*)"', raw, re.M)
+    return (tk.group(1).strip() if tk else "",
+            rp.group(1).strip() if rp else "")
+
+
+def ensure_data(force=False):
+    """确保数据镜像是最新的；返回镜像目录"""
+    import time as _t
+    import urllib.parse
+    import urllib.request
+    mirror = os.path.join(BACKUP_DIR, "_data_mirror")
+    os.makedirs(mirror, exist_ok=True)
+    token, repo = _gh()
+    for name in DATA_FILES:
+        dst = os.path.join(mirror, name)
+        fresh = (os.path.exists(dst) and
+                 _t.time() - os.path.getmtime(dst) < DATA_TTL)
+        if fresh and not force:
+            continue
+        # 先从项目目录找现成的
+        local = os.path.join(BASE, name)
+        if os.path.exists(local):
+            try:
+                shutil.copy2(local, dst)
+                print(f"   数据取自本地：{name}")
+                continue
+            except Exception:
+                pass
+        if not repo:
+            print(f"   [跳过] {name}（无仓库配置）")
+            continue
+        url = (f"https://raw.githubusercontent.com/{repo}/main/"
+               f"{urllib.parse.quote(name)}")
+        ok = False
+        for attempt in range(3):
+            try:
+                print(f"   下载数据 {name} …（第 {attempt+1} 次）")
+                req = urllib.request.Request(url)
+                with urllib.request.urlopen(req, timeout=600) as r, open(dst + ".part", "wb") as f:
+                    while True:
+                        chunk = r.read(262144)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                os.replace(dst + ".part", dst)
+                print(f"   完成 {name}  {os.path.getsize(dst)/1024/1024:.2f} MB")
+                ok = True
+                break
+            except Exception as e:
+                print(f"   失败：{type(e).__name__}")
+        if not ok and not os.path.exists(dst):
+            print(f"   [!] {name} 未能取得")
+    return mirror
 
 
 def current_commit():
@@ -83,7 +161,12 @@ def do_backup(tag=""):
     name = f"site_{stamp}{('_' + tag) if tag else ''}.zip"
     dst = os.path.join(BACKUP_DIR, name)
 
+    mirror = ensure_data(force=bool(os.environ.get("BACKUP_FORCE_DATA")))
     files = collect_files()
+    for name in DATA_FILES:
+        mp = os.path.join(mirror, name)
+        if os.path.exists(mp):
+            files.append((mp, os.path.join("_data", name)))
     manifest = {"created": datetime.now().isoformat(timespec="seconds"),
                 "commit": current_commit(),
                 "file_count": len(files), "files": {}}
