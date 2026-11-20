@@ -55,6 +55,28 @@ def sha256(path, limit=None):
     return h.hexdigest()
 
 
+def current_commit():
+    """取云端当前提交号（失败返回空）"""
+    try:
+        import re
+        import urllib.request
+        sec = os.path.join(BASE, ".streamlit", "secrets.toml")
+        raw = open(sec, encoding="utf-8").read()
+        tk = re.search(r'^\s*GITHUB_TOKEN\s*=\s*"([^"]*)"', raw, re.M)
+        rp = re.search(r'^\s*GITHUB_REPO\s*=\s*"([^"]*)"', raw, re.M)
+        if not tk or not rp:
+            return ""
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{rp.group(1).strip()}/commits?per_page=1",
+            headers={"Authorization": f"Bearer {tk.group(1).strip()}",
+                     "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+        return data[0]["sha"][:10] if data else ""
+    except Exception:
+        return ""
+
+
 def do_backup(tag=""):
     os.makedirs(BACKUP_DIR, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -63,6 +85,7 @@ def do_backup(tag=""):
 
     files = collect_files()
     manifest = {"created": datetime.now().isoformat(timespec="seconds"),
+                "commit": current_commit(),
                 "file_count": len(files), "files": {}}
     with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for full, rel in files:
@@ -76,7 +99,8 @@ def do_backup(tag=""):
 
     size_mb = os.path.getsize(dst) / 1024 / 1024
     print(f"[OK] 备份完成：{dst}")
-    print(f"   文件 {len(files)} 个，压缩包 {size_mb:.2f} MB")
+    print(f"   文件 {len(files)} 个，压缩包 {size_mb:.2f} MB"
+          f"，云端提交 {manifest['commit'] or '（未取到）'}")
 
     # 清理旧备份
     zips = sorted(f for f in os.listdir(BACKUP_DIR)
