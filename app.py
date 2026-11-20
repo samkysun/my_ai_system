@@ -4320,7 +4320,8 @@ def make_login_token(username):
     import hmac as _hm
     import hashlib as _hl
     exp = int(_time_sec.time()) + _LOGIN_TTL_DAYS * 86400
-    raw = f"{username}|{exp}".encode("utf-8")
+    _tv = str(st.secrets.get("TOKEN_VERSION", "1"))
+    raw = f"{username}|{exp}|{_tv}".encode("utf-8")
     payload = _b64.urlsafe_b64encode(raw).decode().rstrip("=")
     sig = _hm.new(_login_secret(), payload.encode(), _hl.sha256).hexdigest()[:32]
     return f"{payload}.{sig}"
@@ -4339,7 +4340,13 @@ def check_login_token(tok):
         if not _hm.compare_digest(sig, want):
             return ""
         raw = _b64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
-        user, exp = raw.rsplit("|", 1)
+        parts = raw.rsplit("|", 2)
+        if len(parts) == 3:
+            user, exp, tv = parts
+            if tv != str(st.secrets.get("TOKEN_VERSION", "1")):
+                return ""
+        else:
+            user, exp = raw.rsplit("|", 1)
         if int(exp) < int(_time_sec.time()):
             return ""
         return user
