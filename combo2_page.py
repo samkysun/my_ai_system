@@ -133,7 +133,7 @@ def analyze(data, sel_period, k, min_count=1):
 def render(df_data, H):
     st.title("🎯 三码组合池")
     st.caption("选一期 → 6 个平码拆成 N 组 → 历史里找包含这些组合的期 → "
-               "取它们的下一期再拆 → 统计出现次数。")
+               "取它们的下一期再拆 → 只保留出现 2 次及以上的组合。")
 
     # ---------- 数据 ----------
     data = []
@@ -162,7 +162,7 @@ def render(df_data, H):
     with c1:
         pick = st.selectbox("选一期（已开奖）", per_list, index=0, key="c2_period")
     k = 3          # 固定：6 个平码三三组合
-    _minc = 1      # 固定：全部列出
+    _minc = 2      # 固定：只保留出现 2 次及以上
     with c2:
         st.write("")
         st.caption("6 个平码 → 三三组合 20 组")
@@ -194,7 +194,7 @@ def render(df_data, H):
     st.markdown(f"- 本池组合：**{len(r['pool'])}** 组")
     st.markdown(f"- 命中的历史触发期：**{len(r['triggers'])}** 期")
     st.markdown(f"- 取到的下一期：**{len(r['next_periods'])}** 期")
-    st.markdown(f"- 符合阈值（≥{int(_minc)} 次）的组合：**{r['total']}** 组")
+    st.markdown(f"- 出现 2 次及以上的组合：**{r['total']}** 组")
     if r["triggers"]:
         st.caption("触发期（前 15）：" + "、".join(r["triggers"][:15])
                    + ("…" if len(r["triggers"]) > 15 else ""))
@@ -202,7 +202,7 @@ def render(df_data, H):
     # ---------- 三、表格 ----------
     st.markdown("### 三、组合统计表（按出现次数降序）")
     if not r["items"]:
-        st.warning(f"没有出现 ≥{int(_minc)} 次的组合")
+        st.warning("没有出现 2 次及以上的组合")
         return
 
     target = r["target"]
