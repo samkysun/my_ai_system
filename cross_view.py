@@ -339,9 +339,25 @@ def render(df_data, H):
         st.error("两套数据没有可对齐的期")
         return
 
-    st.caption(f"可对齐期数：{len(seq)}（{seq[0][0]} ~ {seq[-1][0]}）"
-               f"　｜　数据缓存 {int(_t.time()-_c['ts'])} 秒前"
-               f"（30 分钟自动过期）")
+    # ---------- 数据范围 ----------
+    _rng_c1, _rng_c2 = st.columns([1, 3])
+    with _rng_c1:
+        _range = st.selectbox("数据范围", ["2023年后（干净）", "全部历史"],
+                              index=0, key="cv_range")
+    _seq_all = seq
+    if _range.startswith("2023"):
+        seq = [x for x in seq if x[0][:4] >= "2023"]
+    with _rng_c2:
+        st.caption(f"可对齐期数：{len(seq)}（{seq[0][0] if seq else '—'} ~ "
+                   f"{seq[-1][0] if seq else '—'}）"
+                   f"　｜　缓存 {int(_t.time()-_c['ts'])} 秒前"
+                   f"　｜　全库可对齐 {len(_seq_all)} 期")
+        if _range.startswith("2023"):
+            st.caption("⚠️ 已剔除 2019 年前数据：早期「按序」第6球有 100% 是最大值的拼接痕迹，"
+                       "会污染排列统计。")
+    if not seq:
+        st.error("该范围内没有可用数据")
+        return
 
     c1, c2 = st.columns([1, 1])
     with c1:
