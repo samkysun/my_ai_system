@@ -369,6 +369,88 @@ def _board_append(source, title, text):
     _board_add(source, title, text)
 
 
+_AI_RULES = """【数据规则说明·必须严格遵守】
+1. 六合彩每期开 6 个平码 + 1 个特码，号码范围 1~49。
+2. 「升序」= 把 6 个平码从小到大排列（升序第1位最小，第6位最大）。
+3. 「按序」= 实际摇出的落球顺序（按序第1球先摇出，第6球最后摇出）。
+4. 写法「升1→按4」的意思是：本期最小值那个号，在第 4 个球被摇出。
+5. 「触发行」= 历史上出现过与目标组合相同号码组合的那一期。
+6. 「上一期 / 下一期」= 相对于触发行，时间上前一期或后一期。
+7. 「综合数字」= 把所有触发行对应的上一期号码汇总后，各号码出现的次数统计。
+8. 「三中三」= 你选的 3 个号全部出现在开奖的 6 个平码里。
+   单个三号组合的中奖概率 = C(46,3)/C(49,6) = 0.1086%（约 1/921），
+   公平赔率应为 921 倍；低于这个赔率的玩法长期必然亏损。
+9. 位置配对（升序位 ↔ 落球位）在统计上接近随机（均匀 1/6），
+   不能声称能预测位置。
+10. 禁止编造数据。所有结论必须能在给的数据里找到依据。
+    如果数据不足以得出结论，直接说明"数据不足"。
+11. 输出用中文、分点、给具体数字，不要空话。"""
+
+
+def _board_ai_text(limit_each=2500, max_items=12):
+    """把看板内容压缩成可读文本（长文本保留首尾）"""
+    board = _board_sync_load() or []
+    parts = []
+    for e in board[-max_items:]:
+        txt = e.get("text") or ""
+        if len(txt) > limit_each:
+            lines = txt.splitlines()
+            head = "\n".join(lines[:25])
+            tail = "\n".join(lines[-10:])
+            txt = (f"{head}\n…（中间省略 {max(0, len(lines)-35)} 行）…\n{tail}")
+        parts.append(f"===== 来源：{e.get('source','')} | 标题：{e.get('title','')} "
+                     f"| 时间：{e.get('ts','')} =====\n{txt}")
+    return "\n\n".join(parts)
+
+
+def _board_ai_analyze(question):
+    """调用 AI 综合分析看板内容"""
+    data = _board_ai_text()
+    if not data:
+        return "看板里还没有内容，请先从其它页面推送结果。"
+    prompt = (f"以下是汇总看板中的分析结果数据：\n\n{data}\n\n"
+              f"【我的问题】\n{question}\n\n"
+              f"请基于上面数据回答，要求：\n"
+              f"1) 先概括数据里的关键数字（条数、期数、命中率等）\n"
+              f"2) 再回答我的问题\n"
+              f"3) 涉及概率或赔率时必须给出计算过程\n"
+              f"4) 不要编造数据里没有的内容")
+    return call_deepseek_api(prompt, _AI_RULES)
+
+
+def _board_ai_ui():
+    """AI页面的综合分析入口"""
+    with st.expander("🤖 AI 综合分析（基于看板数据）", expanded=False):
+        st.caption("把看板里的结果按规则交给 AI 分析。数据量大时会自动压缩。")
+        _q = st.text_area(
+            "你想问什么",
+            value="请分析这些结果：\n1) 哪些组合出现的规律最明显\n"
+                  "2) 号码频次排行说明了什么\n3) 如果按这些数据继续研究，"
+                  "下一步应该重点看什么\n4) 有什么统计上的陷阱需要注意",
+            height=120, key="board_ai_q")
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            _go = st.button("▶ 开始分析", type="primary", key="board_ai_go",
+                            use_container_width=True)
+        with c2:
+            st.caption("管理员不限次数；普通用户有频率限制。")
+        if _go:
+            if not (_q or "").strip():
+                st.warning("请先写问题")
+            else:
+                with st.spinner("AI 分析中（约 10~30 秒）…"):
+                    _ans = _board_ai_analyze(_q)
+                st.session_state["board_ai_ans"] = _ans
+        _ans = st.session_state.get("board_ai_ans")
+        if _ans:
+            st.markdown("**AI 分析结果**")
+            st.code(_ans, language=None)
+            if st.button("📌 把分析结果放回看板", key="board_ai_save"):
+                _board_add("AI分析", f"综合分析 {datetime.now():%m-%d %H:%M}",
+                           _ans)
+                st.success("已放回看板")
+
+
 def _board_render():
     """在 AI推演 页面顶部渲染看板"""
     board = _board_sync_load() or []
@@ -3055,6 +3137,7 @@ def render_ai(df_data):
     except Exception as _ae:
         st.caption(f"📚 存档读取异常：{type(_ae).__name__}: {_ae}")
     _board_render()
+    _board_ai_ui()
 
     if df_data is not None and not isinstance(df_data, str):
         unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
