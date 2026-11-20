@@ -242,82 +242,86 @@ except Exception as _cc_err:
     render_calc_center = None
 
 
-_BOARD_JSON = "ai_board.json"
-_BOARD_MAX = 80            # 最多保留 80 条，防止页面变卡
-
-
-def _gh_headers():
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo = st.secrets.get("GITHUB_REPO")
-    if not token or not repo:
-        return None, None
-    return {"Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json"}, repo
+_BOARD_TABLE = "ai_board"
+_BOARD_MAX = 80            # 最多显示 80 条，防止页面变卡
 
 
 def _board_cloud_read():
-    """读云端看板 -> (items, sha)"""
-    import requests as _rq
-    hdr, repo = _gh_headers()
-    if not hdr:
-        return [], None
+    """从 Supabase 读看板 -> items 列表"""
+    client = get_supabase_client()
+    if not client:
+        return []
     try:
-        r = _rq.get(f"https://api.github.com/repos/{repo}/contents/{_BOARD_JSON}",
-                    headers=hdr, timeout=20)
-        if r.status_code == 200:
-            j = r.json()
-            import base64 as _b64
-            obj = json.loads(_b64.b64decode(j["content"]).decode("utf-8"))
-            return obj.get("items", []), j.get("sha")
-        if r.status_code == 404:
-            return [], None
+        rows = (client.table(_BOARD_TABLE)
+                .select("source,title,content,updated_at")
+                .order("updated_at", desc=False)
+                .execute().data) or []
+        out = []
+        for r in rows:
+            out.append({
+                "source": r.get("source", ""),
+                "title": r.get("title", ""),
+                "text": r.get("content", ""),
+                "ts": str(r.get("updated_at", ""))[:19].replace("T", " "),
+            })
+        return out
     except Exception:
-        pass
-    return [], None
+        return []
 
 
-def _board_cloud_write(items):
-    """写云端看板（失败不影响页面）"""
-    import requests as _rq
-    import base64 as _b64
-    hdr, repo = _gh_headers()
-    if not hdr:
+def _board_cloud_upsert(source, title, text):
+    client = get_supabase_client()
+    if not client:
         return False
     try:
-        _, sha = _board_cloud_read()
-        body = {"message": f"看板更新 {datetime.now():%m-%d %H:%M:%S}",
-                "content": _b64.b64encode(
-                    json.dumps({"items": items}, ensure_ascii=False).encode("utf-8")
-                ).decode("utf-8"),
-                "branch": "main"}
-        if sha:
-            body["sha"] = sha
-        r = _rq.put(f"https://api.github.com/repos/{repo}/contents/{_BOARD_JSON}",
-                    headers=hdr, data=json.dumps(body), timeout=30)
-        return r.status_code in (200, 201)
+        client.table(_BOARD_TABLE).upsert(
+            {"source": source, "title": title, "content": text,
+             "updated_at": datetime.now().isoformat(timespec="seconds")},
+            on_conflict="source,title").execute()
+        return True
+    except Exception:
+        return False
+
+
+def _board_cloud_delete(source, title):
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        client.table(_BOARD_TABLE).delete().eq("source", source) \
+            .eq("title", title).execute()
+        return True
+    except Exception:
+        return False
+
+
+def _board_cloud_clear():
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        client.table(_BOARD_TABLE).delete().neq("source", "__none__").execute()
+        return True
     except Exception:
         return False
 
 
 def _board_sync_load():
-    """会话首次使用时，从云端载入看板"""
+    """会话首次使用时从 Supabase 载入"""
     if "ai_board" in st.session_state:
         return st.session_state.ai_board
-    items, _ = _board_cloud_read()
-    st.session_state.ai_board = list(items or [])[:_BOARD_MAX]
+    items = _board_cloud_read()
+    st.session_state.ai_board = items[-_BOARD_MAX:]
     return st.session_state.ai_board
 
 
 def _board_persist():
-    """把当前看板写回云端"""
+    """整表重写（仅在需要时用；一般用增量写）"""
     items = st.session_state.get("ai_board") or []
-    if len(items) > _BOARD_MAX:
-        items = items[-_BOARD_MAX:]
-        st.session_state.ai_board = items
-    _board_cloud_write(items)
-
-
+    _board_cloud_clear()
+    for e in items[-_BOARD_MAX:]:
+        _board_cloud_upsert(e.get("source", ""), e.get("title", ""),
+                            e.get("text", ""))
 def _board_add(source, title, text):
     """把一段结果放进看板；同一个 source+title 会覆盖，并写入云端"""
     _board_sync_load()
@@ -331,10 +335,10 @@ def _board_add(source, title, text):
     for i, e in enumerate(st.session_state.ai_board):
         if e.get("source") == source and e.get("title") == title:
             st.session_state.ai_board[i] = entry
-            _board_persist()
+            _board_cloud_upsert(source, title, text)
             return
     st.session_state.ai_board.append(entry)
-    _board_persist()
+    _board_cloud_upsert(source, title, text)
 
 
 def _board_append(source, title, text):
@@ -348,7 +352,7 @@ def _board_append(source, title, text):
             if text not in e["text"]:
                 e["text"] = (e["text"] + "\n\n" + text)[:20000]
             e["ts"] = datetime.now().strftime("%m-%d %H:%M:%S")
-            _board_persist()
+            _board_cloud_upsert(source, title, e["text"])
             return
     _board_add(source, title, text)
 
@@ -364,7 +368,7 @@ def _board_render():
         with c1:
             if st.button("🗑 清空看板", use_container_width=True, key="board_clear"):
                 st.session_state.ai_board = []
-                _board_persist()
+                _board_cloud_clear()
                 st.rerun()
         with c2:
             _all = "\n\n".join(
@@ -381,7 +385,7 @@ def _board_render():
                              key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
                 if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
                     st.session_state.ai_board.pop(i)
-                    _board_persist()
+                    _board_cloud_delete(e.get("source", ""), e.get("title", ""))
                     st.rerun()
 
 
