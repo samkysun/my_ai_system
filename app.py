@@ -694,11 +694,12 @@ def _range_of(label):
     return (1, 49)
 
 
-def _render_kill_group(label, blocks, amap):
+def _render_kill_group(label, blocks, amap, range_label=None):
     """渲染一个球位（或合并后）的杀号清单（含矛盾判定）"""
     ks = kill_summary(blocks)
+    _rl = range_label or label
     if not ks:
-        _lo0, _hi0 = _range_of(label)
+        _lo0, _hi0 = _range_of(_rl)
         st.warning("没有解析到任何杀号（触发行可能没抓到上/杀值）")
         st.success(f"本球位区间 {_lo0}~{_hi0} 全部保留（{_hi0-_lo0+1} 个号码）")
         _dbg = [f"{b['attr']}：{len(b['triggers'])} 条触发行" for b in blocks]
@@ -738,7 +739,7 @@ def _render_kill_group(label, blocks, amap):
             st.caption("未能翻译的条件：" + "、".join(unmapped))
         return
 
-    _lo, _hi = _range_of(label)
+    _lo, _hi = _range_of(_rl)
     num_kill = _CK({n: c for n, c in num_kill.items() if _lo <= n <= _hi})
     if not num_kill:
         st.caption(f"本组杀号在本球位区间 {_lo}~{_hi} 内没有命中号码")
@@ -916,17 +917,28 @@ def _multi_ai_ui():
                 else:
                     _labels = list(_groups.keys())
                     _merge = st.multiselect(
-                        "或勾选几个球位合并（其余仍分开）", _labels,
+                        "勾选几个球位合并计算（其余仍单独算）", _labels,
                         default=[], key="multi_merge")
                     if _merge:
+                        _dom = st.selectbox(
+                            "★ 主导（决定号码区间）", _merge, index=0,
+                            key="multi_dom",
+                            help="合并后所有号码都按主导球位的区间取值")
+                        _dlo, _dhi = _range_of(_dom)
+                        st.info(f"主导：**{_dom}** → 合并结果的号码区间为 "
+                                f"{_dlo}~{_dhi}（参与合并的条件："
+                                + "、".join(_merge) + "）")
                         _mb = [b for k in _merge for b in _groups[k]]
-                        with st.expander("＋ 合并：" + " + ".join(_merge),
+                        with st.expander("＋ 合并计算（" + " + ".join(_merge) + "）",
                                          expanded=True):
-                            _render_kill_group("合并_" + "_".join(_merge),
-                                               _mb, _amap)
+                            _render_kill_group(
+                                "合并_" + "_".join(_merge), _mb, _amap,
+                                range_label=_dom)
                     for k in [x for x in _labels if x not in _merge]:
-                        with st.expander(f"■ {k}（{len(_groups[k])} 个属性）",
-                                         expanded=True):
+                        _klo, _khi = _range_of(k)
+                        with st.expander(
+                                f"■ {k}（{len(_groups[k])} 个属性，"
+                                f"区间 {_klo}~{_khi}）", expanded=True):
                             _render_kill_group(k, _groups[k], _amap)
             _spinner_text = "AI 综合分析中（约 10~30 秒）…"
             _spinner_text = "AI 综合分析中（约 10~30 秒）…"
