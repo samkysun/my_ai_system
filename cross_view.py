@@ -47,6 +47,40 @@ def _row_index(rows):
     return out
 
 
+_INDEX_FILE = "_index.csv"
+
+
+def _load_index(rows):
+    """从 _index.csv 还原 (up, an, 行号表)"""
+    up, an, rno_up, rno_an = {}, {}, {}, {}
+    if not rows or len(rows) < 2:
+        return up, an, rno_up, rno_an
+    for i, r in enumerate(rows[1:], start=2):
+        if len(r) < 16:
+            continue
+        p = str(r[0]).strip()
+        if not p:
+            continue
+        try:
+            u = [int(float(r[1 + k] or 0)) for k in range(7)]
+            a = [int(float(r[8 + k] or 0)) for k in range(7)]
+        except Exception:
+            continue
+        if not any(u) or not any(a):
+            continue
+        up[p] = u
+        an[p] = a
+        try:
+            rno_up[p] = int(float(r[15]))
+        except Exception:
+            pass
+        try:
+            rno_an[p] = int(float(r[16])) if len(r) > 16 else 0
+        except Exception:
+            pass
+    return up, an, rno_up, rno_an
+
+
 def _aligned(up, an):
     """取两套一致（前6同集合且无重复）的期，按时间升序"""
     seq = []
@@ -341,15 +375,19 @@ def render(df_data, H):
             st.rerun()
 
     if _need:
-        with st.spinner("首次载入数据（约 5~15 秒，之后会变快）…"):
-            rows_up = load(_UP_FILE, None) or []
-            rows_an = load(_AN_FILE, None) or []
-            if not rows_up or not rows_an:
-                st.error("读不到数据文件")
-                return
-            up, an = _parse(rows_up), _parse(rows_an)
-            _rowno_up = _row_index(rows_up)
-            _rowno_an = _row_index(rows_an)
+        with st.spinner("载入索引…"):
+            _idx = load(_INDEX_FILE, None) or []
+            if _idx:
+                up, an, _rowno_up, _rowno_an = _load_index(_idx)
+            else:
+                rows_up = load(_UP_FILE, None) or []
+                rows_an = load(_AN_FILE, None) or []
+                if not rows_up or not rows_an:
+                    st.error("读不到数据文件")
+                    return
+                up, an = _parse(rows_up), _parse(rows_an)
+                _rowno_up = _row_index(rows_up)
+                _rowno_an = _row_index(rows_an)
             seq = _aligned(up, an)
             st.session_state[_ck] = {
                 "seq": seq, "row_up": _rowno_up, "row_an": _rowno_an,
