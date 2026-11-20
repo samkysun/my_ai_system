@@ -418,6 +418,168 @@ def _board_ai_analyze(question):
     return call_deepseek_api(prompt, _AI_RULES)
 
 
+_MULTI_RULES = """【多维分析报告格式说明·必须理解】
+1. 每条报告开头是：
+   =========【期号】期【升序/按序】-【属性名】【球号】球=======
+   例：=========2026124期升序-生肖2球=======
+   表示：预测 2026 年 124 期、升序（6 平码从小到大）、第 2 个球的【生肖】属性。
+
+2. 【基准行排列】(17行)：该位置属性最近 17 期的取值序列，最左边是最新一期。
+   这是用来"查找历史相同模式"的基准。
+
+3. 触发行：行xxx-yyy(N行)：在历史数据中，出现与基准排列完全相同的 N 行。
+   - 行号是数据库里的行号，数字越小越新。
+   - (匹配:牛鼠猪羊猴) 就是这 N 行的实际取值序列。
+   - 上:羊肖 表示这段匹配行的【上一行】（更近一期）的取值。
+   - 下:龙肖 表示这段匹配行的【下一行】（更早一期）的取值。
+   - [自身参考列匹配] 表示用同一属性列自身做匹配。
+   - 标有 近6期一致 的触发行是特殊高亮，代表近期高度重合。
+
+4. 一条报告可能给出多个触发行，每个触发行都会给出"上/下"两个后续状态。
+
+5. 分析任务本质是：从多个属性、多个球位的触发行中，
+   找出"下一期该位置最可能的取值"，以及不同属性之间是否互相印证。
+
+6. 禁止编造。只能基于报告里出现的属性和取值做推断。
+   如果证据互相矛盾，必须指出矛盾点，不要强行给结论。"""
+
+
+def _parse_multi_blocks(text):
+    """按行解析多维分析报告"""
+    import re as _re
+    blocks = []
+    cur = None
+    for line in (text or "").splitlines():
+        s = line.strip()
+        if s.startswith("=") and "期" in s and "球" in s:
+            head = s.strip("= ")
+            m = _re.search(r"(\d{5,8})期(升序|按序)-(.+?)(\d)球", head)
+            if m:
+                cur = {"period": m.group(1), "order": m.group(2),
+                       "attr": m.group(3), "ball": m.group(4),
+                       "base": "", "triggers": []}
+                blocks.append(cur)
+            continue
+        if cur is None:
+            continue
+        if "基准行排列" in s:
+            mb = _re.search(r"[:：]\s*(.+)", s)
+            if mb:
+                cur["base"] = mb.group(1).strip()
+            continue
+        if "触发行" in s:
+            mt = _re.search(r"行(\d+)-(\d+)\((\d+)行\)", s)
+            if not mt:
+                continue
+            mu = _re.search(r"上[:：]([^\s(（]+)", s)
+            md = _re.search(r"下[:：]([^\s(（\[]+)", s)
+            mm = _re.search(r"匹配[:：]([^\)）]*)", s)
+            cur["triggers"].append({
+                "row": f"{mt.group(1)}-{mt.group(2)}",
+                "n": int(mt.group(3)),
+                "up": mu.group(1) if mu else "",
+                "down": md.group(1) if md else "",
+                "match": mm.group(1).strip() if mm else "",
+                "self": "自身参考列" in s,
+                "hot": "一致" in s,
+            })
+    return blocks
+
+
+def _multi_summary_text(blocks):
+    """把解析结果压成 AI 易读的表格文本"""
+    if not blocks:
+        return ""
+    lines = [f"共解析到 {len(blocks)} 条属性报告，明细如下：", ""]
+    for b in blocks:
+        lines.append(f"■ {b['attr']}（{b['order']}第{b['ball']}球）")
+        lines.append(f"  基准序列：{b['base'][:160]}")
+        if not b["triggers"]:
+            lines.append("  （无触发行）")
+        for i, tg in enumerate(b["triggers"], 1):
+            extra = []
+            if tg["self"]:
+                extra.append("自身列匹配")
+            if tg["hot"]:
+                extra.append("近期高度重合")
+            lines.append(
+                f"  触发行{i}：行{tg['row']}（{tg['n']}行）"
+                f"　上期值={tg['up']}　下期值={tg['down']}"
+                f"　匹配序列={tg['match'][:80]}"
+                + (f"　[{'、'.join(extra)}]" if extra else ""))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _multi_ai_analyze(question, raw_text=None):
+    """解析报告并交给 AI"""
+    text = raw_text or ""
+    if not text.strip():
+        # 从看板里凑
+        board = _board_sync_load() or []
+        text = "\n\n".join(e.get("text", "") for e in board
+                            if "基准行排列" in (e.get("text") or ""))
+    blocks = _parse_multi_blocks(text)
+    if not blocks:
+        return None, "没有解析到报告内容（需要包含【基准行排列】和触发行）"
+    summary = _multi_summary_text(blocks)
+    prompt = (f"下面是 {len(blocks)} 条多维分析报告的结构化结果：\n\n{summary}\n\n"
+              f"【我的问题】\n{question}\n\n"
+              f"请按以下要求作答：\n"
+              f"1) 按属性逐个说明：该属性历史上匹配到几段、上期/下期分别是什么值\n"
+              f"2) 汇总所有属性中「下期值」出现最多的取值（若同一属性多个触发行，分别列出）\n"
+              f"3) 指出哪些属性的结论一致、哪些互相矛盾\n"
+              f"4) 给出下一期各位置最可能的属性取值（克制、注明依据与不确定性）\n"
+              f"5) 如果证据不足，明确说「无法判断」")
+    return call_deepseek_api(prompt, _MULTI_RULES), None
+
+
+def _multi_ai_ui():
+    """多维报告分析入口"""
+    with st.expander("📊 多维报告分析（基准行 + 触发行 → AI 解读）", expanded=True):
+        st.caption("分析「基准行排列 / 触发行 / 上·下·匹配」这类报告，"
+                   "理解每个属性的历史匹配情况，找出下期最可能的取值。")
+        _src = st.radio("数据来源", ["自动读看板", "手动粘贴"], horizontal=True,
+                        key="multi_src")
+        _raw = ""
+        if _src == "手动粘贴":
+            _raw = st.text_area("把报告粘进来", height=200, key="multi_raw",
+                                placeholder="=========2026124期升序-生肖2球=======…")
+        _q = st.text_area(
+            "你想问什么",
+            value="1) 每个属性历史上匹配到几段，上期值和下期值分别是什么\n"
+                  "2) 所有属性里「下期值」出现最多的是什么\n"
+                  "3) 哪些属性结论一致、哪些矛盾\n"
+                  "4) 下一期各位置最可能的取值是什么",
+            height=120, key="multi_q")
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            _go = st.button("▶ 让 AI 分析", type="primary", key="multi_go",
+                            use_container_width=True)
+        with c2:
+            st.caption("会先解析成结构化表格，再交给 AI，避免它看不懂格式。")
+
+        if _go:
+            with st.spinner("解析并分析中（约 10~30 秒）…"):
+                try:
+                    _ans, _err = _multi_ai_analyze(_q, _raw)
+                except Exception as _e:
+                    _ans, _err = None, f"{type(_e).__name__}: {_e}"
+            if _err:
+                st.warning(_err)
+            else:
+                st.session_state["multi_ai_ans"] = _ans
+
+        _ans = st.session_state.get("multi_ai_ans")
+        if _ans:
+            st.markdown("**AI 分析结果**")
+            st.code(_ans, language=None)
+            if st.button("📌 结果放回看板", key="multi_ai_save"):
+                _board_add("多维分析AI", f"综合解读 {datetime.now():%m-%d %H:%M}",
+                           _ans)
+                st.success("已放回看板")
+
+
 def _board_ai_ui():
     """AI页面的综合分析入口"""
     with st.expander("🤖 AI 综合分析（基于看板数据）", expanded=False):
@@ -3137,6 +3299,7 @@ def render_ai(df_data):
     except Exception as _ae:
         st.caption(f"📚 存档读取异常：{type(_ae).__name__}: {_ae}")
     _board_render()
+    _multi_ai_ui()
     _board_ai_ui()
 
     if df_data is not None and not isinstance(df_data, str):
