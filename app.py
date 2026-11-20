@@ -227,11 +227,6 @@ def clean_period(val):
 # 跨页面汇总看板（各页面结果 → AI推演页固定展示）
 # ==========================================
 try:
-    from combo_page import render as render_combo_page
-except Exception:
-    render_combo_page = None
-
-try:
     from cross_view import render as render_cross_view
 except Exception:
     render_cross_view = None
@@ -4529,7 +4524,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🧩 组合联动"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -4539,11 +4534,6 @@ def main_app():
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🧠 AI推演": render_ai(df_data)
-    elif page == "🧩 组合联动":
-        if render_combo_page is None:
-            st.error("缺少 combo_page.py，请与 app.py 一起上传")
-        else:
-            render_combo_page(df_data, {"has_index": True})
     elif page == "🔀 升降交集":
         if render_cross_view is None:
             st.error("缺少 cross_view.py，请与 app.py 一起上传")
