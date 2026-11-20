@@ -88,7 +88,8 @@ def _aligned(up, an):
         u, a = up[p], an[p]
         if len(set(u[:6])) < 6 or len(set(a[:6])) < 6:
             continue
-        if sorted(u[:6]) != sorted(a[:6]):
+        # 放宽：只要升序的 6 个号都能在按序里找到，就能确定落球位置
+        if not all(v in a[:6] for v in u[:6]):
             continue
         seq.append((p, u, a))
     return seq
@@ -432,7 +433,11 @@ def render(df_data, H):
     if _fy > _ty:
         _fy, _ty = _ty, _fy
     _range = f"{_fy}~{_ty} 年"
+    _before = len(seq)
     seq = [x for x in seq if _fy <= int(x[0][:4]) <= _ty]
+    st.caption(f"可对比期数：{len(seq)}（全库仅 {_before} 期两套数据能对上，"
+               f"范围 {_years[0]}~{_years[-1]}）。"
+               "1967~1999 只有升序数据、没有按序，无法做配位对比。")
     with _rng_c2:
         st.caption(f"可对齐期数：{len(seq)}（{seq[0][0] if seq else '—'} ~ "
                    f"{seq[-1][0] if seq else '—'}）"
