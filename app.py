@@ -419,33 +419,34 @@ def _board_ai_analyze(question):
 
 
 _MULTI_RULES = """【硬规则·违反即视为错误】
-1. 数据来源：六合彩每期 6 个平码 + 1 个特码，号码 1~49。
-   「升序」= 平码从小到大排；「按序」= 实际落球顺序。
-   每个「球位」是独立的（升序1球 ≠ 升序2球，升序 ≠ 按序）。
+1. ★只看每条报告的标题，标题格式：
+   =========2026124期升序-生肖2球=======
+   从这里读出三件事：① 期号（2026124）② 升序还是按序 ③ 属性 + 球号（生肖、第2球）。
+   这三样是判断归属的唯一依据。
 
-2. ★不同球位绝对不许混在一起判断。只有我明确说"合并"时才合并。
-   输出时必须按球位分开写：先写「升序1球」，再写「升序2球」…
+2. ★基准行排列完全不参考，不要引用、不要分析。
 
-3. ★触发行里的「上」= 下期要杀掉的属性值（排除项）。
-   「下」只是参考，不能拿去当选号依据，也不能用来推翻「上」。
+3. ★「下」完全不参与任何判断，直接忽略，不许引用。
 
-4. ★如果某个属性后面已经写了「杀XXX」（例如 杀金肖木肖），
-   就只认括号里的内容，不能再把「上:XX」也当成杀号。
+4. ★「上」= 下期要杀的属性值。
+   但如果同一行里已经写了「杀XXX」（例如 杀金肖木肖），
+   就只认括号里的值，不能再把「上:XX」也当成杀号。
 
-5. 矛盾的定义：同一个球位里，某值在「上」被要求杀，
-   但在「下」里又出现 → 判为「上杀下留」，杀号可信度降低；
-   不要因为「下」出现就取消杀号，只能标注风险。
+5. ★不同球位绝对不许混在一起。升序1球 ≠ 升序2球，升序 ≠ 按序。
+   输出必须按「升序/按序 + 球号」分组，一个球位一段。
 
-6. 禁止把 49 个号全部杀掉。若条件导致全杀，只保留
-   「杀次数 ≤ 2」的号码，并把杀次数高的列为「下期必杀号码」。
+6. 不存在「矛盾」判定：因为「下」不参与，所以不要写"上杀下留"这类分析。
 
-7. 禁止编造。只能使用下面给出的数据；数据不够就说"无法判断"。
+7. 禁止把 49 个号全部杀光。若全杀，只保留杀次数 ≤ 2 的号码，
+   并把杀次数高的列为「下期必杀号码」。
 
-8. 输出格式固定：
-   ① 按球位逐条列：属性 → 杀的取值（或括号内的值）→ 可信度
-   ② 每个球位给出「必杀号码」和「保留号码」
-   ③ 指出矛盾项
-   ④ 最后给一句总体结论（不要下注建议）"""
+8. 禁止编造，只能使用给出的数据。
+
+9. 输出格式：
+   ① 按期号 + 球位分组
+   ② 每组列出：属性 → 要杀的值 → 出现次数
+   ③ 每组给出「必杀号码」和「保留号码」
+   ④ 最后一句总体结论"""
 
 
 def _parse_multi_blocks(text):
@@ -678,28 +679,15 @@ def _render_kill_group(label, blocks, amap):
         st.caption("没有可杀的项")
         return
 
-    # 收集本组的「下」参考值，用于判断矛盾
-    down_ref = set()
-    for b in blocks:
-        for tg in b["triggers"]:
-            dv = _clean_kill(tg.get("down", ""))
-            if dv:
-                down_ref.add(dv)
-                for it in _kill_items(_attr_group(b["attr"]), "", dv)[0]:
-                    down_ref.add(it)
+    down_ref = set()   # 「下」不参与任何判断
 
     rows_k = []
     for g, v, n, d in ks:
-        conflict = v in down_ref
-        conf = "低（上杀下留）" if conflict else ("高" if n >= 2 else "中")
+        conflict = False
+        conf = "高" if n >= 2 else "中"
         rows_k.append({"属性": g, "杀值": v, "上杀次数": n,
                        "可信度": conf, "来自": "；".join(d)})
     st.dataframe(pd.DataFrame(rows_k), use_container_width=True, hide_index=True)
-
-    _conf_vals = [r["杀值"] for r in rows_k if r["可信度"].startswith("低")]
-    if _conf_vals:
-        st.warning("⚠️ 以下值「上」侧要杀，但「下」侧参考又出现，"
-                   "属自相矛盾，杀号可信度低：" + "、".join(_conf_vals))
 
     if not amap:
         st.info("缺少 _attr_map.csv，无法翻译成号码")
@@ -715,12 +703,9 @@ def _render_kill_group(label, blocks, amap):
         if not nums:
             unmapped.append(f"{g}{v}")
             continue
-        conflict = v in down_ref
         for x in nums:
             num_kill[x] += n
-            num_src[x].append(f"{g}{v}" + ("" if not conflict else "(矛盾)"))
-            if conflict:
-                num_conf.add(x)
+            num_src[x].append(f"{g}{v}")
 
     if not num_kill:
         if unmapped:
@@ -745,8 +730,8 @@ def _render_kill_group(label, blocks, amap):
     st.dataframe(pd.DataFrame(rows_n), use_container_width=True,
                  hide_index=True, height=300)
 
-    strong = [(n, c) for n, c in _sorted if c >= 2 and n not in num_conf]
-    risky = [(n, c) for n, c in _sorted if c >= 2 and n in num_conf]
+    strong = [(n, c) for n, c in _sorted if c >= 2]
+    risky = []
     if strong:
         st.error("⛔ 本组必杀号码（多次触犯且无矛盾）：" +
                  "　".join(f"{n:02d}({c}次)" for n, c in strong))
@@ -765,31 +750,26 @@ def _render_kill_group(label, blocks, amap):
 
 
 def _multi_struct_text(blocks):
-    """把解析结果按球位分组，整理成结构化文本给 AI"""
+    """只输出标题信息 + 上/杀括号，不含基准行与「下」"""
     groups = {}
     for b in blocks:
-        key = f"{b['order']}{b['ball']}球"
+        key = f"{b['period']}期 {b['order']}第{b['ball']}球"
         groups.setdefault(key, []).append(b)
 
-    lines = [f"共 {len(blocks)} 条属性报告，按球位分组如下：", ""]
+    lines = [f"共 {len(blocks)} 条属性报告，按「期号+球位」分组：", ""]
     for gname, gblocks in groups.items():
-        lines.append(f"===== {gname}（{len(gblocks)} 个属性） =====")
+        lines.append(f"===== {gname} =====")
         for b in gblocks:
-            lines.append(f"【{b['attr']}】")
-            for i, tg in enumerate(b["triggers"], 1):
-                up = _clean_kill(tg.get("up", ""))
-                dn = _clean_kill(tg.get("down", ""))
-                kl = tg.get("kill", "")
-                if kl:
-                    lines.append(
-                        f"  触发行{i}：上={up}　杀括号=({kl})　"
-                        f"→ 只杀括号内的值")
-                else:
-                    lines.append(
-                        f"  触发行{i}：上={up}　（无杀括号 → 杀「{up}」）　"
-                        f"下={dn}（仅参考）")
+            lines.append(f"【属性：{b['attr']}】")
             if not b["triggers"]:
                 lines.append("  （无触发行）")
+            for i, tg in enumerate(b["triggers"], 1):
+                up = _clean_kill(tg.get("up", ""))
+                kl = tg.get("kill", "")
+                if kl:
+                    lines.append(f"  触发行{i}：杀({kl})　→ 只杀括号内的值")
+                else:
+                    lines.append(f"  触发行{i}：上={up}　（无括号 → 杀「{up}」）")
         lines.append("")
     return "\n".join(lines)
 
@@ -5254,6 +5234,15 @@ def login_page():
 _APP_BUILD = "v2026-11-20-16d"
 
 
+def render_auto_ai_page():
+    """独立页面：全自动智能分析（带自己的看板）"""
+    st.title("🤖 全自动智能分析")
+    st.caption("把各页面推来的结果集中到这里：自动解析 → 生成杀号清单 → AI 解读。")
+
+    _board_render()
+    _multi_ai_ui()
+
+
 def main_app():
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -5302,7 +5291,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -5311,6 +5300,8 @@ def main_app():
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
+    elif page == "🤖 全自动智能分析":
+        render_auto_ai_page()
     elif page == "🧠 AI推演": render_ai(df_data)
     elif page == "🎯 三中三组合池":
         if render_combo2 is None:
