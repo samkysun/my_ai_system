@@ -730,7 +730,7 @@ def render(df_data, H):
                 for j, a, b in _conflict))
         _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
 
-        # ---------- 下一期位置匹配清单 ----------
+        # ---------- 下一期位置匹配清单（1 对 N） ----------
         st.divider()
         st.markdown("### 一、下一期位置匹配清单")
         _np = ""
@@ -739,32 +739,52 @@ def render(df_data, H):
         except Exception:
             _np = "下一期"
 
-        # 选一个映射作为「预测」
-        if _sols:
-            from collections import Counter as _C5
-            _hf = _C5()
+        _nc1, _nc2 = st.columns([1, 2])
+        with _nc1:
+            _N = st.slider("每个升序位给几个候选", 1, 4, 2, 1, key="cv_n_cand")
+        with _nc2:
+            _use_cons = st.checkbox("只取约束内的位置（会降低覆盖率）", value=False,
+                                    key="cv_use_cons")
+            st.caption(f"目标期号 {_np}（上一期 {seq[-1][0]} 已开奖）"
+                       f"　｜　约束可行映射 {len(_sols)} 种")
+
+        if not _sols:
+            st.warning("当前约束没有可行映射，请放宽条件")
+            _cand_map = {}
+        else:
+            from collections import Counter as _C6
+            _hist_pos = [ _C6() for _ in range(6) ]
             for _pp, _uu, _aa in seq:
                 try:
-                    _pm = tuple(_aa[:6].index(_uu[j - 1]) + 1 for j in range(6))
+                    _pm2 = [_aa[:6].index(_uu[j]) + 1 for j in range(6)]
                 except Exception:
                     continue
-                _hf[_pm] += 1
-            _pred_perm = max(_sols, key=lambda x: (_hf.get(x, 0), tuple(x)))
-            st.markdown(f"**{_np} 期**")
+                for j in range(6):
+                    _hist_pos[j][_pm2[j]] += 1
+            _cand_map = {}
+            for j in range(6):
+                _c6 = _C6(x[j] for x in _sols)
+                if _use_cons:
+                    _pool = list(_c6.keys())
+                    _order = sorted(_pool,
+                                    key=lambda c: (-_hist_pos[j].get(c, 0),
+                                                   -_c6.get(c, 0), c))
+                else:
+                    _order = sorted(range(1, 7),
+                                    key=lambda c: (-_hist_pos[j].get(c, 0), c))
+                _cand_map[j + 1] = _order[:int(_N)]
+
             _l1 = []
-            for _j in range(1, 7):
-                _l1.append(f"　升序第{_j}位 → 按序第{_pred_perm[_j-1]}球")
-            st.text_area("下一期清单", value="\n".join(_l1), height=190,
+            for j in range(1, 7):
+                _cs = _cand_map[j]
+                _l1.append(f"　升序第{j}位 → 按序" +
+                           " / ".join(f"第{c}球" for c in _cs))
+            st.text_area("下一期清单", value="\n".join(_l1), height=200,
                          key="cv_next_list", label_visibility="collapsed")
-            st.caption(f"（该映射在历史上出现过 {_hf.get(_pred_perm, 0)} 次；"
-                       f"当前约束下共 {len(_sols)} 种可行映射）")
-        else:
-            st.warning("当前约束没有可行映射，请放宽条件")
-            _pred_perm = None
 
         # ---------- 历史匹配清单 ----------
         st.markdown("### 二、历史匹配清单（逐期核对）")
-        if _pred_perm is not None:
+        if _cand_map:
             _hc1, _hc2 = st.columns([2, 1])
             with _hc1:
                 _start_p = st.selectbox("从哪一期开始往前看",
@@ -774,32 +794,32 @@ def render(df_data, H):
                 _cnt_n = st.slider("看几期", 5, 100, 20, 5, key="cv_hist_n")
 
             _idx0 = [x[0] for x in seq].index(_start_p)
-            _l2 = [f"预测映射：{' '.join(str(x) for x in _pred_perm)}"
-                   f"（升序1~6位对应按序第几球）", ""]
-            _tot_hit = 0
+            _l2 = [f"候选规则：每个升序位给 {int(_N)} 个候选按序位", ""]
+            _tot = 0
             _n = 0
-            _full = 0
+            _all6 = 0
             for _k in range(_idx0, max(-1, _idx0 - int(_cnt_n)), -1):
                 _p, _u, _a = seq[_k]
                 try:
                     _pm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
                 except Exception:
                     continue
-                _h = sum(1 for j in range(6) if _pm[j] == _pred_perm[j])
-                _tot_hit += _h
+                _h = sum(1 for j in range(6) if _pm[j] in _cand_map[j + 1])
+                _tot += _h
                 _n += 1
                 if _h == 6:
-                    _full += 1
+                    _all6 += 1
                 _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _pm)}"
-                           f"　对上 {_h}/6")
-            _avg = _tot_hit / _n if _n else 0
+                           f"　覆盖 {_h}/6")
+            _avg = _tot / _n if _n else 0
+            _rand = int(_N) / 6 * 6
             _l2.append("")
-            _l2.append(f"合计 {_n} 期：平均对上 {_avg:.2f}/6（随机 1.00/6）；"
-                       f"6 位全对 {_full} 期")
+            _l2.append(f"合计 {_n} 期：平均覆盖 {_avg:.2f}/6"
+                       f"（随机 {_rand:.2f}/6）；6 位全覆盖 {_all6} 期")
             st.text_area("历史匹配清单", value="\n".join(_l2), height=340,
                          key="cv_hist_list", label_visibility="collapsed")
             st.caption("「实际」= 该期升序1~6位分别落在按序第几球；"
-                       "「对上 X/6」= 与预测映射相同的位数。")
+                       "「覆盖 X/6」= 实际落点落在你给的候选里的位数。")
 
         if _sols is not None:
             st.divider()
