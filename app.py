@@ -1529,25 +1529,7 @@ def render_multi_analysis(df_data):
 
             # =====没找到匹配结果的提示拦截=====
             if not res_lines:
-                st.markdown(
-                    """
-                    <style>
-                    @keyframes slideFadeOut {
-                        0% { opacity: 1; max-height: 50px; padding: 12px; margin-bottom: 10px;}
-                        80% { opacity: 1; max-height: 50px; padding: 12px; margin-bottom: 10px;}
-                        100% { opacity: 0; max-height: 0; padding: 0; margin-bottom: 0; border: none; overflow: hidden;}
-                    }
-                    .auto-hide-alert {
-                        background-color: #fef08a; color: #854d0e; border-radius: 6px; text-align: center; font-weight: bold;
-                        animation: slideFadeOut 2s forwards;
-                    }
-                    </style>
-                    <div class="auto-hide-alert">
-                        ⚠️ 未找到符合条件的匹配记录
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                st.warning("⚠️ 未找到符合条件的匹配记录")
             else:
                 out_txt = f"========== {selected_file_type} - {selected_period} - {selected_attr} - {ball_str} ==========\n"
                 out_txt += f"【基准行排列】({len(base_rows)}行): {', '.join(base_rows)}\n\n"
@@ -2748,15 +2730,11 @@ def _pred_render_archive(df_data, default_period):
         for n in _v[0]:
             if actual and n in actual:
                 chips.append(
-                    f"<span style='display:inline-block;min-width:34px;text-align:center;"
-                    f"padding:3px 6px;margin:2px;border-radius:6px;background:#ef4444;"
-                    f"color:#fff;font-weight:700;'>{n:02d}</span>")
+                    f"🔴**{n:02d}**")
             else:
                 chips.append(
-                    f"<span style='display:inline-block;min-width:34px;text-align:center;"
-                    f"padding:3px 6px;margin:2px;border-radius:6px;background:#e5e7eb;"
-                    f"color:#111827;'>{n:02d}</span>")
-        st.markdown(f"**第{i}球**　" + "".join(chips), unsafe_allow_html=True)
+                    f"⚪**{n:02d}**")
+        st.markdown(f"**第{i}球**　" + "".join(chips))
 
     # 恢复上一版（记录级历史）
     _hist_balls = []
@@ -3047,11 +3025,12 @@ def render_ai(df_data):
             else:
                 st.caption("⚠️ AI 本次没有输出 FINAL 行，号码是从正文里提取的，"
                            "可能与正文结论有出入，请对照下方完整结果核对。")
-            balls_html = '<div class="ball-container" style="flex-wrap: wrap; justify-content: flex-start;">'
+            _parts = []
             for num in st.session_state.ai_ball_result:
-                balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-            balls_html += '</div>'
-            st.markdown(balls_html, unsafe_allow_html=True)
+                _dot = {"red": "🔴", "blue": "🔵",
+                        "green": "🟢"}.get(get_ball_color(num), "⚪")
+                _parts.append(f"{_dot}**{num:02d}**")
+            st.markdown("\u3000".join(_parts))
 
     with col_right:
         with st.expander("生肖与五行", expanded=True):
@@ -3403,11 +3382,16 @@ def render_console(df_data):
             except: pass
     if has_next_data:
         st.subheader(f"{next_period_str} 期开奖结果")
-        balls_html = '<div class="ball-container">'
-        for num in next_flat_nums: balls_html += f'<div class="ball {get_ball_color(num)}">{num:02d}</div>'
-        if next_special_num > 0: balls_html += f'<div style="font-size: 32px; font-weight: bold; color: #64748b; display: flex; align-items: center; margin: 0 5px;">+</div><div class="ball {get_ball_color(next_special_num)}">{next_special_num:02d}</div>'
-        balls_html += '</div>'
-        st.markdown(balls_html, unsafe_allow_html=True)
+        _parts4 = []
+        for num in next_flat_nums:
+            _dot4 = {"red": "🔴", "blue": "🔵",
+                     "green": "🟢"}.get(get_ball_color(num), "⚪")
+            _parts4.append(f"{_dot4}**{num:02d}**")
+        if next_special_num > 0:
+            _dot4 = {"red": "🔴", "blue": "🔵",
+                     "green": "🟢"}.get(get_ball_color(next_special_num), "⚪")
+            _parts4.append("➕" + f"{_dot4}**{next_special_num:02d}**")
+        st.markdown("\u3000".join(_parts4))
     else:
         try: next_period_str = str(int(float(selected_period)) + 1)
         except: next_period_str = "下一期"
