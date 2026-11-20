@@ -673,15 +673,34 @@ def kill_summary(blocks):
 
 
 def _render_kill_group(label, blocks, amap):
-    """渲染一个球位（或合并后）的杀号清单"""
+    """渲染一个球位（或合并后）的杀号清单（含矛盾判定）"""
     ks = kill_summary(blocks)
     if not ks:
         st.caption("没有可杀的项")
         return
-    _rows_k = [{"属性": g, "杀值": v, "次数": n,
-                "来自": "；".join(d)} for g, v, n, d in ks]
-    st.dataframe(pd.DataFrame(_rows_k), use_container_width=True,
-                 hide_index=True)
+
+    # 收集本组的「下」参考值，用于判断矛盾
+    down_ref = set()
+    for b in blocks:
+        for tg in b["triggers"]:
+            dv = _clean_kill(tg.get("down", ""))
+            if dv:
+                down_ref.add(dv)
+                for it in _kill_items(_attr_group(b["attr"]), "", dv)[0]:
+                    down_ref.add(it)
+
+    rows_k = []
+    for g, v, n, d in ks:
+        conflict = v in down_ref
+        conf = "低（上杀下留）" if conflict else ("高" if n >= 2 else "中")
+        rows_k.append({"属性": g, "杀值": v, "上杀次数": n,
+                       "可信度": conf, "来自": "；".join(d)})
+    st.dataframe(pd.DataFrame(rows_k), use_container_width=True, hide_index=True)
+
+    _conf_vals = [r["杀值"] for r in rows_k if r["可信度"].startswith("低")]
+    if _conf_vals:
+        st.warning("⚠️ 以下值「上」侧要杀，但「下」侧参考又出现，"
+                   "属自相矛盾，杀号可信度低：" + "、".join(_conf_vals))
 
     if not amap:
         st.info("缺少 _attr_map.csv，无法翻译成号码")
@@ -690,22 +709,25 @@ def _render_kill_group(label, blocks, amap):
     from collections import Counter as _CK, defaultdict as _DK
     num_kill = _CK()
     num_src = _DK(list)
+    num_conf = set()
     unmapped = []
     for g, v, n, _s in ks:
         nums = kill_to_numbers(v, amap)
         if not nums:
             unmapped.append(f"{g}{v}")
             continue
+        conflict = v in down_ref
         for x in nums:
             num_kill[x] += n
-            num_src[x].append(f"{g}{v}")
+            num_src[x].append(f"{g}{v}" + ("" if not conflict else "(矛盾)"))
+            if conflict:
+                num_conf.add(x)
 
     if not num_kill:
         if unmapped:
             st.caption("未能翻译的条件：" + "、".join(unmapped))
         return
 
-    # 全杀光时自动放宽
     kill_set = set(num_kill.keys())
     keep_nums = [n for n in range(1, 50) if n not in kill_set]
     if len(kill_set) >= 49:
@@ -719,14 +741,19 @@ def _render_kill_group(label, blocks, amap):
 
     _sorted = sorted(num_kill.items(), key=lambda x: (-x[1], x[0]))
     rows_n = [{"号码": f"{n:02d}", "被杀次数": c,
+               "是否矛盾": "⚠️" if n in num_conf else "",
                "被这些条件杀": "、".join(num_src[n])} for n, c in _sorted]
     st.dataframe(pd.DataFrame(rows_n), use_container_width=True,
                  hide_index=True, height=300)
 
-    strong = [(n, c) for n, c in _sorted if c >= 2]
+    strong = [(n, c) for n, c in _sorted if c >= 2 and n not in num_conf]
+    risky = [(n, c) for n, c in _sorted if c >= 2 and n in num_conf]
     if strong:
-        st.error("⛔ 本组必杀号码（多次触犯）：" +
+        st.error("⛔ 本组必杀号码（多次触犯且无矛盾）：" +
                  "　".join(f"{n:02d}({c}次)" for n, c in strong))
+    if risky:
+        st.warning("⚠️ 高频但存在矛盾（上杀下留，慎杀）：" +
+                   "　".join(f"{n:02d}({c}次)" for n, c in risky))
     keep = [f"{n:02d}" for n in keep_nums]
     if keep:
         st.success(f"保留号码（{len(keep)} 个）：" + " ".join(keep))
