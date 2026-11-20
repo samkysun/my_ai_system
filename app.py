@@ -877,18 +877,19 @@ def _multi_ai_ui():
             _groups.setdefault(key, []).append(b)
         _labels = list(_groups.keys())
 
-        st.markdown("**① 合并设置**")
-        _merge = st.multiselect(
-            "选择辅助球位（它们的杀号条件会合并进来；不选=各自单独算）", _labels,
+        st.markdown("**① 合并设置（主导 + 辅助）**")
+        _dom = st.selectbox(
+            "★ 主导球位（决定取值区间）", _labels, index=0, key="multi_dom",
+            help="合并计算时，所有号码都按这个球位的区间取值")
+        _dlo, _dhi = _range_of(_dom)
+        _merge_sel = st.multiselect(
+            "辅助球位（勾选后其杀号条件并入主导一起算）", _labels,
             default=[], key="multi_merge")
-        if _merge:
-            _dom = st.selectbox(
-                "★ 主导球位（决定取值区间）", _merge, index=0, key="multi_dom")
-            _dlo, _dhi = _range_of(_dom)
-            st.info(f"主导 **{_dom}**（取值区间 {_dlo}~{_dhi}） ＋ 辅助 {'、'.join([m for m in _merge if m != _dom]) or '无'}"
-                    f"\n→ 两边杀号条件合并后，只在 **{_dlo}~{_dhi}** 里取号")
-        else:
-            _dom = None
+        _merge = [k for k in _merge_sel if k != _dom]
+        st.info(f"主导：**{_dom}**（取值区间 {_dlo}~{_dhi}）"
+                + (f"　＋　辅助：{'、'.join(_merge)}" if _merge else
+                   "　（未选辅助 → 各球位单独计算）")
+                + (f"\n→ 合并后只在 **{_dlo}~{_dhi}** 里取号" if _merge else ""))
 
         _amap = _load_attr_map()
         if not _amap:
@@ -897,14 +898,16 @@ def _multi_ai_ui():
         # 合并结果先显示
         if _merge and _amap:
             st.markdown("**② 合并计算结果**")
-            _mb = [b for k in _merge for b in _groups[k]]
-            with st.expander("＋ 合并：" + " + ".join(_merge) +
-                             f"（区间 {_dlo}~{_dhi}）", expanded=True):
-                _render_kill_group("合并_" + "_".join(_merge), _mb, _amap,
+            _allk = [_dom] + _merge
+            _mb = [b for k in _allk for b in _groups.get(k, [])]
+            with st.expander("＋ 合并：" + " + ".join(_allk) +
+                             f"（取值区间 {_dlo}~{_dhi}）", expanded=True):
+                _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
                                    range_label=_dom)
 
         # 单独结果
-        _单独 = [k for k in _labels if k not in _merge]
+        _单独 = [k for k in _labels
+                 if k not in _merge and not (_merge and k == _dom)]
         if _单独:
             st.markdown("**② 单独计算结果**")
             for k in _单独:
