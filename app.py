@@ -672,6 +672,72 @@ def kill_summary(blocks):
     return out
 
 
+def _render_kill_group(label, blocks, amap):
+    """渲染一个球位（或合并后）的杀号清单"""
+    ks = kill_summary(blocks)
+    if not ks:
+        st.caption("没有可杀的项")
+        return
+    _rows_k = [{"属性": g, "杀值": v, "次数": n,
+                "来自": "；".join(d)} for g, v, n, d in ks]
+    st.dataframe(pd.DataFrame(_rows_k), use_container_width=True,
+                 hide_index=True)
+
+    if not amap:
+        st.info("缺少 _attr_map.csv，无法翻译成号码")
+        return
+
+    from collections import Counter as _CK, defaultdict as _DK
+    num_kill = _CK()
+    num_src = _DK(list)
+    unmapped = []
+    for g, v, n, _s in ks:
+        nums = kill_to_numbers(v, amap)
+        if not nums:
+            unmapped.append(f"{g}{v}")
+            continue
+        for x in nums:
+            num_kill[x] += n
+            num_src[x].append(f"{g}{v}")
+
+    if not num_kill:
+        if unmapped:
+            st.caption("未能翻译的条件：" + "、".join(unmapped))
+        return
+
+    # 全杀光时自动放宽
+    kill_set = set(num_kill.keys())
+    keep_nums = [n for n in range(1, 50) if n not in kill_set]
+    if len(kill_set) >= 49:
+        for thr in range(2, 11):
+            cand = [n for n in range(1, 50) if num_kill.get(n, 0) < thr]
+            if cand:
+                keep_nums = cand
+                st.info(f"本组把 49 个号全杀光了 → 自动放宽："
+                        f"只杀出现 {thr} 次及以上的，保留 {len(cand)} 个号码")
+                break
+
+    _sorted = sorted(num_kill.items(), key=lambda x: (-x[1], x[0]))
+    rows_n = [{"号码": f"{n:02d}", "被杀次数": c,
+               "被这些条件杀": "、".join(num_src[n])} for n, c in _sorted]
+    st.dataframe(pd.DataFrame(rows_n), use_container_width=True,
+                 hide_index=True, height=300)
+
+    strong = [(n, c) for n, c in _sorted if c >= 2]
+    if strong:
+        st.error("⛔ 本组必杀号码（多次触犯）：" +
+                 "　".join(f"{n:02d}({c}次)" for n, c in strong))
+    keep = [f"{n:02d}" for n in keep_nums]
+    if keep:
+        st.success(f"保留号码（{len(keep)} 个）：" + " ".join(keep))
+    st.download_button(f"📥 下载 {label} 杀号清单",
+                       pd.DataFrame(rows_n).to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"杀号_{label}.csv", mime="text/csv",
+                       key=f"kill_dl_{label}")
+    if unmapped:
+        st.caption("未能翻译的条件：" + "、".join(unmapped))
+
+
 def _multi_ai_analyze(question, raw_text=None):
     """解析报告并交给 AI"""
     text = raw_text or ""
@@ -734,118 +800,33 @@ def _multi_ai_ui():
             _blocks = _parse_multi_blocks(_txt)
             if _blocks:
                 st.markdown(f"**解析到 {len(_blocks)} 条属性报告**")
-                _rows_b = []
+                # 按「升/按序 + 球位」分组
+                _groups = {}
                 for b in _blocks:
-                    _kills = []
-                    for tg in b["triggers"]:
-                        _items, _paren = _kill_items(_attr_group(b["attr"]),
-                                                     tg.get("up", ""),
-                                                     tg.get("kill", ""))
-                        for _it in _items:
-                            _kills.append(_it + ("(括号)" if _paren else "(上)"))
-                    _rows_b.append({
-                        "属性": b["attr"], "球位": b["ball"],
-                        "触发行数": len(b["triggers"]),
-                        "要杀的": "、".join(_kills) or "—",
-                    })
-                st.dataframe(pd.DataFrame(_rows_b), use_container_width=True,
-                             hide_index=True)
+                    key = f"{b['order']}{b['ball']}球"
+                    _groups.setdefault(key, []).append(b)
 
-                _ks = kill_summary(_blocks)
-                if _ks:
-                    st.markdown("**🔪 杀号清单（按出现次数排序）**")
-                    _rows_k = [{"属性": g, "杀值": v, "次数": n,
-                                "来自": "；".join(d)}
-                               for g, v, n, d in _ks]
-                    st.dataframe(pd.DataFrame(_rows_k), use_container_width=True,
-                                 hide_index=True, height=360)
-                    _multi = [r for r in _rows_k if r["次数"] >= 2]
-                    if _multi:
-                        st.success("多个属性同时杀（更可靠）：" +
-                                   "、".join(f"{r['属性']}{r['杀值']}"
-                                            for r in _multi[:12]))
+                _labels = list(_groups.keys())
+                st.caption("默认每个球位单独计算；需要合并时在下面选择。")
+                _merge = st.multiselect(
+                    "合并这些球位一起杀（可选）", _labels, default=[],
+                    key="multi_merge")
 
-                    # ---- 翻译成具体号码 ----
-                    _amap = _load_attr_map()
-                    if not _amap:
-                        st.info("缺少 _attr_map.csv，无法翻译成号码")
-                    else:
-                        from collections import Counter as _CK, defaultdict as _DK
-                        _num_kill = _CK()
-                        _num_src = _DK(list)
-                        _unmapped = []
-                        for g, v, n, _src2 in _ks:
-                            _nums = kill_to_numbers(v, _amap)
-                            if not _nums:
-                                _unmapped.append(f"{g}{v}")
-                                continue
-                            for _n2 in _nums:
-                                _num_kill[_n2] += n
-                                _num_src[_n2].append(f"{g}{v}")
-                        if _num_kill:
-                            _sorted = sorted(_num_kill.items(),
-                                             key=lambda x: (-x[1], x[0]))
-                            _relaxed = []
-                            _kill_set = set(_num_kill.keys())
-                            _keep_nums = [n for n in range(1, 50)
-                                          if n not in _kill_set]
-                            # ① 不允许全杀光
-                            if len(_kill_set) >= 49:
-                                for _thr in range(2, 11):
-                                    _cand = [n for n in range(1, 50)
-                                             if _num_kill.get(n, 0) < _thr]
-                                    if _cand:
-                                        _keep_nums = _cand
-                                        _relaxed.append(
-                                            f"全部 49 个号码都被杀到，已自动放宽："
-                                            f"只杀出现 {_thr} 次及以上的号码，"
-                                            f"保留 {len(_cand)} 个号码（杀次数 < {_thr}）")
-                                        break
+                _amap = _load_attr_map()
+                if _merge:
+                    _merged_blocks = [b for k in _merge for b in _groups[k]]
+                    with st.expander("＋ 合并分析：" + " + ".join(_merge),
+                                     expanded=True):
+                        _render_kill_group("合并_" + "_".join(_merge),
+                                           _merged_blocks, _amap)
 
-                            st.markdown("**🎯 具体号码杀号清单**")
-                            _rows_num = []
-                            for _n2, _c in _sorted:
-                                _rows_num.append({
-                                    "号码": f"{_n2:02d}",
-                                    "被杀次数": _c,
-                                    "被这些条件杀": "、".join(_num_src[_n2]),
-                                })
-                            st.dataframe(pd.DataFrame(_rows_num),
-                                         use_container_width=True,
-                                         hide_index=True, height=380)
-
-                            # ② 必杀号码声明（多次触犯）
-                            _strong = [(_n, _c) for _n, _c in _sorted if _c >= 2]
-                            if _strong:
-                                st.error(
-                                    "⛔ 下期必杀号码（多次触犯，" +
-                                    f"共 {len(_strong)} 个）：" +
-                                    "　".join(f"{n:02d}({c}次)" for n, c in _strong))
-                                st.caption("这些号码被 2 个以上条件同时杀掉，"
-                                           "属于重复触犯，可信度最高。")
-                            else:
-                                st.info("没有出现多次触犯的号码（都是单次杀号）")
-
-                            # ③ 剩余号码
-                            _keep = [f"{n:02d}" for n in _keep_nums]
-                            if _keep:
-                                st.success(f"剩余号码（{len(_keep)} 个）："
-                                           + " ".join(_keep))
-                            else:
-                                st.warning("⚠️ 没有剩余号码——条件把 49 个号全杀光了")
-
-                            for _msg in _relaxed:
-                                st.info(_msg)
-
-                            st.download_button(
-                                "📥 下载杀号清单",
-                                pd.DataFrame(_rows_num).to_csv(
-                                    index=False).encode("utf-8-sig"),
-                                file_name="杀号清单.csv", mime="text/csv",
-                                key="kill_dl")
-                        if _unmapped:
-                            st.caption("未能翻译的条件：" + "、".join(_unmapped))
-            with st.spinner("AI 综合分析中（约 10~30 秒）…"):
+                _单独 = [k for k in _labels if k not in _merge]
+                for k in _单独:
+                    with st.expander(f"■ {k}（{len(_groups[k])} 个属性）",
+                                     expanded=True):
+                        _render_kill_group(k, _groups[k], _amap)
+            _spinner_text = "AI 综合分析中（约 10~30 秒）…"
+            with st.spinner(_spinner_text):
                 try:
                     _ans, _err = _multi_ai_analyze(_q, _raw)
                 except Exception as _e:
