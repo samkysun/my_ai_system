@@ -1,47 +1,30 @@
 # -*- coding: utf-8 -*-
-"""组合联动（按 Excel「六选三组合」逻辑搬到网页）
-   · 取 6 个号码 → 生成 C(6,3)=20 组
-   · 每组去历史里找同时出现这 3 个号的期数
-   · 统计其余号码出现次数，输出清单（可复制/打印）
-   · 支持「七套替换」：用替换号替换某一位置后再生成
+"""组合联动（严格还原 Excel「组合联动分析」）
+   · 输入 3 个数字 → 找「同一行 7 球中同时包含这 3 个号」的历史行（触发行）
+   · 对每个触发行，取上一行（上期）的 7 个号
+   · 统计上期号码出现频次（= 综合数字汇总）
+   · 六选三 → 20 组批量跑，输出每组结果
 """
 import csv
-import itertools
+import re
 from collections import Counter
 
 import pandas as pd
 import streamlit as st
 
 _INDEX = "_index.csv"
+TAGS = ["DE", "FG", "HI", "JK", "LM", "NO", "PQ"]
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def _load_rows(path):
-    with open(path, encoding="utf-8-sig", errors="replace") as f:
-        return list(csv.reader(f))
-
-
-def _parse_index(rows):
-    """返回 [(期号, [7 个升序号])] 旧->新"""
-    out = []
-    for r in rows[1:]:
-        if len(r) < 15:
-            continue
-        p = str(r[0]).strip()
-        if not p:
-            continue
-        try:
-            nums = [int(float(r[1 + k] or 0)) for k in range(7)]
-        except Exception:
-            continue
-        if not any(nums[:6]):
-            continue
-        out.append((p, nums))
-    return out
+def _num(v):
+    try:
+        return int(float(str(v).strip()))
+    except Exception:
+        return 0
 
 
 def _parse_zong(rows):
-    """总数据表：索引18=期数，索引19~25=1球~7球"""
+    """总数据表：索引18=期数，19~25=1球~7球（旧->新排序）"""
     out = []
     if not rows:
         return out
@@ -54,8 +37,12 @@ def _parse_zong(rows):
         nums = []
         ok = True
         for k in range(7):
+            v = str(r[19 + k]).strip()
+            if v == "" or v.lower() == "nan":
+                nums.append(0)
+                continue
             try:
-                nums.append(int(float(str(r[19 + k]).strip())))
+                nums.append(int(float(v)))
             except Exception:
                 ok = False
                 break
@@ -66,8 +53,24 @@ def _parse_zong(rows):
     return out
 
 
+def _parse_index(rows):
+    out = []
+    for r in rows[1:]:
+        if len(r) < 15:
+            continue
+        p = str(r[0]).strip()
+        if not p:
+            continue
+        nums = [_num(r[1 + k]) for k in range(7)]
+        if not any(nums[:6]):
+            continue
+        out.append((p, nums))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
 def _combos3(nums6):
-    """6 个号里选 3 个 → 20 组（与 Excel 顺序一致）"""
+    """6 选 3 → 20 组（与 Excel 循环顺序一致）"""
     out = []
     for i in range(4):
         for j in range(i + 1, 5):
@@ -76,134 +79,148 @@ def _combos3(nums6):
     return out
 
 
-def _scan(history, combo):
-    """找同时包含这 3 个号的历史期"""
-    hit_periods = []
-    rest = Counter()
+def analyze_combo(data, combo):
+    """严格还原 组合联动分析：
+       返回 dict：triggers=[(期号, nums, 上期期号, 上期nums)], 综合数字 Counter, 明细行"""
     s = set(combo)
-    for p, nums in history:
-        if s.issubset(set(nums[:6])):
-            hit_periods.append(p)
-            for v in nums[:6]:
-                if v not in s:
-                    rest[v] += 1
-    return hit_periods, rest
+    triggers = []
+    for i, (p, nums) in enumerate(data):
+        if s.issubset(set(nums)):
+            if i >= 1:
+                prev_p, prev_nums = data[i - 1]
+                triggers.append((p, nums, prev_p, prev_nums))
+    counter = Counter()
+    detail = []
+    for tp, tn, pp, pn in triggers:
+        for v in pn:
+            if v:
+                counter[v] += 1
+        detail.append((tp, tn, pp, pn))
+    return {"triggers": triggers, "counter": counter, "detail": detail}
+
+
+def _line(nums):
+    return " ".join(f"{v:02d}" if v else "空" for v in nums)
 
 
 def render(df_data, H):
     st.title("🧩 组合联动")
-    st.caption("按 Excel「六选三组合」的逻辑：6 个号选出 20 组三号组合，"
-               "逐组去历史里找同时出现这 3 个号的期数，并统计其余号码出现次数。")
+    st.caption("还原 Excel「组合联动分析」：3 个数字 → 找同时出现它们的历史行 → "
+               "统计这些行的上一期号码（综合数字）频次。")
 
-    # 优先用【总数据.xlsx → 总数据表】（与 Excel 一致）
+    # ---------- 数据 ----------
     data = []
     _load = H.get("load_excel_data")
     if _load:
         try:
             with st.spinner("读取总数据表…"):
-                zrows = _load("总数据.xlsx", "总数据表") or []
-            data = _parse_zong(zrows)
-        except Exception as e:
-            st.warning(f"总数据表读取失败：{type(e).__name__}")
-            data = []
-    if not data:
-        try:
-            data = _parse_index(_load_rows(_INDEX))
+                data = _parse_zong(_load("总数据.xlsx", "总数据表") or [])
         except Exception:
             data = []
     if not data:
-        st.error("读不到数据（总数据表与 _index.csv 都失败）")
+        try:
+            with open(_INDEX, encoding="utf-8-sig", errors="replace") as f:
+                data = _parse_index(list(csv.reader(f)))
+        except Exception:
+            data = []
+    if not data:
+        st.error("读不到数据")
         return
-    st.caption(f"数据源：总数据表　共 {len(data)} 期"
-               f"（{data[0][0]} ~ {data[-1][0]}）")
+    st.caption(f"数据源：总数据表　共 {len(data)} 期（{data[0][0]} ~ {data[-1][0]}）")
 
-    st.markdown("### 一、输入 6 个号码")
-    c1, c2, c3 = st.columns([1, 2, 1])
+    # ---------- 输入 ----------
+    st.markdown("### 一、输入")
+    c1, c2 = st.columns([2, 2])
     with c1:
-        mode = st.radio("取号方式", ["按历史期号", "手动输入"], key="cb_mode")
+        mode = st.radio("方式", ["直接输入 3 个数字", "从历史期号取 6 个号生成 20 组"],
+                        key="cb_mode")
     per_list = [p for p, _ in reversed(data)]
     with c2:
-        if mode == "按历史期号":
-            pick = st.selectbox("选一期（自动填入该期 6 个平码）", per_list,
-                                index=0, key="cb_period")
-            cur = dict(data).get(pick, [0] * 7)[:6]
-            st.caption(f"{pick} 期：{' '.join(f'{n:02d}' for n in cur)}")
+        if mode.startswith("直接"):
+            txt = st.text_input("3 个数字（逗号分隔）", value="45,47,41", key="cb_three")
+            three = [int(x) for x in re.findall(r"\d+", txt)][:3]
+            combos = [tuple(three)] if len(three) == 3 else []
         else:
-            txt = st.text_input("输入 6 个号码，用逗号或空格分隔",
-                                value="01,02,03,04,05,06", key="cb_manual")
-            cur = []
-            import re as _re
-            for x in _re.findall(r"\d+", txt):
-                cur.append(int(x))
-            cur = cur[:6]
-    with c3:
-        replace_on = st.checkbox("七套替换模式", value=False, key="cb_rep")
+            pick = st.selectbox("选一期", per_list, index=0, key="cb_period")
+            cur = dict(data).get(pick, [0] * 7)[:6]
+            st.caption(f"{pick} 期：{_line(cur)}")
+            combos = _combos3(cur)
 
-    if len(cur) < 6:
-        st.warning("需要 6 个号码")
+    if not combos:
+        st.warning("请输入 3 个数字")
         return
-    if len(set(cur)) < 6:
-        st.warning("号码有重复，请检查")
-        return
-
-    base = list(cur)
-    repl_mode = False
-    repl_pos = 0
-    repl_num = 0
-    if replace_on:
-        r1, r2 = st.columns(2)
-        with r1:
-            repl_pos = st.selectbox("替换第几球", [1, 2, 3, 4, 5, 6], index=0,
-                                    key="cb_pos") - 1
-        with r2:
-            repl_num = st.number_input("替换成哪个号码", 1, 49, 7, 1, key="cb_num")
-        base[repl_pos] = int(repl_num)
-        repl_mode = True
-
-    st.markdown(f"**当前 6 个号码**：{' '.join(f'{n:02d}' for n in base)}"
-                + (f"　（第{repl_pos+1}球已替换为 {int(repl_num):02d}）"
-                   if repl_mode else ""))
 
     if st.button("▶ 开始分析", type="primary", key="cb_run"):
         st.session_state["cb_go"] = True
 
     if not st.session_state.get("cb_go"):
-        st.info("点「开始分析」生成 20 组组合并统计")
+        st.info("点「开始分析」")
         return
 
-    combos = _combos3(base)
-    st.markdown(f"### 二、20 组三号组合（共 {len(combos)} 组）")
+    # ---------- 单组：完整报告 ----------
+    if len(combos) == 1:
+        cmb = combos[0]
+        r = analyze_combo(data, cmb)
+        st.markdown(f"### 二、★3数字「{','.join(f'{x:02d}' for x in cmb)}」"
+                    f" 同行触发 → 上一期7对联动分析★")
+        st.markdown(f"条件：同一行 7 对中同时出现 "
+                    f"{'、'.join(f'{x:02d}' for x in cmb)}　｜　共找到 "
+                    f"**{len(r['triggers'])}** 处")
+        if not r["triggers"]:
+            st.warning("无匹配")
+            return
+        lines = ["【一、触发明细】"]
+        for tp, tn, pp, pn in r["detail"][:60]:
+            lines.append(f"触发行 {tp}：{_line(tn)}")
+            lines.append(f"　↓ 上期行 {pp}：{_line(pn)}")
+        lines.append("")
+        lines.append("【二、上一期7对联动数字综合频次统计】")
+        for num, cnt in r["counter"].most_common():
+            lines.append(f"　{num:02d}　出现 {cnt} 次")
+        txt = "\n".join(lines)
+        st.code(txt, language=None)
+        st.download_button("📥 下载报告", txt.encode("utf-8-sig"),
+                           file_name=f"组合联动_{'-'.join(map(str,cmb))}.txt",
+                           mime="text/plain", key="cb_dl1")
+        return
 
-    show_all = {}
-    for idx, cmb in enumerate(combos, 1):
-        hp, rest = _scan(data, cmb)
-        show_all[idx] = (cmb, hp, rest)
-
+    # ---------- 20 组批量 ----------
+    st.markdown(f"### 二、{len(combos)} 组批量分析")
     rows_t = []
-    for idx, (cmb, hp, rest) in show_all.items():
-        top = "、".join(f"{n:02d}({c})" for n, c in rest.most_common(8))
+    all_counter = Counter()
+    detail_map = {}
+    for idx, cmb in enumerate(combos, 1):
+        r = analyze_combo(data, cmb)
+        detail_map[idx] = r
+        for k, v in r["counter"].items():
+            all_counter[k] += v
+        top = "、".join(f"{n:02d}({c})" for n, c in r["counter"].most_common(6))
         rows_t.append({
             "序": idx,
             "组合": ",".join(f"{n:02d}" for n in cmb),
-            "出现期数": len(hp),
-            "其余号码（次数）": top or "—",
+            "触发处数": len(r["triggers"]),
+            "综合数字（次数）": top or "—",
         })
     st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
 
-    # 明细文本（可复制 / 打印）
-    st.markdown("### 三、明细清单")
-    lines = [f"========== 组合联动 ==========",
-             f"号码：{' '.join(f'{n:02d}' for n in base)}", ""]
-    for idx, (cmb, hp, rest) in show_all.items():
-        lines.append(f"{idx:>2}. 组合 {','.join(f'{n:02d}' for n in cmb)}"
-                     f"　出现 {len(hp)} 期")
-        if hp:
-            lines.append("　　最近出现：" + "、".join(hp[-5:]))
-            lines.append("　　其余号码：" +
-                         "　".join(f"{n:02d}×{c}" for n, c in rest.most_common(10)))
-        lines.append("")
-    txt = "\n".join(lines)
-    st.code(txt, language=None)
-    st.download_button("📥 下载清单", txt.encode("utf-8-sig"),
-                       file_name="组合联动.txt", mime="text/plain",
-                       key="cb_dl")
+    st.markdown("### 三、20 组总汇总（综合数字累计次数）")
+    rows_s = [{"号码": f"{n:02d}", "累计次数": c}
+              for n, c in all_counter.most_common(30)]
+    st.dataframe(pd.DataFrame(rows_s), use_container_width=True, hide_index=True)
+
+    txt = [f"========== 组合联动 批量（{len(combos)} 组）==========",
+           f"号码：{' '.join(f'{n:02d}' for n in combos and combos[0])} 等", ""]
+    for idx, cmb in enumerate(combos, 1):
+        r = detail_map[idx]
+        txt.append(f"{idx:>2}. 组合 {','.join(f'{n:02d}' for n in cmb)}"
+                   f"　触发 {len(r['triggers'])} 处")
+        for n, c in r["counter"].most_common(6):
+            txt.append(f"　　　{n:02d} × {c}")
+        txt.append("")
+    txt.append("【总汇总】")
+    for n, c in all_counter.most_common(30):
+        txt.append(f"　{n:02d} 累计 {c} 次")
+    s = "\n".join(txt)
+    st.code(s, language=None)
+    st.download_button("📥 下载全部", s.encode("utf-8-sig"),
+                       file_name="组合联动_20组.txt", mime="text/plain", key="cb_dl2")
