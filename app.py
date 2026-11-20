@@ -879,14 +879,14 @@ def _multi_ai_ui():
 
         st.markdown("**① 合并设置**")
         _merge = st.multiselect(
-            "勾选要合并计算的球位（不选=每个球位单独算）", _labels,
+            "选择辅助球位（它们的杀号条件会合并进来；不选=各自单独算）", _labels,
             default=[], key="multi_merge")
         if _merge:
             _dom = st.selectbox(
-                "★ 主导球位（决定号码区间）", _merge, index=0, key="multi_dom")
+                "★ 主导球位（决定取值区间）", _merge, index=0, key="multi_dom")
             _dlo, _dhi = _range_of(_dom)
-            st.info(f"主导 **{_dom}** → 合并结果只在 **{_dlo}~{_dhi}** 之间取号；"
-                    f"参与合并：{'、'.join(_merge)}")
+            st.info(f"主导 **{_dom}**（取值区间 {_dlo}~{_dhi}） ＋ 辅助 {'、'.join([m for m in _merge if m != _dom]) or '无'}"
+                    f"\n→ 两边杀号条件合并后，只在 **{_dlo}~{_dhi}** 里取号")
         else:
             _dom = None
 
