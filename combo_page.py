@@ -40,6 +40,32 @@ def _parse_index(rows):
     return out
 
 
+def _parse_zong(rows):
+    """总数据表：索引18=期数，索引19~25=1球~7球"""
+    out = []
+    if not rows:
+        return out
+    for r in rows[2:]:
+        if len(r) < 26:
+            continue
+        p = str(r[18]).strip()
+        if not p or p.lower() == "nan" or not p.replace(".", "").isdigit():
+            continue
+        nums = []
+        ok = True
+        for k in range(7):
+            try:
+                nums.append(int(float(str(r[19 + k]).strip())))
+            except Exception:
+                ok = False
+                break
+        if not ok or not any(nums[:6]):
+            continue
+        out.append((p, nums))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
 def _combos3(nums6):
     """6 个号里选 3 个 → 20 组（与 Excel 顺序一致）"""
     out = []
@@ -69,14 +95,27 @@ def render(df_data, H):
     st.caption("按 Excel「六选三组合」的逻辑：6 个号选出 20 组三号组合，"
                "逐组去历史里找同时出现这 3 个号的期数，并统计其余号码出现次数。")
 
-    rows = _load_rows(_INDEX) if H.get("has_index", True) else []
-    if not rows:
-        st.error("读不到 _index.csv")
-        return
-    data = _parse_index(rows)
+    # 优先用【总数据.xlsx → 总数据表】（与 Excel 一致）
+    data = []
+    _load = H.get("load_excel_data")
+    if _load:
+        try:
+            with st.spinner("读取总数据表…"):
+                zrows = _load("总数据.xlsx", "总数据表") or []
+            data = _parse_zong(zrows)
+        except Exception as e:
+            st.warning(f"总数据表读取失败：{type(e).__name__}")
+            data = []
     if not data:
-        st.error("索引为空")
+        try:
+            data = _parse_index(_load_rows(_INDEX))
+        except Exception:
+            data = []
+    if not data:
+        st.error("读不到数据（总数据表与 _index.csv 都失败）")
         return
+    st.caption(f"数据源：总数据表　共 {len(data)} 期"
+               f"（{data[0][0]} ~ {data[-1][0]}）")
 
     st.markdown("### 一、输入 6 个号码")
     c1, c2, c3 = st.columns([1, 2, 1])
