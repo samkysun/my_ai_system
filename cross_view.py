@@ -763,7 +763,7 @@ def render(df_data, H):
             _next_txt = "\n".join(_l1)
             st.code(_next_txt, language=None)
 
-            _pb1, _pb2 = st.columns(2)
+            _pb1, _pb2, _pb3 = st.columns(3)
             with _pb1:
                 st.download_button(
                     "📥 下载清单",
@@ -781,6 +781,23 @@ def render(df_data, H):
                     if st.button("🖨️ 打印", key="cv_next_print_fb",
                                  use_container_width=True):
                         st.info("打印组件不可用，请先下载 TXT 再打印")
+            with _pb3:
+                if st.button("📤 转到 AI", key="cv_next_ai",
+                             use_container_width=True):
+                    _ok_ai = False
+                    if H.get("board_add"):
+                        try:
+                            H["board_add"](
+                                "位置匹配清单",
+                                f"{_np2} 期 升序→按序 候选",
+                                f"方向：{_dir2}　每期 {_N2} 个候选\n" + _next_txt)
+                            _ok_ai = True
+                        except Exception:
+                            _ok_ai = False
+                    if _ok_ai:
+                        st.success("已转到 AI 推演看板")
+                    else:
+                        st.warning("看板接口不可用，请手动复制清单")
 
             # 历史回测
             st.markdown("#### 二、历史回测清单")
