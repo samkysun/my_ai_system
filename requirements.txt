@@ -1,7 +1,8 @@
-streamlit
+streamlit>=1.32,<2.0
 pandas
 openpyxl
 pyxlsb
+requests
 supabase
 psycopg2-binary
 SQLAlchemy
