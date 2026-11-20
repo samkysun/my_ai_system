@@ -742,6 +742,11 @@ def _render_kill_group(label, blocks, amap):
     num_kill = _CK({n: c for n, c in num_kill.items() if _lo <= n <= _hi})
     if not num_kill:
         st.caption(f"本组杀号在本球位区间 {_lo}~{_hi} 内没有命中号码")
+        _allk = list(range(_lo, _hi + 1))
+        st.success(f"保留号码（{len(_allk)} 个，本区间全部保留）："
+                   + " ".join(f"{n:02d}" for n in _allk))
+        if unmapped:
+            st.caption("未能翻译的条件：" + "、".join(unmapped))
         return
     st.caption(f"本球位号码区间：{_lo}~{_hi}（只在此区间内计算）")
     kill_set = set(num_kill.keys())
