@@ -729,62 +729,67 @@ def render(df_data, H):
                 for j, a, b in _conflict))
         _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
 
-        # ---------- 实际配位表 ----------
+        # ---------- 实际配位表（文字版） ----------
         st.divider()
-        st.markdown("### 实际配位表（逐期核对）")
-        _n_show = st.slider("列出最近几期", 10, 200, 30, 10, key="cv_tbl_n")
-        _rows_act = []
+        st.markdown("### 一、历史配位（逐期核对）")
+        st.caption("读法：升序第1位是当期最小的号，它落在落球顺序的第几球。")
+        _n_show = st.slider("列出最近几期", 5, 60, 12, 1, key="cv_tbl_n")
+        _lines = ["========== 历史配位表 ==========",
+                  "格式：期号 / 升序6号 / 按序6号 / 配位（升序1~6位落在按序第几球）", ""]
+        _cnt_ok = 0
+        _cnt_all = 0
         for _p, _u, _a in list(reversed(seq))[:int(_n_show)]:
             try:
                 _perm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
             except Exception:
                 continue
-            _rows_act.append({
-                "期号": _p,
-                "升序6号": " ".join(f"{n:02d}" for n in _u[:6]),
-                "按序6号": " ".join(f"{n:02d}" for n in _a[:6]),
-                "配位（升1位→按X球…）": " ".join(
-                    f"升{j+1}→按{_perm[j]}" for j in range(6)),
-                "符合约束": "✅" if tuple(_perm) in set(_sols) else "—",
-            })
-        if _rows_act:
-            st.dataframe(pd.DataFrame(_rows_act), use_container_width=True,
-                         hide_index=True)
-            _v = sum(1 for r in _rows_act if r["符合约束"] == "✅")
-            st.caption(f"最近 {len(_rows_act)} 期中，符合当前约束 {_v} 期"
-                       f"（{_v/len(_rows_act)*100:.1f}%）；"
-                       f"当前约束合法解 {len(_sols)} 种，随机基线 "
-                       f"{len(_sols)/720*100:.1f}%")
+            _cnt_all += 1
+            _in = tuple(_perm) in set(_sols)
+            if _in:
+                _cnt_ok += 1
+            _lines.append(f"{_p}期  {'符合' if _in else '不符合'}当前约束")
+            _lines.append("　升序：" + " ".join(f"{n:02d}" for n in _u[:6]))
+            _lines.append("　按序：" + " ".join(f"{n:02d}" for n in _a[:6]))
+            _lines.append("　配位：" + " ".join(str(x) for x in _perm)
+                          + "　（依次＝升序1~6位各落在按序第几球）")
+            _lines.append("")
+        _lines.append(f"合计：{_cnt_all} 期，符合约束 {_cnt_ok} 期"
+                      f"（{_cnt_ok/_cnt_all*100 if _cnt_all else 0:.1f}%）；"
+                      f"当前合法解 {len(_sols)} 种，随机基线 "
+                      f"{len(_sols)/720*100:.1f}%")
+        _txt = "\n".join(_lines)
+        st.text_area("历史配位表", value=_txt, height=300,
+                     key="cv_pair_txt", label_visibility="collapsed")
 
-        # ---------- 待开奖配对 ----------
-        st.markdown("### 待开奖配对（下一期）")
+        # ---------- 待开奖配对（文字版） ----------
+        st.markdown("### 二、待开奖配对")
         _np = ""
         try:
             _np = str(int(seq[-1][0]) + 1)
         except Exception:
             _np = "下一期"
-        st.markdown(f"**目标期号：{_np}**（上一期 {seq[-1][0]} 已开奖）")
+        st.caption(f"目标期号 {_np}（上一期 {seq[-1][0]} 已开奖）")
+
+        _l2 = [f"========== {_np} 期配对预测 ==========", ""]
         if _sols:
-            _cnt = {}
             for _j in range(1, 7):
-                _cnt[_j] = sorted({x[_j - 1] for x in _sols})
-            _rows_np = []
+                _cs = sorted({x[_j - 1] for x in _sols})
+                _l2.append(f"升序第{_j}位 → 可能落在：" +
+                           "、".join(f"按序第{c}球" for c in _cs) +
+                           f"（{len(_cs)} 种可能）")
+            _l2.append("")
+            _bp = sorted(_sols)[0]
+            _l2.append("最推荐的一种配对：")
             for _j in range(1, 7):
-                _rows_np.append({
-                    "升序位": f"第{_j}位",
-                    "可能落在": "、".join(f"按序{c}球" for c in _cnt[_j]),
-                    "候选数": len(_cnt[_j]),
-                    "概率分布": "　".join(
-                        f"按{c}:{sum(1 for x in _sols if x[_j-1]==c)/len(_sols)*100:.0f}%"
-                        for c in _cnt[_j]),
-                })
-            st.dataframe(pd.DataFrame(_rows_np), use_container_width=True,
-                         hide_index=True)
-            _best_perm = sorted(_sols)[0]
-            st.markdown("**推荐配对**：" + "　".join(
-                f"升{j}位→按{_best_perm[j-1]}球" for j in range(1, 7)))
+                _l2.append(f"　升序第{_j}位 → 按序第{_bp[_j-1]}球")
+            _l2.append("")
+            _l2.append(f"说明：当前共 {len(_sols)} 种合法配对，"
+                       f"每种可能性约 {1/len(_sols)*100:.1f}%。")
         else:
-            st.warning("当前约束没有合法解，请放宽条件")
+            _l2.append("当前条件没有合法配对，请放宽约束。")
+        _txt2 = "\n".join(_l2)
+        st.text_area("待开奖配对", value=_txt2, height=260,
+                     key="cv_next_txt", label_visibility="collapsed")
 
         if _sols is not None:
             st.divider()
