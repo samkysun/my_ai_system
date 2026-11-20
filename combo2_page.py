@@ -164,10 +164,10 @@ def render(df_data, H):
     with c1:
         pick = st.selectbox("选一期（已开奖）", per_list, index=0, key="c2_period")
     k = 3          # 固定：6 个平码三三组合
-    _minc = 2      # 固定：只保留出现 2 次及以上
     with c2:
-        st.write("")
-        st.caption("6 个平码 → 三三组合 20 组")
+        _minc = st.selectbox("显示出现几次及以上", [1, 2, 3, 4, 5],
+                             index=1, key="c2_minc")
+        st.caption("1 次 = 全部列出；2 次 = 只看重复出现的")
     with c3:
         st.write("")
         st.caption(f"{k} 码组合数：C(6,{k}) = {len(combos_of(list(range(1, 7)), k))}")
