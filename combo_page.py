@@ -175,7 +175,7 @@ def render(df_data, H):
             lines.append(f"　↓ 上期行 {pp}：{_line(pn)}")
         lines.append("")
         lines.append("【二、上一期7对联动数字综合频次统计】")
-        for num, cnt in r["counter"].most_common():
+        for num, cnt in r["counter"].most_common(10):
             lines.append(f"　{num:02d}　出现 {cnt} 次")
         txt = "\n".join(lines)
         st.code(txt, language=None)
@@ -194,18 +194,18 @@ def render(df_data, H):
         detail_map[idx] = r
         for k, v in r["counter"].items():
             all_counter[k] += v
-        top = "、".join(f"{n:02d}({c})" for n, c in r["counter"].most_common(6))
+        top = "、".join(f"{n:02d}({c})" for n, c in r["counter"].most_common(10))
         rows_t.append({
             "序": idx,
             "组合": ",".join(f"{n:02d}" for n in cmb),
             "触发处数": len(r["triggers"]),
-            "综合数字（次数）": top or "—",
+            "综合数字前10（次数）": top or "—",
         })
     st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
 
     st.markdown("### 三、20 组总汇总（综合数字累计次数）")
     rows_s = [{"号码": f"{n:02d}", "累计次数": c}
-              for n, c in all_counter.most_common(30)]
+              for n, c in all_counter.most_common(10)]
     st.dataframe(pd.DataFrame(rows_s), use_container_width=True, hide_index=True)
 
     txt = [f"========== 组合联动 批量（{len(combos)} 组）==========",
@@ -214,11 +214,11 @@ def render(df_data, H):
         r = detail_map[idx]
         txt.append(f"{idx:>2}. 组合 {','.join(f'{n:02d}' for n in cmb)}"
                    f"　触发 {len(r['triggers'])} 处")
-        for n, c in r["counter"].most_common(6):
+        for n, c in r["counter"].most_common(10):
             txt.append(f"　　　{n:02d} × {c}")
         txt.append("")
     txt.append("【总汇总】")
-    for n, c in all_counter.most_common(30):
+    for n, c in all_counter.most_common(10):
         txt.append(f"　{n:02d} 累计 {c} 次")
     s = "\n".join(txt)
     st.code(s, language=None)
