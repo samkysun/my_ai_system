@@ -20,6 +20,7 @@ import streamlit as st
 import pandas as pd
 import hashlib
 import time
+import urllib.parse
 import os
 import itertools
 import requests
@@ -291,13 +292,51 @@ def load_real_data():
         try: df_raw = pd.read_excel(file_name, sheet_name="数据源", header=None)
         except Exception as e: return str(e)
     else:
-        try:
-            url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
-            r = requests.get(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"})
-            if r.status_code == 200:
-                df_raw = pd.read_excel(io.BytesIO(requests.get(r.json()["download_url"]).content), sheet_name="数据源", header=None)
-            else: return "云端源文件读取失败"
-        except Exception as e: return str(e)
+        df_raw = None
+        _errs = []
+        # ① 官方 API + download_url
+        for _att in range(2):
+            try:
+                url = f"https://api.github.com/repos/{repo}/contents/{file_name}"
+                r = requests.get(url, headers={"Authorization": f"Bearer {token}",
+                                               "Accept": "application/vnd.github.v3+json"},
+                                 timeout=30)
+                if r.status_code == 200:
+                    _du = r.json().get("download_url")
+                    if _du:
+                        _bin = requests.get(_du, timeout=60).content
+                        df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+                        break
+                else:
+                    _errs.append(f"API {r.status_code}")
+            except Exception as _e:
+                _errs.append(type(_e).__name__)
+            time.sleep(1)
+        # ② raw 直链
+        if df_raw is None:
+            try:
+                _raw = (f"https://raw.githubusercontent.com/{repo}/main/"
+                        f"{urllib.parse.quote(file_name)}")
+                _bin = requests.get(_raw, timeout=60).content
+                df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+            except Exception as _e:
+                _errs.append("raw:" + type(_e).__name__)
+        # ③ 本地 xlsx
+        if df_raw is None and os.path.exists(file_name):
+            try:
+                df_raw = pd.read_excel(file_name, sheet_name="数据源", header=None)
+            except Exception as _e:
+                _errs.append("local:" + type(_e).__name__)
+        # ④ 最后回退：用 CSV 升序全集
+        if df_raw is None:
+            try:
+                _csv = load_excel_data("升序全套.csv", None)
+                if _csv:
+                    df_raw = pd.DataFrame(_csv)
+            except Exception as _e:
+                _errs.append("csv:" + type(_e).__name__)
+        if df_raw is None:
+            return "云端源文件读取失败（" + "、".join(_errs[:4]) + "）"
     try:
         synced_rows = []
         def clean_val(v):
@@ -1075,6 +1114,9 @@ def _verify_report(report, rows):
 
 
 def render_multi_analysis(df_data):
+    if df_data is None or isinstance(df_data, str):
+        st.error("数据读取失败：多维分析需要主数据表。请点左侧「☁️刷新云端数据」，或到后台管理重新同步【升序源文件】。")
+        return
     from openpyxl.utils import get_column_letter, column_index_from_string
 
     st.title("📐多维分析系统")
@@ -1831,6 +1873,9 @@ def _periods_of_file(file_key):
 
 
 def render_deep_linkage(df_data):
+    if df_data is None or isinstance(df_data, str):
+        st.error("数据读取失败：深度联动需要主数据表。请点左侧「☁️刷新云端数据」。")
+        return
     st.title("🔗 深度联动分析系统")
     st.info("💡 功能说明：提取基准期开奖号码的属性组合，在全历史数据中寻找相同组合，并统计命中后下一期各球位的属性频次。")
     st.divider()
@@ -2395,22 +2440,35 @@ def _pred_sig(rec, prev_sig=""):
 
 
 def _pred_verify():
-    """校验全部记录 -> (通过数, 问题列表)"""
+    """校验全部记录 -> (通过数, 问题列表)
+       有 psig 的记录：用自带锚点校验（插入新期不影响）
+       无 psig 的老记录：按顺序链校验；链错位归为「旧格式未锚定」"""
     data = _pred_load_all()
     keys = sorted(data.keys())
     prev = ""
-    ok, bad = 0, []
+    ok, bad, legacy = 0, [], 0
     for k in keys:
         rec = data[k]
-        want = _pred_sig(rec, prev)
         got = str(rec.get("sig", ""))
-        if not got:
-            bad.append((k, "缺少指纹（旧数据或未签名）"))
-        elif got != want:
-            bad.append((k, "指纹不匹配（内容被改动）"))
+        if "psig" in rec:
+            want = _pred_sig(rec, rec.get("psig") or "")
+            if not got:
+                bad.append((k, "缺少指纹（未签名）"))
+            elif got != want:
+                bad.append((k, "指纹不匹配（内容被改动）"))
+            else:
+                ok += 1
         else:
-            ok += 1
+            # 老格式：链条校验
+            want = _pred_sig(rec, prev)
+            if got and got == want:
+                ok += 1
+            else:
+                legacy += 1
         prev = want
+    if legacy:
+        bad.append((f"旧格式记录 {legacy} 条",
+                    "无锚点（非篡改，重新保存或点「重新签名」即可归入新格式）"))
     return ok, bad
 
 
@@ -2453,6 +2511,7 @@ def _pred_save(period, ball, order_type, nums, force=False):
                 "nums": [int(n) for n in nums],
                 "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "history": _hist}
+        _rec["psig"] = _prev_sig
         _rec["sig"] = _pred_sig(_rec, _prev_sig)
         data[_k] = _rec
         st.session_state["_pred_cache"] = data
@@ -3298,7 +3357,10 @@ def extract_numbers(answer, lo=1, hi=49):
 def render_console(df_data):
     st.title("💻智能数据分析总控台")
     if df_data is None or isinstance(df_data, str):
-        st.error("数据读取失败：" + str(EXCEL_FILE)); return
+        st.error("数据读取失败：" + str(EXCEL_FILE)
+                 + ("" if df_data is None else "　原因：" + str(df_data)[:200]))
+        st.info("请点左侧「☁️刷新云端数据」，或到「后台管理」重新同步【升序源文件】。")
+        return
     unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
     try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
     except: unique_periods.sort(reverse=True)
