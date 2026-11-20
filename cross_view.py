@@ -404,27 +404,35 @@ def render(df_data, H):
         st.error("两套数据没有可对齐的期")
         return
 
-    # ---------- 数据范围 ----------
-    _rng_c1, _rng_c2 = st.columns([1, 3])
-    with _rng_c1:
-        _range = st.selectbox(
-            "数据范围",
-            ["2023年后（干净）", "2000年后", "1976起（全部）", "自定义起始年"],
-            index=0, key="cv_range")
+    # ---------- 数据范围（起止年份可选） ----------
     _seq_all = seq
-    _from_year = ""
-    if _range.startswith("2023"):
-        _from_year = "2023"
-    elif _range.startswith("2000"):
-        _from_year = "2000"
-    elif _range.startswith("1976"):
-        _from_year = "1976"
+    _years = sorted({x[0][:4] for x in seq})
+    _ymin = int(_years[0]) if _years else 1976
+    _ymax = int(_years[-1]) if _years else 2026
+
+    _rng_c1, _rng_c2, _rng_c3 = st.columns([1, 1, 2])
+    with _rng_c1:
+        _pre = st.selectbox("范围预设",
+                            ["2023年后（干净）", "2000年后", "1976起（全部）",
+                             "自定义"],
+                            index=0, key="cv_range")
+    if _pre.startswith("2023"):
+        _fy, _ty = 2023, _ymax
+    elif _pre.startswith("2000"):
+        _fy, _ty = 2000, _ymax
+    elif _pre.startswith("1976"):
+        _fy, _ty = _ymin, _ymax
     else:
         with _rng_c2:
-            _yy = st.number_input("起始年份", 1976, 2100, 1990, 1, key="cv_from_year")
-        _from_year = str(int(_yy))
-    if _from_year:
-        seq = [x for x in seq if x[0][:4] >= _from_year]
+            _fy = int(st.number_input("起始年", _ymin, _ymax,
+                                      max(_ymin, 1990), 1, key="cv_fy"))
+        with _rng_c3:
+            _ty = int(st.number_input("结束年", _ymin, _ymax,
+                                      _ymax, 1, key="cv_ty"))
+    if _fy > _ty:
+        _fy, _ty = _ty, _fy
+    _range = f"{_fy}~{_ty} 年"
+    seq = [x for x in seq if _fy <= int(x[0][:4]) <= _ty]
     with _rng_c2:
         st.caption(f"可对齐期数：{len(seq)}（{seq[0][0] if seq else '—'} ~ "
                    f"{seq[-1][0] if seq else '—'}）"
