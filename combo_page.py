@@ -163,9 +163,11 @@ def render(df_data, H):
         r = analyze_combo(data, cmb)
         st.markdown(f"### 二、★3数字「{','.join(f'{x:02d}' for x in cmb)}」"
                     f" 同行触发 → 上一期7对联动分析★")
+        _uniq = {tuple(pn) for _, _, _, pn in r['detail']}
         st.markdown(f"条件：同一行 7 对中同时出现 "
                     f"{'、'.join(f'{x:02d}' for x in cmb)}　｜　共找到 "
-                    f"**{len(r['triggers'])}** 处")
+                    f"**{len(r['triggers'])}** 处　｜　导入行数 "
+                    f"**{len(_uniq)}**")
         if not r["triggers"]:
             st.warning("无匹配")
             return
@@ -203,12 +205,19 @@ def render(df_data, H):
         })
     st.dataframe(pd.DataFrame(rows_t), use_container_width=True, hide_index=True)
 
-    st.markdown("### 三、20 组总汇总（综合数字累计次数）")
+    _all_uniq = set()
+    for idx, r in detail_map.items():
+        for _tp, _tn, _pp, _pn in r["detail"]:
+            _all_uniq.add(tuple(_pn))
+    st.markdown(f"### 三、20 组总汇总　（导入行数：**{len(_all_uniq)}**）")
     rows_s = [{"号码": f"{n:02d}", "累计次数": c}
               for n, c in all_counter.most_common(10)]
     st.dataframe(pd.DataFrame(rows_s), use_container_width=True, hide_index=True)
 
+    _n_uniq = len({tuple(pn) for r0 in detail_map.values()
+                  for _, _, _, pn in r0["detail"]})
     txt = [f"========== 组合联动 批量（{len(combos)} 组）==========",
+           f"导入行数：{_n_uniq}",
            f"号码：{' '.join(f'{n:02d}' for n in combos and combos[0])} 等", ""]
     for idx, cmb in enumerate(combos, 1):
         r = detail_map[idx]
