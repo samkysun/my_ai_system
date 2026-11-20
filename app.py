@@ -306,6 +306,18 @@ def _board_cloud_clear():
         return False
 
 
+def _board_table_ok():
+    """检查 Supabase 看板表是否存在"""
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        client.table(_BOARD_TABLE).select("id").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
 def _board_sync_load():
     """会话首次使用时从 Supabase 载入"""
     if "ai_board" in st.session_state:
@@ -360,6 +372,10 @@ def _board_append(source, title, text):
 def _board_render():
     """在 AI推演 页面顶部渲染看板"""
     board = _board_sync_load() or []
+    if not _board_table_ok():
+        st.error("看板未连接数据库：请在 Supabase 的 SQL Editor 里执行 "
+                 "i_board_table.sql（仓库根目录），然后 Reboot app。")
+        return
     if not board:
         return
     # 字体由全局 CSS 统一控制
