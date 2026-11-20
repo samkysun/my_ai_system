@@ -570,6 +570,82 @@ def _kill_items(grp, up, kill):
     return ([up] if up else []), False
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_attr_map():
+    """读取 _attr_map.csv -> {号码: {属性:值}}"""
+    try:
+        rows = load_excel_data("_attr_map.csv", None)
+    except Exception:
+        rows = None
+    if not rows:
+        return {}
+    hdr = [str(x).strip() for x in rows[0]]
+    out = {}
+    for r in rows[1:]:
+        if not r or not str(r[0]).strip().isdigit():
+            continue
+        num = int(float(r[0]))
+        out[num] = {hdr[i]: str(r[i]).strip() for i in range(1, min(len(hdr), len(r)))}
+    return out
+
+
+_WX_CHARS = set("金木水火土")
+_ZODIAC = set("鼠牛虎兔龙蛇马羊猴鸡狗猪")
+
+
+def kill_to_numbers(item, amap):
+    """把一个杀号条件翻译成号码列表"""
+    it = (item or "").strip()
+    if not it or not amap:
+        return []
+    # 尾数：5尾
+    if it.endswith("尾") and it[:-1].isdigit():
+        d = it[:-1]
+        return [n for n, a in amap.items() if a.get("尾数") == d]
+    # 合数：06合
+    if it.endswith("合"):
+        return [n for n, a in amap.items() if a.get("数字合") == it]
+    # 段数 / 门数
+    if it.endswith("段"):
+        return [n for n, a in amap.items() if a.get("段数") == it]
+    if it.endswith("门"):
+        return [n for n, a in amap.items() if a.get("门数") == it]
+    # 五行号码：火号
+    if it.endswith("号") and it[:-1] in _WX_CHARS:
+        return [n for n, a in amap.items() if a.get("数字五行") == it[:-1]]
+    # 五行肖：木肖
+    if it.endswith("肖") and it[:-1] in _WX_CHARS:
+        return [n for n, a in amap.items() if a.get("生肖五行") == it[:-1]]
+    # 生肖：羊肖
+    if it.endswith("肖") and it[:-1] in _ZODIAC:
+        return [n for n, a in amap.items() if a.get("生肖") == it[:-1]]
+    # 福禄寿：福肖/禄肖/寿肖
+    if it.endswith("肖") and it[:-1] in "福禄寿":
+        return [n for n, a in amap.items() if a.get("福禄寿") == it]
+    # 颜色肖：红肖
+    if it.endswith("肖") and it[:-1] in "红蓝绿":
+        return [n for n, a in amap.items() if a.get("颜色肖") == it]
+    # 大小肖
+    if it.endswith("肖") and it[:-1] in ("大", "小"):
+        return [n for n, a in amap.items() if a.get("大小肖") == it]
+    # 波色单双
+    if "波" in it:
+        return [n for n, a in amap.items() if a.get("波单双") == it]
+    # 方位
+    if it in ("东", "南", "西", "北"):
+        return [n for n, a in amap.items() if a.get("方位") == it]
+    # 阴阳天地
+    if it in ("阳天", "阳地", "阴天", "阴地"):
+        return [n for n, a in amap.items() if a.get("阴阳天地") == it]
+    # 物象
+    if it in ("家臣", "恶人", "美女", "君王"):
+        return [n for n, a in amap.items() if a.get("物象") == it]
+    # 3模
+    if it.startswith("3余"):
+        return [n for n, a in amap.items() if a.get("3模") == it]
+    return []
+
+
 def kill_summary(blocks):
     """返回 [(属性组, 杀值, 次数, 明细)]，按次数降序"""
     from collections import Counter, defaultdict
@@ -682,6 +758,54 @@ def _multi_ai_ui():
                         st.success("多个属性同时杀（更可靠）：" +
                                    "、".join(f"{r['属性']}{r['杀值']}"
                                             for r in _multi[:12]))
+
+                    # ---- 翻译成具体号码 ----
+                    _amap = _load_attr_map()
+                    if not _amap:
+                        st.info("缺少 _attr_map.csv，无法翻译成号码")
+                    else:
+                        from collections import Counter as _CK, defaultdict as _DK
+                        _num_kill = _CK()
+                        _num_src = _DK(list)
+                        _unmapped = []
+                        for g, v, n, _src2 in _ks:
+                            _nums = kill_to_numbers(v, _amap)
+                            if not _nums:
+                                _unmapped.append(f"{g}{v}")
+                                continue
+                            for _n2 in _nums:
+                                _num_kill[_n2] += n
+                                _num_src[_n2].append(f"{g}{v}")
+                        if _num_kill:
+                            st.markdown("**🎯 具体号码杀号清单**")
+                            _rows_num = []
+                            for _n2, _c in sorted(_num_kill.items(),
+                                                 key=lambda x: (-x[1], x[0])):
+                                _rows_num.append({
+                                    "号码": f"{_n2:02d}",
+                                    "被杀次数": _c,
+                                    "被这些条件杀": "、".join(_num_src[_n2]),
+                                })
+                            st.dataframe(pd.DataFrame(_rows_num),
+                                         use_container_width=True,
+                                         hide_index=True, height=380)
+                            _strong = [r["号码"] for r in _rows_num
+                                       if r["被杀次数"] >= 2]
+                            if _strong:
+                                st.error("⛔ 重点杀号（2 个以上条件同时杀）："
+                                         + " ".join(_strong))
+                            _keep = [f"{n:02d}" for n in range(1, 50)
+                                     if n not in _num_kill]
+                            st.success(f"剩余号码（{len(_keep)} 个）："
+                                       + " ".join(_keep))
+                            st.download_button(
+                                "📥 下载杀号清单",
+                                pd.DataFrame(_rows_num).to_csv(
+                                    index=False).encode("utf-8-sig"),
+                                file_name="杀号清单.csv", mime="text/csv",
+                                key="kill_dl")
+                        if _unmapped:
+                            st.caption("未能翻译的条件：" + "、".join(_unmapped))
             with st.spinner("AI 综合分析中（约 10~30 秒）…"):
                 try:
                     _ans, _err = _multi_ai_analyze(_q, _raw)
