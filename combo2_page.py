@@ -234,6 +234,29 @@ def render(df_data, H):
                        file_name=f"三码组合池_{pick}.csv", mime="text/csv",
                        key="c2_dl")
 
+    # ---------- 号码频次排行 ----------
+    st.markdown("### 五、号码出现频次排行（由多到少）")
+    _nscore = Counter()      # 按组合出现次数加权
+    _ncombo = Counter()      # 出现在多少个组合里
+    for c, n in r["items"]:
+        for v in c:
+            _nscore[v] += n
+            _ncombo[v] += 1
+    if not _nscore:
+        st.info("没有可统计的号码")
+    else:
+        rows_n = [{"排名": i, "号码": f"{v:02d}",
+                   "累计出现次数": s, "涉及组合数": _ncombo[v]}
+                  for i, (v, s) in enumerate(_nscore.most_common(), 1)]
+        df_n = pd.DataFrame(rows_n)
+        st.dataframe(df_n, use_container_width=True, hide_index=True, height=380)
+        st.download_button("📥 下载号码排行",
+                           df_n.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"号码排行_{pick}.csv", mime="text/csv",
+                           key="c2_dl_n")
+        st.caption("累计出现次数 = 该号码在所有组合里按组合出现次数加权求和；"
+                   "涉及组合数 = 该号码出现在多少个不同组合里。")
+
     # ---------- 四、命中核对 ----------
     if target:
         st.markdown("### 四、下一期开奖核对")
