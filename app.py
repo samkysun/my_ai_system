@@ -4341,12 +4341,11 @@ def check_login_token(tok):
             return ""
         raw = _b64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
         parts = raw.rsplit("|", 2)
-        if len(parts) == 3:
-            user, exp, tv = parts
-            if tv != str(st.secrets.get("TOKEN_VERSION", "1")):
-                return ""
-        else:
-            user, exp = raw.rsplit("|", 1)
+        if len(parts) != 3:
+            return ""          # 旧格式令牌一律作废
+        user, exp, tv = parts
+        if tv != str(st.secrets.get("TOKEN_VERSION", "1")):
+            return ""          # 版本不符 -> 失效
         if int(exp) < int(_time_sec.time()):
             return ""
         return user
