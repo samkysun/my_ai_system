@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """三码组合池（严格还原 Excel「组合分析」）
    ① 选一期 → 取该期 7 个号 → C(7,3)=35 组（可切换 2~5 码）
-   ② 只在该期之前的历史里找「7 个号包含某个组合」的期
-   ③ 命中则取它的下一期，收集下一期的 7 个号
-   ④ 下一期再拆 35 组，全局统计出现次数与出现过的期号
+   ② 只在该期之前的历史里找「6 个平码包含某个组合」的期
+   ③ 命中则取它的下一期，收集下一期的 6 个平码
+   ④ 下一期再拆成组合，全局统计出现次数与出现过的期号
    ⑤ 只保留出现次数 >= 2 的组合，按次数降序
    ⑥ 用「选中期的下一期」实际开奖号做命中高亮
 """
@@ -40,7 +40,7 @@ def _parse_zong(rows):
             except Exception:
                 ok = False
                 break
-        if not ok or sum(1 for x in nums if x) < 7:
+        if not ok or sum(1 for x in nums[:6] if x) < 6:
             continue
         out.append((p, nums))
     out.sort(key=lambda x: x[0])
@@ -61,7 +61,7 @@ def _parse_index(rows):
                 nums.append(int(float(r[1 + k] or 0)))
             except Exception:
                 nums.append(0)
-        if sum(1 for x in nums if x) < 7:
+        if sum(1 for x in nums[:6] if x) < 6:
             continue
         out.append((p, nums))
     out.sort(key=lambda x: x[0])
@@ -79,14 +79,14 @@ def combos_of(nums, k):
     return out
 
 
-def analyze(data, sel_period, k):
+def analyze(data, sel_period, k, min_count=1):
     """返回 dict：pool(计数器)、periods(每组出现在哪些期)、
        trigger_periods、next_periods、target(下一期)、total"""
     idx_of = {p: i for i, (p, _) in enumerate(data)}
     if sel_period not in idx_of:
         return None
     si = idx_of[sel_period]
-    base_nums = [v for v in data[si][1] if v]
+    base_nums = [v for v in data[si][1][:6] if v]
     pool_combo_list = combos_of(base_nums, k)
     pool_set = set(pool_combo_list)
 
@@ -95,7 +95,7 @@ def analyze(data, sel_period, k):
     next_periods = []
     for i in range(si):
         p, nums = data[i]
-        ns = {v for v in nums if v}
+        ns = {v for v in nums[:6] if v}
         hit = any(set(c).issubset(ns) for c in pool_set)
         if not hit:
             continue
@@ -104,7 +104,7 @@ def analyze(data, sel_period, k):
             continue
         np_, nn = data[ni]
         triggers.append(p)
-        next_periods.append((np_, [v for v in nn if v]))
+        next_periods.append((np_, [v for v in nn[:6] if v]))
 
     # ④ 下一期再拆 k 码，全局统计
     cnt = Counter()
@@ -115,7 +115,7 @@ def analyze(data, sel_period, k):
             where[c].append(np_)
 
     # ⑤ 只保留 >= 2 次
-    items = [(c, n) for c, n in cnt.most_common() if n >= 2]
+    items = [(c, n) for c, n in cnt.most_common() if n >= min_count]
 
     target = data[si + 1] if si + 1 < len(data) else None
     return {
@@ -132,8 +132,8 @@ def analyze(data, sel_period, k):
 
 def render(df_data, H):
     st.title("🎯 三码组合池")
-    st.caption("选一期 → 7 个号拆成 N 组 → 历史里找包含这些组合的期 → "
-               "取它们的下一期再拆 → 统计出现 ≥2 次的组合。")
+    st.caption("选一期 → 6 个平码拆成 N 组 → 历史里找包含这些组合的期 → "
+               "取它们的下一期再拆 → 统计出现次数。")
 
     # ---------- 数据 ----------
     data = []
@@ -163,15 +163,16 @@ def render(df_data, H):
         pick = st.selectbox("选一期（已开奖）", per_list, index=0, key="c2_period")
     with c2:
         k = st.selectbox("几码一组", [2, 3, 4, 5], index=1, key="c2_k")
+        _minc = st.number_input("最少出现几次", 1, 10, 1, 1, key="c2_minc")
     with c3:
         st.write("")
-        st.caption(f"{k} 码组合数：C(7,{k}) = {len(combos_of(list(range(1, 8)), k))}")
+        st.caption(f"{k} 码组合数：C(6,{k}) = {len(combos_of(list(range(1, 7)), k))}")
 
     row = dict(data).get(pick, [0] * 7)
-    st.markdown(f"**{pick} 期 7 个号：** {' '.join(f'{v:02d}' for v in row if v)}")
+    st.markdown(f"**{pick} 期 6 个平码：** {' '.join(f'{v:02d}' for v in row if v)}")
     st.caption("本池组合（前 10）：" + "　".join(
         ",".join(f"{x:02d}" for x in c)
-        for c in combos_of([v for v in row if v], k)[:10]))
+        for c in combos_of([v for v in row[:6] if v], k)[:10]))
 
     if st.button("▶ 开始计算", type="primary", key="c2_run"):
         st.session_state["c2_go"] = True
@@ -181,7 +182,7 @@ def render(df_data, H):
         return
 
     with st.spinner("扫描历史…"):
-        r = analyze(data, pick, int(k))
+        r = analyze(data, pick, int(k), int(_minc))
     if not r:
         st.error("找不到该期")
         return
@@ -191,7 +192,7 @@ def render(df_data, H):
     st.markdown(f"- 本池组合：**{len(r['pool'])}** 组")
     st.markdown(f"- 命中的历史触发期：**{len(r['triggers'])}** 期")
     st.markdown(f"- 取到的下一期：**{len(r['next_periods'])}** 期")
-    st.markdown(f"- 出现 ≥2 次的组合（A 列总行数）：**{r['total']}** 组")
+    st.markdown(f"- 符合阈值（≥{int(_minc)} 次）的组合：**{r['total']}** 组")
     if r["triggers"]:
         st.caption("触发期（前 15）：" + "、".join(r["triggers"][:15])
                    + ("…" if len(r["triggers"]) > 15 else ""))
@@ -199,11 +200,11 @@ def render(df_data, H):
     # ---------- 三、表格 ----------
     st.markdown("### 三、组合统计表（按出现次数降序）")
     if not r["items"]:
-        st.warning("没有出现 2 次及以上的组合")
+        st.warning(f"没有出现 ≥{int(_minc)} 次的组合")
         return
 
     target = r["target"]
-    win = [v for v in target[1] if v] if target else []
+    win = [v for v in target[1][:6] if v] if target else []
     rows = []
     hit_total = 0
     for i, (c, n) in enumerate(r["items"], 1):
