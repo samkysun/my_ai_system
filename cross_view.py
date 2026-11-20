@@ -706,6 +706,88 @@ def render(df_data, H):
                     st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
                                  hide_index=True)
 
+                # ---------- 一键定案 ----------
+                st.markdown("**一键定案：把结果收敛成唯一映射**")
+                _nr = len(_sols)
+                if _nr == 1:
+                    _p0 = _sols[0]
+                    st.success("✅ 唯一解 —— 这就是 1 对 1 匹配")
+                    st.markdown(
+                        "　".join(f"升序{j}位→按序{_p0[j-1]}球" for j in range(1, 7)))
+                else:
+                    _prob = 1 / _nr * 100
+                    # 按历史出现频次给所有合法解排序
+                    from collections import Counter as _C3
+                    _hist = _C3()
+                    for _pp, _uu, _aa in seq:
+                        try:
+                            _perm2 = tuple(_aa[:6].index(_uu[j - 1]) + 1
+                                           for j in range(1, 7))
+                        except Exception:
+                            continue
+                        _hist[_perm2] += 1
+                    _ranked = sorted(_sols, key=lambda x: -_hist.get(x, 0))
+                    _top = _ranked[0]
+                    st.info(f"共 {_nr} 种合法解；单注命中率上限 {_prob:.1f}%")
+                    st.markdown("**推荐第 1 种**（历史出现 "
+                                f"{_hist.get(_top,0)} 次）：")
+                    st.markdown(
+                        "　".join(f"升序{j}位→按序{_top[j-1]}球" for j in range(1, 7)))
+                    _rows_r = []
+                    for _k, _pp in enumerate(_ranked[:20], 1):
+                        _rows_r.append({
+                            "序": _k,
+                            "映射": " ".join(str(x) for x in _pp),
+                            "历史出现": _hist.get(_pp, 0),
+                            "单注概率": f"{_prob:.2f}%",
+                        })
+                    st.dataframe(pd.DataFrame(_rows_r), use_container_width=True,
+                                 hide_index=True)
+
+                # ---------- 指定期号核对 ----------
+                st.markdown("**指定期号核对：选期号 / 方向 / 球号**")
+                _pk1, _pk2, _pk3 = st.columns([2, 1, 1])
+                with _pk1:
+                    _recent_p = [x[0] for x in reversed(seq)][:300]
+                    _tgtp = st.selectbox("期号", _recent_p, index=0, key="cv_chk_p")
+                with _pk2:
+                    _d2 = st.selectbox("方向", ["升序→按序", "按序→升序"],
+                                       key="cv_chk_d")
+                with _pk3:
+                    _b2 = st.selectbox("球号", [1, 2, 3, 4, 5, 6],
+                                       key="cv_chk_b")
+
+                _rowp = next((x for x in seq if x[0] == _tgtp), None)
+                if _rowp:
+                    _pp_, _uu_, _aa_ = _rowp
+                    _perm3 = tuple(_aa_[:6].index(_uu_[j - 1]) + 1 for j in range(1, 7))
+                    _ok3 = _perm3 in set(_sols)
+                    st.write(f"**{_tgtp} 期**　升序：{' '.join(f'{n:02d}' for n in _uu_[:6])}"
+                             f"　按序：{' '.join(f'{n:02d}' for n in _aa_[:6])}")
+                    st.write("实际映射：" + "　".join(
+                        f"升序{j}位→按序{_perm3[j-1]}球" for j in range(1, 7)))
+                    if _d2.startswith("升序"):
+                        _act = _perm3[_b2 - 1]
+                        _cand = sorted({x[_b2 - 1] for x in _sols})
+                        st.write(f"升序第{_b2}位 实际落在 **按序第{_act}球**；"
+                                 f"约束给出的可能：{'、'.join(f'按序{c}球' for c in _cand)}")
+                        if _act in _cand:
+                            st.success(f"✅ 在约束范围内（{len(_cand)} 选 1）")
+                        else:
+                            st.error("❌ 不在约束范围内（条件与本期不符）")
+                    else:
+                        _rank = _perm3.index(_b2) + 1
+                        _cand2 = sorted({j for j in range(1, 7)
+                                         for x in _sols if x[j - 1] == _b2})
+                        st.write(f"按序第{_b2}球 实际是升序 **第{_rank}位**；"
+                                 f"约束给出的可能：{'、'.join(f'升序第{c}位' for c in _cand2)}")
+                        if _rank in _cand2:
+                            st.success(f"✅ 在约束范围内（{len(_cand2)} 选 1）")
+                        else:
+                            st.error("❌ 不在约束范围内")
+                    st.write(("整体映射符合约束 ✅" if _ok3
+                              else f"整体映射不符合约束 ❌（合法解 {len(_sols)} 种）"))
+
                 # ---------- 历史回测 ----------
                 st.markdown("**历史回测：这些约束在历史上成立多少期**")
                 _bc1, _bc2 = st.columns([1, 2])
