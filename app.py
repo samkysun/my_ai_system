@@ -816,6 +816,33 @@ def _render_kill_group(label, blocks, amap, range_label=None):
                        key=f"kill_dl_{label}")
     if unmapped:
         st.caption("未能翻译的条件：" + "、".join(unmapped))
+
+    # 保存结果到云端看板
+    _period = (blocks[0].get("period") if blocks else "") or ""
+    _lines = [f"期号 {_period}　{label}　取值区间 {_lo}~{_hi}", ""]
+    _lines.append("【属性级】")
+    for g, v, n, _s in ks:
+        _lines.append(f"  {g}：杀 {v}（{n} 次）")
+    if rows_n:
+        _lines.append("")
+        _lines.append("【号码级】")
+        for r in rows_n:
+            _lines.append(f"  {r['号码']}  被杀 {r['被杀次数']} 次  ← {r['被这些条件杀']}")
+    if strong:
+        _lines.append("")
+        _lines.append("【必杀号码】" + " ".join(f"{n:02d}" for n, _c in strong))
+    if keep:
+        _lines.append("")
+        _lines.append(f"【保留号码 {len(keep)} 个】" + " ".join(keep))
+    _save_txt = "\n".join(_lines)
+    if st.button(f"📌 保存「{label}」结果到看板", key=f"save_{label}"):
+        try:
+            _board_add("杀号结果", f"{_period} {label}", _save_txt)
+            st.success("已保存到看板（云端）")
+        except Exception as _e:
+            st.warning(f"保存失败：{_e}")
+
+
 def _multi_struct_text(blocks):
     """只输出标题信息 + 上/杀括号，不含基准行与「下」"""
     groups = {}
