@@ -698,8 +698,8 @@ def render(df_data, H):
 
         c3, c4 = st.columns(2)
         with c3:
-            _psel = st.selectbox("回测起始期号（近期）",
-                                 [x[0] for x in reversed(seq)][:300],
+            _psel = st.selectbox("回测起始期号（范围内的全部）",
+                                 [x[0] for x in reversed(seq)],
                                  index=0, key="cv_bt_p")
             _pman = st.text_input("或手动输入期号（如 1976001）", "",
                                   key="cv_bt_manual")
