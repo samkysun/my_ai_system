@@ -242,41 +242,120 @@ except Exception as _cc_err:
     render_calc_center = None
 
 
+_BOARD_JSON = "ai_board.json"
+_BOARD_MAX = 80            # 最多保留 80 条，防止页面变卡
+
+
+def _gh_headers():
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo = st.secrets.get("GITHUB_REPO")
+    if not token or not repo:
+        return None, None
+    return {"Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json"}, repo
+
+
+def _board_cloud_read():
+    """读云端看板 -> (items, sha)"""
+    import requests as _rq
+    hdr, repo = _gh_headers()
+    if not hdr:
+        return [], None
+    try:
+        r = _rq.get(f"https://api.github.com/repos/{repo}/contents/{_BOARD_JSON}",
+                    headers=hdr, timeout=20)
+        if r.status_code == 200:
+            j = r.json()
+            import base64 as _b64
+            obj = json.loads(_b64.b64decode(j["content"]).decode("utf-8"))
+            return obj.get("items", []), j.get("sha")
+        if r.status_code == 404:
+            return [], None
+    except Exception:
+        pass
+    return [], None
+
+
+def _board_cloud_write(items):
+    """写云端看板（失败不影响页面）"""
+    import requests as _rq
+    import base64 as _b64
+    hdr, repo = _gh_headers()
+    if not hdr:
+        return False
+    try:
+        _, sha = _board_cloud_read()
+        body = {"message": f"看板更新 {datetime.now():%m-%d %H:%M:%S}",
+                "content": _b64.b64encode(
+                    json.dumps({"items": items}, ensure_ascii=False).encode("utf-8")
+                ).decode("utf-8"),
+                "branch": "main"}
+        if sha:
+            body["sha"] = sha
+        r = _rq.put(f"https://api.github.com/repos/{repo}/contents/{_BOARD_JSON}",
+                    headers=hdr, data=json.dumps(body), timeout=30)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def _board_sync_load():
+    """会话首次使用时，从云端载入看板"""
+    if "ai_board" in st.session_state:
+        return st.session_state.ai_board
+    items, _ = _board_cloud_read()
+    st.session_state.ai_board = list(items or [])[:_BOARD_MAX]
+    return st.session_state.ai_board
+
+
+def _board_persist():
+    """把当前看板写回云端"""
+    items = st.session_state.get("ai_board") or []
+    if len(items) > _BOARD_MAX:
+        items = items[-_BOARD_MAX:]
+        st.session_state.ai_board = items
+    _board_cloud_write(items)
+
+
 def _board_add(source, title, text):
-    """把一段结果放进看板；同一个 source+title 会覆盖，不重复堆积。"""
-    if "ai_board" not in st.session_state:
-        st.session_state.ai_board = []
+    """把一段结果放进看板；同一个 source+title 会覆盖，并写入云端"""
+    _board_sync_load()
     text = (text or "").strip()
     if not text:
         return
+    if len(text) > 20000:
+        text = text[:20000] + "\n…（内容过长已截断）"
     entry = {"source": source, "title": title, "text": text,
              "ts": datetime.now().strftime("%m-%d %H:%M:%S")}
     for i, e in enumerate(st.session_state.ai_board):
         if e.get("source") == source and e.get("title") == title:
             st.session_state.ai_board[i] = entry
+            _board_persist()
             return
     st.session_state.ai_board.append(entry)
+    _board_persist()
 
 
 def _board_append(source, title, text):
     """按 source+title 追加：同一个球号多次推送合并成一条。"""
-    if "ai_board" not in st.session_state:
-        st.session_state.ai_board = []
+    _board_sync_load()
     text = (text or "").strip()
     if not text:
         return
     for i, e in enumerate(st.session_state.ai_board):
         if e.get("source") == source and e.get("title") == title:
             if text not in e["text"]:
-                e["text"] = e["text"] + "\n\n" + text
+                e["text"] = (e["text"] + "\n\n" + text)[:20000]
             e["ts"] = datetime.now().strftime("%m-%d %H:%M:%S")
+            _board_persist()
             return
     _board_add(source, title, text)
 
 
 def _board_render():
     """在 AI推演 页面顶部渲染看板"""
-    board = st.session_state.get("ai_board") or []
+    board = _board_sync_load() or []
     if not board:
         return
     # 字体由全局 CSS 统一控制
@@ -285,6 +364,7 @@ def _board_render():
         with c1:
             if st.button("🗑 清空看板", use_container_width=True, key="board_clear"):
                 st.session_state.ai_board = []
+                _board_persist()
                 st.rerun()
         with c2:
             _all = "\n\n".join(
@@ -301,6 +381,7 @@ def _board_render():
                              key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
                 if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
                     st.session_state.ai_board.pop(i)
+                    _board_persist()
                     st.rerun()
 
 
