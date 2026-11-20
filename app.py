@@ -307,10 +307,11 @@ def _board_render():
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_real_data():
     token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
-    file_name = "升序源文件.xlsx"
+    file_name = "总数据.xlsx"
+    _sheet = "总数据表"
     if not token or not repo:
         if not os.path.exists(file_name): return None
-        try: df_raw = pd.read_excel(file_name, sheet_name="数据源", header=None)
+        try: df_raw = pd.read_excel(file_name, sheet_name=_sheet, header=None)
         except Exception as e: return str(e)
     else:
         df_raw = None
@@ -321,7 +322,7 @@ def load_real_data():
         try:
             if (os.path.exists(_disk)
                     and time.time() - os.path.getmtime(_disk) < 6 * 3600):
-                df_raw = pd.read_excel(_disk, sheet_name="数据源", header=None)
+                df_raw = pd.read_excel(_disk, sheet_name=_sheet, header=None)
         except Exception:
             df_raw = None
 
@@ -336,7 +337,7 @@ def load_real_data():
                     _du = r.json().get("download_url")
                     if _du:
                         _bin = requests.get(_du, timeout=60).content
-                        df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+                        df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name=_sheet, header=None)
                         try:
                             with open(_disk, "wb") as _f:
                                 _f.write(_bin)
@@ -354,7 +355,7 @@ def load_real_data():
                 _raw = (f"https://raw.githubusercontent.com/{repo}/main/"
                         f"{urllib.parse.quote(file_name)}")
                 _bin = requests.get(_raw, timeout=60).content
-                df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+                df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name=_sheet, header=None)
                 try:
                     with open(_disk, "wb") as _f:
                         _f.write(_bin)
@@ -365,7 +366,7 @@ def load_real_data():
         # ③ 本地 xlsx
         if df_raw is None and os.path.exists(file_name):
             try:
-                df_raw = pd.read_excel(file_name, sheet_name="数据源", header=None)
+                df_raw = pd.read_excel(file_name, sheet_name=_sheet, header=None)
             except Exception as _e:
                 _errs.append("local:" + type(_e).__name__)
         # ④ 最后回退：用 CSV 升序全集
@@ -385,18 +386,30 @@ def load_real_data():
             try: return str(int(float(v)))
             except: return str(v).strip()
         for idx, row in df_raw.iterrows():
-            year_val = clean_val(row[26]) if len(row) > 26 else ""
-            p1, p2, p3 = clean_val(row[0]), clean_val(row[1]), clean_val(row[2])
-            if not year_val.isdigit() or not p1.isdigit(): continue
-            period_str = f"{year_val}{p1}{p2}{p3}"
+            # 总数据表：第19列(索引18)=期数，第20~26列(索引19~25)=1球~7球
+            if len(row) < 26:
+                continue
+            period_str = clean_val(row[18])
+            if not period_str or not period_str.replace(".", "").isdigit():
+                continue
             nums = []
+            ok = True
             for i in range(7):
-                tens, units = clean_val(row[3 + i*2]), clean_val(row[4 + i*2])
-                if tens == "" and units == "": nums.append(None)
-                else: nums.append(int((tens if tens.isdigit() else "0") + (units if units.isdigit() else "0")))
+                v = clean_val(row[19 + i])
+                if v == "":
+                    nums.append(None)
+                    continue
+                try:
+                    nums.append(int(float(v)))
+                except Exception:
+                    ok = False
+                    break
+            if not ok or all(x is None for x in nums[:6]):
+                continue
             new_row = [None] * 30
             new_row[18] = period_str
-            for i in range(6): new_row[19+i] = nums[i]
+            for i in range(6):
+                new_row[19 + i] = nums[i]
             new_row[25] = nums[6]
             synced_rows.append(new_row)
         result_df = pd.DataFrame(synced_rows)
@@ -3639,7 +3652,7 @@ def render_admin_panel():
 
                             src_info = get_info("升序源文件.xlsx")
                             if not src_info: st.error("找不到升序源文件"); st.stop()
-                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name="数据源", header=None)
+                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name=_sheet, header=None)
 
                             m_file = "总数据.xlsx"
                             m_info = get_info(m_file)
