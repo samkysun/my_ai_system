@@ -245,17 +245,19 @@ def render(df_data, H):
     if not _nscore:
         st.info("没有可统计的号码")
     else:
+        _order = sorted(_nscore.keys(),
+                        key=lambda v: (-_ncombo[v], -_nscore[v], v))
         rows_n = [{"排名": i, "号码": f"{v:02d}",
-                   "累计出现次数": s, "涉及组合数": _ncombo[v]}
-                  for i, (v, s) in enumerate(_nscore.most_common(), 1)]
+                   "出现次数": _ncombo[v], "加权次数": _nscore[v]}
+                  for i, v in enumerate(_order, 1)]
         df_n = pd.DataFrame(rows_n)
         st.dataframe(df_n, use_container_width=True, hide_index=True, height=380)
         st.download_button("📥 下载号码排行",
                            df_n.to_csv(index=False).encode("utf-8-sig"),
                            file_name=f"号码排行_{pick}.csv", mime="text/csv",
                            key="c2_dl_n")
-        st.caption("累计出现次数 = 该号码在所有组合里按组合出现次数加权求和；"
-                   "涉及组合数 = 该号码出现在多少个不同组合里。")
+        st.caption("出现次数 = 该号码在这些组合里出现了几次（每个组合算一次）；"
+                   "加权次数 = 再按组合自身的出现次数加权。")
 
     # ---------- 四、命中核对 ----------
     if target:
