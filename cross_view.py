@@ -407,11 +407,24 @@ def render(df_data, H):
     # ---------- 数据范围 ----------
     _rng_c1, _rng_c2 = st.columns([1, 3])
     with _rng_c1:
-        _range = st.selectbox("数据范围", ["2023年后（干净）", "全部历史"],
-                              index=0, key="cv_range")
+        _range = st.selectbox(
+            "数据范围",
+            ["2023年后（干净）", "2000年后", "1976起（全部）", "自定义起始年"],
+            index=0, key="cv_range")
     _seq_all = seq
+    _from_year = ""
     if _range.startswith("2023"):
-        seq = [x for x in seq if x[0][:4] >= "2023"]
+        _from_year = "2023"
+    elif _range.startswith("2000"):
+        _from_year = "2000"
+    elif _range.startswith("1976"):
+        _from_year = "1976"
+    else:
+        with _rng_c2:
+            _yy = st.number_input("起始年份", 1976, 2100, 1990, 1, key="cv_from_year")
+        _from_year = str(int(_yy))
+    if _from_year:
+        seq = [x for x in seq if x[0][:4] >= _from_year]
     with _rng_c2:
         st.caption(f"可对齐期数：{len(seq)}（{seq[0][0] if seq else '—'} ~ "
                    f"{seq[-1][0] if seq else '—'}）"
@@ -672,9 +685,15 @@ def render(df_data, H):
 
         c3, c4 = st.columns(2)
         with c3:
-            _bp = st.selectbox("回测起始期号",
-                               [x[0] for x in reversed(seq)][:300],
-                               index=0, key="cv_bt_p")
+            _psel = st.selectbox("回测起始期号（近期）",
+                                 [x[0] for x in reversed(seq)][:300],
+                                 index=0, key="cv_bt_p")
+            _pman = st.text_input("或手动输入期号（如 1976001）", "",
+                                  key="cv_bt_manual")
+            _bp = _pman.strip() if _pman.strip() else _psel
+            if _bp not in [x[0] for x in seq]:
+                st.warning(f"期号 {_bp} 不在当前数据范围内，请换一个或调整年份")
+                _bp = seq[-1][0]
         with c4:
             _bn = st.slider("回测期数", 5, 100, 20, 5, key="cv_bt_n")
 
