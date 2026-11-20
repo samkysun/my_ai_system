@@ -704,9 +704,12 @@ def render(df_data, H):
             _pman = st.text_input("或手动输入期号（如 1976001）", "",
                                   key="cv_bt_manual")
             _bp = _pman.strip() if _pman.strip() else _psel
-            if _bp not in [x[0] for x in seq]:
-                st.warning(f"期号 {_bp} 不在当前数据范围内，请换一个或调整年份")
-                _bp = seq[-1][0]
+            _allp = [x[0] for x in seq]
+            if _bp not in _allp:
+                st.warning(f"期号 {_bp} 不可用：按序数据从 2000 年才有，"
+                           f"1976~1999 只有升序号码、没有落球顺序，无法做配位对比。"
+                           f"当前可用范围 {_allp[0]} ~ {_allp[-1]}（共 {len(_allp)} 期）")
+                _bp = _allp[-1]
         with c4:
             _bn = st.slider("回测期数", 5, 100, 20, 5, key="cv_bt_n")
 
