@@ -250,6 +250,18 @@ def render(df_data, H):
                        file_name=f"三码组合池_{pick}.csv", mime="text/csv",
                        key="c2_dl")
 
+    st.markdown("**把结果转到智能分析**")
+    _btxt = (f"期号 {pick}　6 个平码：{' '.join(f'{v:02d}' for v in r['base'])}\n"
+             f"触发 {len(r['triggers'])} 期　汇总组合 {r['total']} 组\n\n"
+             + "\n".join(f"{x['组合']}\t{x['共同出现次数']}"
+                          for x in rows[:200]))
+    if H.get("board_add") and st.button("📤 转到全自动智能分析", key="c2_to_board"):
+        try:
+            H["board_add"]("三码组合池", f"{pick} 期 组合池", _btxt)
+            st.success("已转到看板")
+        except Exception as _e:
+            st.warning(f"推送失败：{_e}")
+
     st.caption("说明：三中三理论中奖概率 0.1086%（1/921）。")
 
     # ---------- 号码频次排行 ----------
