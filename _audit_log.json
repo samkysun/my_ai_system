@@ -117,5 +117,12 @@
   "action": "保存存档",
   "detail": "2026124 第1球 升序 -> 1,15（覆盖）",
   "sig": "f5991f4189dd2ad9792067703c8f3d374dcc3a281ad961662ad5f27c7e1cf63f"
+ },
+ {
+  "ts": "2026-11-20 14:37:31",
+  "user": "samkysun",
+  "action": "保存存档",
+  "detail": "2026124 第2球 按序 -> 3（覆盖）",
+  "sig": "f7218edd880454ce15f65b1489ebcfc7ce4e2049ae968f47efefeadf41efcbe0"
  }
 ]
