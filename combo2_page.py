@@ -15,7 +15,7 @@ from collections import Counter, defaultdict
 import pandas as pd
 import streamlit as st
 
-_INDEX = "_index.csv"
+_INDEX = "_index6.csv"      # 153KB：期号 + 6 个平码
 
 
 def _parse_zong(rows):
@@ -50,19 +50,20 @@ def _parse_zong(rows):
 def _parse_index(rows):
     out = []
     for r in rows[1:]:
-        if len(r) < 15:
+        if len(r) < 7:
             continue
         p = str(r[0]).strip()
         if not p:
             continue
         nums = []
-        for k in range(7):
+        for k in range(6):
             try:
                 nums.append(int(float(r[1 + k] or 0)))
             except Exception:
                 nums.append(0)
-        if sum(1 for x in nums[:6] if x) < 6:
+        if sum(1 for x in nums if x) < 6:
             continue
+        nums.append(0)
         out.append((p, nums))
     out.sort(key=lambda x: x[0])
     return out
@@ -137,25 +138,40 @@ def render(df_data, H):
     st.caption("选一期 → 6 个平码拆成 N 组 → 历史里找包含这些组合的期 → "
                "取它们的下一期再拆 → 只保留出现 2 次及以上的组合。")
 
-    # ---------- 数据 ----------
-    data = []
-    _load = H.get("load_excel_data")
-    if _load:
-        try:
-            with st.spinner("读取总数据表…"):
-                data = _parse_zong(_load("总数据.xlsx", "总数据表") or [])
-        except Exception:
-            data = []
-    if not data:
-        try:
-            with open(_INDEX, encoding="utf-8-sig", errors="replace") as f:
-                data = _parse_index(list(csv.reader(f)))
-        except Exception:
-            data = []
-    if not data:
-        st.error("读不到数据")
-        return
-    st.caption(f"数据源：总数据表　共 {len(data)} 期（{data[0][0]} ~ {data[-1][0]}）")
+    # ---------- 数据（带缓存，避免每次都解析） ----------
+    import time as _t
+    _ck = "c2_data_cache"
+    _c = st.session_state.get(_ck)
+    if not _c or _t.time() - _c.get("ts", 0) > 1800:
+        data = []
+        _load = H.get("load_excel_data")
+        # 优先用精简索引（322KB，最快）
+        if _load:
+            try:
+                with st.spinner("读取索引…"):
+                    idx_rows = _load(_INDEX, None) or []
+                data = _parse_index(idx_rows)
+            except Exception:
+                data = []
+        if not data:
+            try:
+                with open(_INDEX, encoding="utf-8-sig", errors="replace") as f:
+                    data = _parse_index(list(csv.reader(f)))
+            except Exception:
+                data = []
+        if not data and _load:
+            try:
+                with st.spinner("读取总数据表…"):
+                    data = _parse_zong(_load("总数据.xlsx", "总数据表") or [])
+            except Exception:
+                data = []
+        if not data:
+            st.error("读不到数据")
+            return
+        st.session_state[_ck] = {"data": data, "ts": _t.time()}
+    else:
+        data = _c["data"]
+    st.caption(f"数据源：升序索引　共 {len(data)} 期（{data[0][0]} ~ {data[-1][0]}）")
 
     # ---------- 一、参数 ----------
     st.markdown("### 一、选期与码数")
