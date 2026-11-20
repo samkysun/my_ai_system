@@ -5234,15 +5234,6 @@ def login_page():
 _APP_BUILD = "v2026-11-20-16d"
 
 
-def render_auto_ai_page():
-    """独立页面：全自动智能分析（带自己的看板）"""
-    st.title("🤖 全自动智能分析")
-    st.caption("把各页面推来的结果集中到这里：自动解析 → 生成杀号清单 → AI 解读。")
-
-    _board_render()
-    _multi_ai_ui()
-
-
 def main_app():
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -5291,7 +5282,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -5300,8 +5291,6 @@ def main_app():
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
-    elif page == "🤖 全自动智能分析":
-        render_auto_ai_page()
     elif page == "🧠 AI推演": render_ai(df_data)
     elif page == "🎯 三中三组合池":
         if render_combo2 is None:
