@@ -418,35 +418,34 @@ def _board_ai_analyze(question):
     return call_deepseek_api(prompt, _AI_RULES)
 
 
-_MULTI_RULES = """【多维分析报告格式说明·必须理解】
-1. 每条报告开头是：
-   =========【期号】期【升序/按序】-【属性名】【球号】球=======
-   例：=========2026124期升序-生肖2球=======
-   表示：预测 2026 年 124 期、升序（6 平码从小到大）、第 2 个球的【生肖】属性。
+_MULTI_RULES = """【硬规则·违反即视为错误】
+1. 数据来源：六合彩每期 6 个平码 + 1 个特码，号码 1~49。
+   「升序」= 平码从小到大排；「按序」= 实际落球顺序。
+   每个「球位」是独立的（升序1球 ≠ 升序2球，升序 ≠ 按序）。
 
-2. 【基准行排列】(17行)：该位置属性最近 17 期的取值序列，最左边是最新一期。
-   这是用来"查找历史相同模式"的基准。
+2. ★不同球位绝对不许混在一起判断。只有我明确说"合并"时才合并。
+   输出时必须按球位分开写：先写「升序1球」，再写「升序2球」…
 
-3. 触发行：行xxx-yyy(N行)：在历史数据中，出现与基准排列完全相同的 N 行。
-   - 行号是数据库里的行号，数字越小越新。
-   - (匹配:牛鼠猪羊猴) 就是这 N 行的实际取值序列。
-   - 上:羊肖 表示这段匹配行的【上一行】（更近一期）的取值。
-   - 下:龙肖 表示这段匹配行的【下一行】（更早一期）的取值。
-   - [自身参考列匹配] 表示用同一属性列自身做匹配。
-   - 标有 近6期一致 的触发行是特殊高亮，代表近期高度重合。
+3. ★触发行里的「上」= 下期要杀掉的属性值（排除项）。
+   「下」只是参考，不能拿去当选号依据，也不能用来推翻「上」。
 
-4. 一条报告可能给出多个触发行，每个触发行都会给出"上/下"两个后续状态。
-   ★ 关键：触发行里的「上」= 下期要杀掉（排除）的属性值。
-   例：上:龙肖 → 下期不选属龙的号码；
-       上:5尾 → 下期不选尾数为 5 的号码；
-       上:金号(杀木肖火肖) → 下期杀掉属金号码（以及木肖、火肖）。
-   「下」只是参考，不作为杀号依据。
+4. ★如果某个属性后面已经写了「杀XXX」（例如 杀金肖木肖），
+   就只认括号里的内容，不能再把「上:XX」也当成杀号。
 
-5. 分析任务本质是：从多个属性、多个球位的触发行中，
-   找出"下一期该位置最可能的取值"，以及不同属性之间是否互相印证。
+5. 矛盾的定义：同一个球位里，某值在「上」被要求杀，
+   但在「下」里又出现 → 判为「上杀下留」，杀号可信度降低；
+   不要因为「下」出现就取消杀号，只能标注风险。
 
-6. 禁止编造。只能基于报告里出现的属性和取值做推断。
-   如果证据互相矛盾，必须指出矛盾点，不要强行给结论。"""
+6. 禁止把 49 个号全部杀掉。若条件导致全杀，只保留
+   「杀次数 ≤ 2」的号码，并把杀次数高的列为「下期必杀号码」。
+
+7. 禁止编造。只能使用下面给出的数据；数据不够就说"无法判断"。
+
+8. 输出格式固定：
+   ① 按球位逐条列：属性 → 杀的取值（或括号内的值）→ 可信度
+   ② 每个球位给出「必杀号码」和「保留号码」
+   ③ 指出矛盾项
+   ④ 最后给一句总体结论（不要下注建议）"""
 
 
 def _parse_multi_blocks(text):
@@ -765,6 +764,36 @@ def _render_kill_group(label, blocks, amap):
         st.caption("未能翻译的条件：" + "、".join(unmapped))
 
 
+def _multi_struct_text(blocks):
+    """把解析结果按球位分组，整理成结构化文本给 AI"""
+    groups = {}
+    for b in blocks:
+        key = f"{b['order']}{b['ball']}球"
+        groups.setdefault(key, []).append(b)
+
+    lines = [f"共 {len(blocks)} 条属性报告，按球位分组如下：", ""]
+    for gname, gblocks in groups.items():
+        lines.append(f"===== {gname}（{len(gblocks)} 个属性） =====")
+        for b in gblocks:
+            lines.append(f"【{b['attr']}】")
+            for i, tg in enumerate(b["triggers"], 1):
+                up = _clean_kill(tg.get("up", ""))
+                dn = _clean_kill(tg.get("down", ""))
+                kl = tg.get("kill", "")
+                if kl:
+                    lines.append(
+                        f"  触发行{i}：上={up}　杀括号=({kl})　"
+                        f"→ 只杀括号内的值")
+                else:
+                    lines.append(
+                        f"  触发行{i}：上={up}　（无杀括号 → 杀「{up}」）　"
+                        f"下={dn}（仅参考）")
+            if not b["triggers"]:
+                lines.append("  （无触发行）")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _multi_ai_analyze(question, raw_text=None):
     """解析报告并交给 AI"""
     text = raw_text or ""
@@ -776,7 +805,7 @@ def _multi_ai_analyze(question, raw_text=None):
     blocks = _parse_multi_blocks(text)
     if not blocks:
         return None, "没有解析到报告内容（需要包含【基准行排列】和触发行）"
-    summary = _multi_summary_text(blocks)
+    summary = _multi_struct_text(blocks)
     prompt = (f"下面是 {len(blocks)} 条多维分析报告的结构化结果：\n\n{summary}\n\n"
               f"【我的问题】\n{question}\n\n"
               f"请按以下要求作答：\n"
