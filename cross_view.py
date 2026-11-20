@@ -265,6 +265,32 @@ def print_block(report_text, key="cv_print"):
     </script>""", height=44, scrolling=False)
 
 
+def gen_combos(freq, k=8, n_top=20, beam=20000):
+    """每位取前 k 个高频号码，枚举升序递增组合，按概率排序"""
+    import math
+    cands = []
+    probs = []
+    for j in range(6):
+        c = freq[j]
+        tot = sum(c.values()) + 49
+        cands.append([n for n, _ in c.most_common(k)])
+        probs.append({n: (c.get(n, 0) + 1) / tot for n in range(1, 50)})
+    cur = [((), 0.0)]
+    for j in range(6):
+        nxt = []
+        for nums, sc in cur:
+            low = nums[-1] if nums else 0
+            for v in cands[j]:
+                if v <= low:
+                    continue
+                nxt.append((nums + (v,), sc + math.log(probs[j].get(v, 1e-9))))
+        nxt.sort(key=lambda x: -x[1])
+        cur = nxt[:beam]
+        if not cur:
+            break
+    return [(tuple(sorted(c[0])), c[1]) for c in cur[:n_top]], cands
+
+
 def solve_matching(forbid_up, forbid_an=None, required=None):
     """forbid_up: {升序位1-6: [不能落的按序位...]}
        返回 (合法排列列表, 信息)  排列 = 升序位1..6 各自落在的按序位"""
@@ -363,7 +389,8 @@ def render(df_data, H):
     with c1:
         k = st.slider("每个位置取前几个候选", 3, 20, 8, 1, key="cv_k")
     with c2:
-        mode = st.radio("模式", ["预测下一期", "回测对比", "位置序列", "配位求解"],
+        mode = st.radio("模式", ["预测下一期", "回测对比", "位置序列",
+                                  "配位求解", "号码组合"],
                         horizontal=True, key="cv_mode")
 
     if mode == "预测下一期":
@@ -884,6 +911,77 @@ def render(df_data, H):
                             _txt += f"  {r['升序位']} → {r['可能落在按序']}\n"
                         H["board_add"]("配位求解", f"{len(_sols)} 种合法排列", _txt)
                         st.success("已推送到看板")
+
+    elif mode == "号码组合":
+        st.markdown("### 号码组合（号码候选 + 升序递增约束）")
+
+        _g1, _g2, _g3 = st.columns(3)
+        with _g1:
+            _gk = st.slider("每位取前几个候选", 3, 16, 8, 1, key="cv_gk")
+        with _g2:
+            _gn = st.slider("输出前几组组合", 5, 100, 20, 5, key="cv_gn")
+        with _g3:
+            st.write("")
+            _go = st.button("🎯 生成组合", type="primary", key="cv_gen",
+                            use_container_width=True)
+
+        from collections import Counter as _C4
+        _freq = []
+        for j in range(6):
+            _freq.append(_C4(x[1][j] for x in seq))
+
+        if _go:
+            _combos, _cands = gen_combos(_freq, int(_gk), int(_gn))
+            st.session_state["cv_combos"] = _combos
+            st.session_state["cv_cands"] = _cands
+
+        _cands = st.session_state.get("cv_cands")
+        if _cands:
+            _rows_c = []
+            for j in range(6):
+                _rows_c.append({"位置": f"升序第{j+1}位",
+                                "候选号码": " ".join(f"{n:02d}" for n in _cands[j])})
+            st.markdown("**各位置候选**")
+            st.dataframe(pd.DataFrame(_rows_c), use_container_width=True, hide_index=True)
+
+        _combos = st.session_state.get("cv_combos")
+        if _combos:
+            st.markdown(f"**生成的组合（前 {len(_combos)} 组，按评分排序）**")
+            _rows_g = []
+            for k, (cmb, sc) in enumerate(_combos, 1):
+                _rows_g.append({
+                    "序": k,
+                    "6 个号码": " ".join(f"{n:02d}" for n in cmb),
+                    "评分": f"{sc:.2f}",
+                })
+            st.dataframe(pd.DataFrame(_rows_g), use_container_width=True, hide_index=True)
+            st.caption("评分 = 各位置历史频率的对数之和；数值越大越“常见”。")
+
+        # ---------- 指定期号核对 ----------
+        st.markdown("**指定期号核对**")
+        _hk1, _hk2 = st.columns([2, 2])
+        with _hk1:
+            _hp = st.selectbox("期号", [x[0] for x in reversed(seq)][:300],
+                               index=0, key="cv_gp")
+        with _hk2:
+            _hk = st.slider("核对用候选数/位置", 3, 16, 8, 1, key="cv_hk")
+        _row3 = next((x for x in seq if x[0] == _hp), None)
+        if _row3:
+            _u3, _a3 = _row3[1], _row3[2]
+            _fr3 = []
+            _idx3 = [x[0] for x in seq].index(_hp)
+            for j in range(6):
+                _fr3.append(_C4(x[1][j] for x in seq[:_idx3]))
+            _cmb3, _cand3 = gen_combos(_fr3, int(_hk), 20)
+            _act3 = tuple(sorted(_u3[:6]))
+            _inpos = sum(1 for j in range(6) if _u3[j] in _cand3[j])
+            _best = max((len(set(c[0]) & set(_act3)) for c in _cmb3), default=0)
+            st.write(f"**{_hp} 期实际：** {' '.join(f'{n:02d}' for n in _act3)}"
+                     f"　落球顺序：{' '.join(f'{n:02d}' for n in _a3[:6])}")
+            st.write(f"对应位置命中候选：**{_inpos}/6**"
+                     f"（随机 {(int(_hk)/49)*6:.2f}）；"
+                     f"最佳组合与实际重复 **{_best}** 个号")
+            st.caption(f"数据范围：{_range}；候选由该期之前的历史频率生成，不含当期信息。")
 
     else:
         st.markdown("### 回测对比")
