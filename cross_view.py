@@ -704,31 +704,88 @@ def render(df_data, H):
 
         _a, _b = st.columns(2)
         with _a:
-            if st.button("🔍 计算合法排列", type="primary", key="cv_solve",
+            if st.button("🔍 重新计算", type="primary", key="cv_solve",
                          use_container_width=True):
-                # 合并正向约束：升序j必须在按序i / 按序i必须来自升序j（同一个排列约束）
-                _req_all = {j: i for j, i in _req.items() if i}
-                _conflict = []
-                for i, j in _req_an.items():
-                    if not j:
-                        continue
-                    if j in _req_all and _req_all[j] != i:
-                        _conflict.append((j, _req_all[j], i))
-                    else:
-                        _req_all[j] = i
-                if _conflict:
-                    st.error("正向约束互相冲突：" + "；".join(
-                        f"升序第{j}位被要求同时在按序第{a}球和第{b}球"
-                        for j, a, b in _conflict))
-                _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
-                st.session_state["cv_sols"] = _sols
-                st.session_state["cv_banned"] = len(_banned)
+                st.session_state.pop("cv_sols", None)
+
         with _b:
             if st.button("↩ 恢复示例条件", key="cv_reset", use_container_width=True):
                 st.session_state["cv_ver"] = st.session_state.get("cv_ver", 0) + 1
                 st.rerun()
 
-        _sols = st.session_state.get("cv_sols")
+        # 合并正向约束：升序j必须在按序i / 按序i必须来自升序j
+        _req_all = {j: i for j, i in _req.items() if i}
+        _conflict = []
+        for i, j in _req_an.items():
+            if not j:
+                continue
+            if j in _req_all and _req_all[j] != i:
+                _conflict.append((j, _req_all[j], i))
+            else:
+                _req_all[j] = i
+        if _conflict:
+            st.error("正向约束互相冲突：" + "；".join(
+                f"升序第{j}位被要求同时在按序第{a}球和第{b}球"
+                for j, a, b in _conflict))
+        _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
+
+        # ---------- 实际配位表 ----------
+        st.divider()
+        st.markdown("### 实际配位表（逐期核对）")
+        _n_show = st.slider("列出最近几期", 10, 200, 30, 10, key="cv_tbl_n")
+        _rows_act = []
+        for _p, _u, _a in list(reversed(seq))[:int(_n_show)]:
+            try:
+                _perm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
+            except Exception:
+                continue
+            _rows_act.append({
+                "期号": _p,
+                "升序6号": " ".join(f"{n:02d}" for n in _u[:6]),
+                "按序6号": " ".join(f"{n:02d}" for n in _a[:6]),
+                "配位（升1位→按X球…）": " ".join(
+                    f"升{j+1}→按{_perm[j]}" for j in range(6)),
+                "符合约束": "✅" if tuple(_perm) in set(_sols) else "—",
+            })
+        if _rows_act:
+            st.dataframe(pd.DataFrame(_rows_act), use_container_width=True,
+                         hide_index=True)
+            _v = sum(1 for r in _rows_act if r["符合约束"] == "✅")
+            st.caption(f"最近 {len(_rows_act)} 期中，符合当前约束 {_v} 期"
+                       f"（{_v/len(_rows_act)*100:.1f}%）；"
+                       f"当前约束合法解 {len(_sols)} 种，随机基线 "
+                       f"{len(_sols)/720*100:.1f}%")
+
+        # ---------- 待开奖配对 ----------
+        st.markdown("### 待开奖配对（下一期）")
+        _np = ""
+        try:
+            _np = str(int(seq[-1][0]) + 1)
+        except Exception:
+            _np = "下一期"
+        st.markdown(f"**目标期号：{_np}**（上一期 {seq[-1][0]} 已开奖）")
+        if _sols:
+            _cnt = {}
+            for _j in range(1, 7):
+                _cnt[_j] = sorted({x[_j - 1] for x in _sols})
+            _rows_np = []
+            for _j in range(1, 7):
+                _rows_np.append({
+                    "升序位": f"第{_j}位",
+                    "可能落在": "、".join(f"按序{c}球" for c in _cnt[_j]),
+                    "候选数": len(_cnt[_j]),
+                    "概率分布": "　".join(
+                        f"按{c}:{sum(1 for x in _sols if x[_j-1]==c)/len(_sols)*100:.0f}%"
+                        for c in _cnt[_j]),
+                })
+            st.dataframe(pd.DataFrame(_rows_np), use_container_width=True,
+                         hide_index=True)
+            _best_perm = sorted(_sols)[0]
+            st.markdown("**推荐配对**：" + "　".join(
+                f"升{j}位→按{_best_perm[j-1]}球" for j in range(1, 7)))
+        else:
+            st.warning("当前约束没有合法解，请放宽条件")
+
         if _sols is not None:
             st.divider()
             if not _sols:
