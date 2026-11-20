@@ -70,12 +70,29 @@ def _parse_index(rows):
 
 
 def _combos3(nums6):
-    """6 选 3 → 20 组（与 Excel 循环顺序一致）"""
+    """6 选 3 → 20 组"""
     out = []
     for i in range(4):
         for j in range(i + 1, 5):
             for k in range(j + 1, 6):
                 out.append((nums6[i], nums6[j], nums6[k]))
+    return out
+
+
+def _combos_from(pool, clean=True):
+    """从给定号码池里选 3 个组合，可选去重"""
+    seen = set()
+    out = []
+    n = len(pool)
+    for i in range(n - 2):
+        for j in range(i + 1, n - 1):
+            for k in range(j + 1, n):
+                cmb = tuple(sorted((pool[i], pool[j], pool[k])))
+                if clean:
+                    if cmb in seen:
+                        continue
+                    seen.add(cmb)
+                out.append(cmb)
     return out
 
 
@@ -132,19 +149,37 @@ def render(df_data, H):
     st.markdown("### 一、输入")
     c1, c2 = st.columns([2, 2])
     with c1:
-        mode = st.radio("方式", ["直接输入 3 个数字", "从历史期号取 6 个号生成 20 组"],
+        mode = st.radio("方式", ["直接输入 3 个数字", "单套：6 个平码 → 20 组",
+                                "多套：7 个号（含特码）→ 35 组"],
                         key="cb_mode")
     per_list = [p for p, _ in reversed(data)]
+    combos = []
     with c2:
         if mode.startswith("直接"):
             txt = st.text_input("3 个数字（逗号分隔）", value="45,47,41", key="cb_three")
             three = [int(x) for x in re.findall(r"\d+", txt)][:3]
-            combos = [tuple(three)] if len(three) == 3 else []
+            combos = [tuple(sorted(three))] if len(three) == 3 else []
         else:
             pick = st.selectbox("选一期", per_list, index=0, key="cb_period")
-            cur = dict(data).get(pick, [0] * 7)[:6]
-            st.caption(f"{pick} 期：{_line(cur)}")
-            combos = _combos3(cur)
+            row = dict(data).get(pick, [0] * 7)
+            if mode.startswith("单套"):
+                cur = row[:6]
+                st.caption(f"{pick} 期平码：{_line(cur)}")
+                combos = _combos3(cur)
+            else:
+                cur = row[:7]
+                st.caption(f"{pick} 期 7 个号（含特码）：{_line(cur)}")
+                if st.checkbox("替换其中一位后再组合", value=False, key="cb_rep2"):
+                    r1, r2 = st.columns(2)
+                    with r1:
+                        pos = st.selectbox("替换第几球", [1, 2, 3, 4, 5, 6, 7],
+                                           index=0, key="cb_pos2") - 1
+                    with r2:
+                        newnum = st.number_input("替换成", 1, 49, 7, 1, key="cb_num2")
+                    cur = list(cur)
+                    cur[pos] = int(newnum)
+                    st.caption(f"替换后：{_line(cur)}")
+                combos = _combos_from(cur, clean=True)
 
     if not combos:
         st.warning("请输入 3 个数字")
@@ -186,7 +221,7 @@ def render(df_data, H):
                            mime="text/plain", key="cb_dl1")
         return
 
-    # ---------- 20 组批量 ----------
+    # ---------- 批量 ----------
     st.markdown(f"### 二、{len(combos)} 组批量分析")
     rows_t = []
     all_counter = Counter()
@@ -209,7 +244,8 @@ def render(df_data, H):
     for idx, r in detail_map.items():
         for _tp, _tn, _pp, _pn in r["detail"]:
             _all_uniq.add(tuple(_pn))
-    st.markdown(f"### 三、20 组总汇总　（导入行数：**{len(_all_uniq)}**）")
+    st.markdown(f"### 三、{len(combos)} 组总汇总　"
+                f"（总共触发 **{len(_all_uniq)}** 期）")
     rows_s = [{"号码": f"{n:02d}", "累计次数": c}
               for n, c in all_counter.most_common(10)]
     st.dataframe(pd.DataFrame(rows_s), use_container_width=True, hide_index=True)
@@ -217,7 +253,7 @@ def render(df_data, H):
     _n_uniq = len({tuple(pn) for r0 in detail_map.values()
                   for _, _, _, pn in r0["detail"]})
     txt = [f"========== 组合联动 批量（{len(combos)} 组）==========",
-           f"导入行数：{_n_uniq}",
+           f"总共触发 {_n_uniq} 期",
            f"号码：{' '.join(f'{n:02d}' for n in combos and combos[0])} 等", ""]
     for idx, cmb in enumerate(combos, 1):
         r = detail_map[idx]
@@ -232,4 +268,34 @@ def render(df_data, H):
     s = "\n".join(txt)
     st.code(s, language=None)
     st.download_button("📥 下载全部", s.encode("utf-8-sig"),
-                       file_name="组合联动_20组.txt", mime="text/plain", key="cb_dl2")
+                       file_name="组合联动_批量.txt", mime="text/plain", key="cb_dl2")
+
+    # ---------- 四、中奖结果核对 ----------
+    st.markdown("### 四、中奖结果核对")
+    st.caption("取汇总前 7 个数字作参照，比对某一期的 6 个平码与特码（同 Excel「中奖结果」）。")
+    _top7 = [n for n, _ in all_counter.most_common(7)]
+    _c1, _c2 = st.columns([2, 2])
+    with _c1:
+        _chk = st.selectbox("核对哪一期", per_list, index=0, key="cb_chk")
+    with _c2:
+        st.write(f"参照（前7）：{' '.join(f'{n:02d}' for n in _top7)}")
+
+    _row = dict(data).get(_chk)
+    if _row:
+        _flat = [v for v in _row[:6] if v]
+        _special = _row[6] if len(_row) > 6 else 0
+        _hits = sorted({v for v in _flat if v in _top7})
+        _z = bool(_special and _special in _top7)
+        _lines = [f"核对期号：{_chk}",
+                  f"该期平码：{' '.join(f'{v:02d}' for v in _flat)}"
+                  f"　特码：{_special:02d}",
+                  f"参照数字：{' '.join(f'{n:02d}' for n in _top7)}", ""]
+        if not _hits and not _z:
+            _lines.append("本期无中任何数字")
+        else:
+            if _hits:
+                _lines.append(f"平码命中 {len(_hits)} 个："
+                              + " ".join(f"{v:02d}" for v in _hits))
+            if _z:
+                _lines.append(f"特码命中：{_special:02d}")
+        st.code("\n".join(_lines), language=None)
