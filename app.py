@@ -310,6 +310,16 @@ def load_real_data():
     else:
         df_raw = None
         _errs = []
+        # ⓿ 磁盘缓存（6 小时内有效，重启后秒开）
+        _disk = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_src_cache.xlsx")
+        try:
+            if (os.path.exists(_disk)
+                    and time.time() - os.path.getmtime(_disk) < 6 * 3600):
+                df_raw = pd.read_excel(_disk, sheet_name="数据源", header=None)
+        except Exception:
+            df_raw = None
+
         # ① 官方 API + download_url
         for _att in range(2):
             try:
@@ -322,6 +332,11 @@ def load_real_data():
                     if _du:
                         _bin = requests.get(_du, timeout=60).content
                         df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+                        try:
+                            with open(_disk, "wb") as _f:
+                                _f.write(_bin)
+                        except Exception:
+                            pass
                         break
                 else:
                     _errs.append(f"API {r.status_code}")
@@ -335,6 +350,11 @@ def load_real_data():
                         f"{urllib.parse.quote(file_name)}")
                 _bin = requests.get(_raw, timeout=60).content
                 df_raw = pd.read_excel(io.BytesIO(_bin), sheet_name="数据源", header=None)
+                try:
+                    with open(_disk, "wb") as _f:
+                        _f.write(_bin)
+                except Exception:
+                    pass
             except Exception as _e:
                 _errs.append("raw:" + type(_e).__name__)
         # ③ 本地 xlsx
@@ -4377,12 +4397,13 @@ def login_page():
                         st.session_state["_login_fails"] = 0
                         _qp_set("t", make_login_token(u))
                         st.success("👑 管理员登录成功！")
-                        time.sleep(0.6)
+                        time.sleep(0.15)
                         st.rerun()
                     else:
                         st.error("管理员密码错误")
                 else:
-                    ok, msg = check_credentials(u, login_pass)
+                    with st.spinner("正在登录…"):
+                        ok, msg = check_credentials(u, login_pass)
                     if ok:
                         _ok = True
                         st.session_state.logged_in = True
@@ -4390,7 +4411,7 @@ def login_page():
                         st.session_state["_login_fails"] = 0
                         _qp_set("t", make_login_token(u))
                         st.success("登录成功，正在进入系统…")
-                        time.sleep(0.6)
+                        time.sleep(0.15)
                         st.rerun()
                     else:
                         st.error(msg)
