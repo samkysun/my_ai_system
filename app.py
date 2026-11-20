@@ -698,7 +698,11 @@ def _render_kill_group(label, blocks, amap):
     """渲染一个球位（或合并后）的杀号清单（含矛盾判定）"""
     ks = kill_summary(blocks)
     if not ks:
-        st.caption("没有可杀的项")
+        _lo0, _hi0 = _range_of(label)
+        st.warning("没有解析到任何杀号（触发行可能没抓到上/杀值）")
+        st.success(f"本球位区间 {_lo0}~{_hi0} 全部保留（{_hi0-_lo0+1} 个号码）")
+        _dbg = [f"{b['attr']}：{len(b['triggers'])} 条触发行" for b in blocks]
+        st.caption("解析情况：" + "；".join(_dbg))
         return
 
     down_ref = set()   # 「下」不参与任何判断
@@ -884,6 +888,20 @@ def _multi_ai_ui():
                 for b in _blocks:
                     key = f"{b['order']}{b['ball']}球"
                     _groups.setdefault(key, []).append(b)
+
+                with st.expander("🔍 解析详情（排查用）", expanded=False):
+                    _n_trig = sum(len(b["triggers"]) for b in _blocks)
+                    st.write(f"属性报告 {len(_blocks)} 条，触发行合计 {_n_trig} 条")
+                    _dbgrows = []
+                    for b in _blocks:
+                        _ups = "、".join(_clean_kill(tg.get("up", ""))
+                                         for tg in b["triggers"]) or "—"
+                        _kls = "、".join(tg.get("kill", "") for tg in b["triggers"]) or "—"
+                        _dbgrows.append({"属性": b["attr"], "球位": b["ball"],
+                                         "触发行": len(b["triggers"]),
+                                         "上值": _ups, "杀括号": _kls})
+                    st.dataframe(pd.DataFrame(_dbgrows), use_container_width=True,
+                                 hide_index=True)
 
                 _amap = _load_attr_map()
                 if _merged_mode:
