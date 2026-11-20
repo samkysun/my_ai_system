@@ -442,7 +442,13 @@ _MULTI_RULES = """【硬规则·违反即视为错误】
 
 8. 禁止编造，只能使用给出的数据。
 
-9. 输出格式：
+9. ★各球位号码范围（升序）：
+   第1球 1~20，第2球 2~25，第3球 3~30，第4球 4~40，
+   第5球 15~48，第6球 25~49，第7球（特码）1~49。
+   按序（落球顺序）各球没有固定范围，都是 1~49。
+   涉及具体号码时必须落在对应区间内，不得给出区间外的号码。
+
+10. 输出格式：
    ① 按期号 + 球位分组
    ② 每组列出：属性 → 要杀的值 → 出现次数
    ③ 每组给出「必杀号码」和「保留号码」
@@ -672,6 +678,22 @@ def kill_summary(blocks):
     return out
 
 
+_UP_RANGE = {1: (1, 20), 2: (2, 25), 3: (3, 30), 4: (4, 40),
+             5: (15, 48), 6: (25, 49), 7: (1, 49)}
+
+
+def _range_of(label):
+    """从「升序2球」这类标签推出号码区间"""
+    import re as _re
+    m = _re.search(r"(升序|按序)第?(\d)球", label)
+    if not m:
+        return (1, 49)
+    order, ball = m.group(1), int(m.group(2))
+    if order == "升序":
+        return _UP_RANGE.get(ball, (1, 49))
+    return (1, 49)
+
+
 def _render_kill_group(label, blocks, amap):
     """渲染一个球位（或合并后）的杀号清单（含矛盾判定）"""
     ks = kill_summary(blocks)
@@ -712,11 +734,17 @@ def _render_kill_group(label, blocks, amap):
             st.caption("未能翻译的条件：" + "、".join(unmapped))
         return
 
+    _lo, _hi = _range_of(label)
+    num_kill = _CK({n: c for n, c in num_kill.items() if _lo <= n <= _hi})
+    if not num_kill:
+        st.caption(f"本组杀号在本球位区间 {_lo}~{_hi} 内没有命中号码")
+        return
+    st.caption(f"本球位号码区间：{_lo}~{_hi}（只在此区间内计算）")
     kill_set = set(num_kill.keys())
-    keep_nums = [n for n in range(1, 50) if n not in kill_set]
+    keep_nums = [n for n in range(_lo, _hi + 1) if n not in kill_set]
     if len(kill_set) >= 49:
         for thr in range(2, 11):
-            cand = [n for n in range(1, 50) if num_kill.get(n, 0) < thr]
+            cand = [n for n in range(_lo, _hi + 1) if num_kill.get(n, 0) < thr]
             if cand:
                 keep_nums = cand
                 st.info(f"本组把 49 个号全杀光了 → 自动放宽："
