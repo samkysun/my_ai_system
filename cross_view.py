@@ -355,6 +355,7 @@ def solve_matching(forbid_up, forbid_an=None, required=None):
 
 def render(df_data, H):
     st.title("🔀 升降交集")
+    st.caption("版本 v2026-11-20-16c｜若看不到这行，说明还在跑旧代码，请重启")
     st.caption("「升序」是 6 个平码从小到大排列 + 特码；「按序」是落球顺序。"
                "同一期的前 6 个号是同一组数，两套候选取交集能压缩范围。")
 
