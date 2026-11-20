@@ -730,96 +730,125 @@ def render(df_data, H):
                 for j, a, b in _conflict))
         _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
 
-        # ---------- 下一期位置匹配清单（1 对 N） ----------
+        from collections import Counter as _C7
+        # ================= 位置匹配清单 =================
         st.divider()
-        st.markdown("### 一、下一期位置匹配清单")
-        _np = ""
-        try:
-            _np = str(int(seq[-1][0]) + 1)
-        except Exception:
-            _np = "下一期"
+        st.markdown("### 位置匹配清单")
 
-        _nc1, _nc2 = st.columns([1, 2])
-        with _nc1:
-            _N = st.slider("每个升序位给几个候选", 1, 4, 2, 1, key="cv_n_cand")
-        with _nc2:
-            _use_cons = st.checkbox("只取约束内的位置（会降低覆盖率）", value=False,
-                                    key="cv_use_cons")
-            st.caption(f"目标期号 {_np}（上一期 {seq[-1][0]} 已开奖）"
-                       f"　｜　约束可行映射 {len(_sols)} 种")
+        _o1, _o2, _o3 = st.columns([1, 1, 1])
+        with _o1:
+            _dir2 = st.selectbox("对比方向", ["升序 → 按序", "按序 → 升序"],
+                                 key="cv_pair_dir")
+            _up2an = _dir2.startswith("升序")
+        with _o2:
+            _N2 = st.slider("每个位给几个候选", 1, 4, 2, 1, key="cv_pair_n")
+        with _o3:
+            st.write("")
+            st.caption(f"可行映射 {len(_sols)} 种")
 
-        if not _sols:
-            st.warning("当前约束没有可行映射，请放宽条件")
-            _cand_map = {}
-        else:
-            from collections import Counter as _C6
-            _hist_pos = [ _C6() for _ in range(6) ]
-            for _pp, _uu, _aa in seq:
-                try:
-                    _pm2 = [_aa[:6].index(_uu[j]) + 1 for j in range(6)]
-                except Exception:
-                    continue
-                for j in range(6):
-                    _hist_pos[j][_pm2[j]] += 1
-            _cand_map = {}
-            for j in range(6):
-                _c6 = _C6(x[j] for x in _sols)
-                if _use_cons:
-                    _pool = list(_c6.keys())
-                    _order = sorted(_pool,
-                                    key=lambda c: (-_hist_pos[j].get(c, 0),
-                                                   -_c6.get(c, 0), c))
+        # 统计每个位的历史落点分布
+        _freq2 = [_C7() for _ in range(6)]
+        for _pp, _uu, _aa in seq:
+            try:
+                if _up2an:
+                    for j in range(6):
+                        _freq2[j][_aa[:6].index(_uu[j]) + 1] += 1
                 else:
-                    _order = sorted(range(1, 7),
-                                    key=lambda c: (-_hist_pos[j].get(c, 0), c))
-                _cand_map[j + 1] = _order[:int(_N)]
+                    _srt = sorted(_uu[:6])
+                    for i in range(6):
+                        _freq2[i][_srt.index(_aa[i]) + 1] += 1
+            except Exception:
+                continue
 
-            _l1 = []
-            for j in range(1, 7):
-                _cs = _cand_map[j]
-                _l1.append(f"　升序第{j}位 → 按序" +
+        _cands2 = {}
+        for k in range(6):
+            _cands2[k] = sorted(range(1, 7),
+                                key=lambda c: (-_freq2[k].get(c, 0), c))[:int(_N2)]
+
+        if _up2an:
+            _label_out = "升序{}位 → 按序"
+            _label_in = "升序第{}位"
+            _hdr = "升序1~6位分别落在按序第几球"
+        else:
+            _label_out = "按序{}球 → 升序第"
+            _label_in = "按序第{}球"
+            _hdr = "按序1~6球分别在升序第几位"
+
+        # ---------- 下一期清单 ----------
+        try:
+            _np2 = str(int(seq[-1][0]) + 1)
+        except Exception:
+            _np2 = "下一期"
+        st.markdown(f"#### 一、下一期清单（{_np2} 期）")
+        _l1 = []
+        for k in range(6):
+            _cs = _cands2[k]
+            if _up2an:
+                _l1.append(f"　升序第{k+1}位 → 按序" +
                            " / ".join(f"第{c}球" for c in _cs))
-            st.text_area("下一期清单", value="\n".join(_l1), height=200,
-                         key="cv_next_list", label_visibility="collapsed")
+            else:
+                _l1.append(f"　按序第{k+1}球 → 升序" +
+                           " / ".join(f"第{c}位" for c in _cs))
+        st.text_area("下一期清单", value="\n".join(_l1), height=200,
+                     key="cv_next_list", label_visibility="collapsed")
 
-        # ---------- 历史匹配清单 ----------
-        st.markdown("### 二、历史匹配清单（逐期核对）")
-        if _cand_map:
-            _hc1, _hc2 = st.columns([2, 1])
-            with _hc1:
-                _start_p = st.selectbox("从哪一期开始往前看",
-                                        [x[0] for x in reversed(seq)][:300],
-                                        index=0, key="cv_hist_p")
-            with _hc2:
-                _cnt_n = st.slider("看几期", 5, 100, 20, 5, key="cv_hist_n")
+        # ---------- 历史回测清单 ----------
+        st.markdown("#### 二、历史回测清单（可看每一位对错）")
+        _b1, _b2 = st.columns([2, 1])
+        with _b1:
+            _bp = st.selectbox("从哪一期开始往前", [x[0] for x in reversed(seq)][:300],
+                               index=0, key="cv_bt_p")
+        with _b2:
+            _bn = st.slider("回测几期", 5, 100, 20, 5, key="cv_bt_n")
 
-            _idx0 = [x[0] for x in seq].index(_start_p)
-            _l2 = [f"候选规则：每个升序位给 {int(_N)} 个候选按序位", ""]
-            _tot = 0
-            _n = 0
-            _all6 = 0
-            for _k in range(_idx0, max(-1, _idx0 - int(_cnt_n)), -1):
-                _p, _u, _a = seq[_k]
-                try:
-                    _pm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
-                except Exception:
-                    continue
-                _h = sum(1 for j in range(6) if _pm[j] in _cand_map[j + 1])
-                _tot += _h
-                _n += 1
-                if _h == 6:
-                    _all6 += 1
-                _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _pm)}"
-                           f"　覆盖 {_h}/6")
-            _avg = _tot / _n if _n else 0
-            _rand = int(_N) / 6 * 6
+        _i0 = [x[0] for x in seq].index(_bp)
+        _l2 = [f"方向：{_dir2}　每期 {_N2} 个候选　（{_hdr}）", ""]
+        _sum_hit = 0
+        _cnt = 0
+        _full = 0
+        for _k in range(_i0, max(-1, _i0 - int(_bn)), -1):
+            _p, _uu, _aa = seq[_k]
+            try:
+                if _up2an:
+                    _act = [_aa[:6].index(_uu[j]) + 1 for j in range(6)]
+                else:
+                    _srt = sorted(_uu[:6])
+                    _act = [_srt.index(_aa[i]) + 1 for i in range(6)]
+            except Exception:
+                continue
+            _hit_idx = [k2 for k2 in range(6) if _act[k2] in _cands2[k2]]
+            _h = len(_hit_idx)
+            _sum_hit += _h
+            _cnt += 1
+            if _h == 6:
+                _full += 1
+            _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _act)}"
+                       f"　对上 {_h}/6")
+            for k2 in range(6):
+                _mark = "✅" if _act[k2] in _cands2[k2] else "❌"
+                if _up2an:
+                    _l2.append(f"　{_mark} 升序第{k2+1}位 → 候选"
+                               f"{'/'.join(str(c) for c in _cands2[k2])}"
+                               f"　实际落在按序第{_act[k2]}球")
+                else:
+                    _l2.append(f"　{_mark} 按序第{k2+1}球 → 候选"
+                               f"{'/'.join(str(c) for c in _cands2[k2])}"
+                               f"　实际是升序第{_act[k2]}位")
+            if _hit_idx:
+                if _up2an:
+                    _l2.append("　对上的是：" +
+                               "、".join(f"升序第{x+1}位" for x in _hit_idx))
+                else:
+                    _l2.append("　对上的是：" +
+                               "、".join(f"按序第{x+1}球" for x in _hit_idx))
+            else:
+                _l2.append("　全部未对上")
             _l2.append("")
-            _l2.append(f"合计 {_n} 期：平均覆盖 {_avg:.2f}/6"
-                       f"（随机 {_rand:.2f}/6）；6 位全覆盖 {_all6} 期")
-            st.text_area("历史匹配清单", value="\n".join(_l2), height=340,
-                         key="cv_hist_list", label_visibility="collapsed")
-            st.caption("「实际」= 该期升序1~6位分别落在按序第几球；"
-                       "「覆盖 X/6」= 实际落点落在你给的候选里的位数。")
+        _avg2 = _sum_hit / _cnt if _cnt else 0
+        _l2.append(f"合计 {_cnt} 期：平均对上 {_avg2:.2f}/6"
+                   f"（随机 {int(_N2):.2f}/6）；6 位全对 {_full} 期")
+        st.text_area("历史回测清单", value="\n".join(_l2), height=380,
+                     key="cv_bt_list", label_visibility="collapsed")
 
         if _sols is not None:
             st.divider()
