@@ -659,95 +659,39 @@ def render(df_data, H):
             st.info("历史中没有出现 100% 相同的排列，可以把基准行数调小试试。")
 
     elif mode == "配位求解":
-        st.markdown("### 配位求解")
-        st.caption("6 个升序位置对应 6 个按序位置（一个排列，共 720 种）。"
-                   "下面填「不能落在」的条件，程序枚举出所有合法排列。")
+        st.markdown("### 配位求解：位置匹配清单")
 
-        _DEF_UP = {1: [3, 5], 2: [1, 2, 3, 4], 3: [4], 4: [2], 5: [1], 6: [1, 2, 6]}
-        _DEF_AN = {1: [5], 2: [1, 2], 3: [2, 3, 4, 5], 4: [3], 5: [1, 4], 6: [6]}
-
-        _ver = st.session_state.get("cv_ver", 0)
-        st.markdown("**升序各球位：不能落在按序的哪几球**")
-        _cols = st.columns(6)
-        _f_up = {}
-        for j in range(1, 7):
-            with _cols[j - 1]:
-                _f_up[j] = st.multiselect(
-                    f"升序{j}球", [1, 2, 3, 4, 5, 6],
-                    default=_DEF_UP.get(j, []), key=f"cv_fu{j}_{_ver}")
-
-        st.markdown("**按序各球位：不能落在升序的哪几球**")
-        _cols2 = st.columns(6)
-        _f_an = {}
-        for i in range(1, 7):
-            with _cols2[i - 1]:
-                _f_an[i] = st.multiselect(
-                    f"按序{i}球", [1, 2, 3, 4, 5, 6],
-                    default=_DEF_AN.get(i, []), key=f"cv_fa{i}_{_ver}")
-
-        st.markdown("**正向约束：某升序位必须落在按序第几球（可选）**")
-        _cols3 = st.columns(6)
-        _req = {}
-        for j in range(1, 7):
-            with _cols3[j - 1]:
-                _v = st.selectbox(f"升序{j}位", ["任意", 1, 2, 3, 4, 5, 6],
-                                  index=0, key=f"cv_rq{j}_{_ver}")
-                _req[j] = 0 if _v == "任意" else int(_v)
-
-        st.markdown("**反向约束：某按序位必须来自升序第几球（可选）**")
-        _cols4 = st.columns(6)
-        _req_an = {}
-        for i in range(1, 7):
-            with _cols4[i - 1]:
-                _v2 = st.selectbox(f"按序{i}位", ["任意", 1, 2, 3, 4, 5, 6],
-                                   index=0, key=f"cv_ra{i}_{_ver}")
-                _req_an[i] = 0 if _v2 == "任意" else int(_v2)
-
-        _a, _b = st.columns(2)
-        with _a:
-            if st.button("🔍 重新计算", type="primary", key="cv_solve",
-                         use_container_width=True):
-                st.session_state.pop("cv_sols", None)
-
-        with _b:
-            if st.button("↩ 恢复示例条件", key="cv_reset", use_container_width=True):
-                st.session_state["cv_ver"] = st.session_state.get("cv_ver", 0) + 1
-                st.rerun()
-
-        # 合并正向约束：升序j必须在按序i / 按序i必须来自升序j
-        _req_all = {j: i for j, i in _req.items() if i}
-        _conflict = []
-        for i, j in _req_an.items():
-            if not j:
-                continue
-            if j in _req_all and _req_all[j] != i:
-                _conflict.append((j, _req_all[j], i))
-            else:
-                _req_all[j] = i
-        if _conflict:
-            st.error("正向约束互相冲突：" + "；".join(
-                f"升序第{j}位被要求同时在按序第{a}球和第{b}球"
-                for j, a, b in _conflict))
-        _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
-
-        from collections import Counter as _C7
-        # ================= 位置匹配清单 =================
-        st.divider()
-        st.markdown("### 位置匹配清单")
-
-        _o1, _o2, _o3 = st.columns([1, 1, 1])
-        with _o1:
+        # ---------- 控件 ----------
+        c1, c2 = st.columns(2)
+        with c1:
             _dir2 = st.selectbox("对比方向", ["升序 → 按序", "按序 → 升序"],
                                  key="cv_pair_dir")
             _up2an = _dir2.startswith("升序")
-        with _o2:
-            _N2 = st.slider("每个位给几个候选", 1, 4, 2, 1, key="cv_pair_n")
-        with _o3:
-            st.write("")
-            st.caption(f"可行映射 {len(_sols)} 种")
+        with c2:
+            _N2 = st.slider("每个位给几个候选（匹配个数）", 1, 4, 2, 1,
+                            key="cv_pair_n")
 
-        # 统计每个位的历史落点分布
-        _freq2 = [_C7() for _ in range(6)]
+        c3, c4 = st.columns(2)
+        with c3:
+            _bp = st.selectbox("回测起始期号",
+                               [x[0] for x in reversed(seq)][:300],
+                               index=0, key="cv_bt_p")
+        with c4:
+            _bn = st.slider("回测期数", 5, 100, 20, 5, key="cv_bt_n")
+
+        c5, c6 = st.columns(2)
+        with c5:
+            _go = st.button("🚀 开始预测（生成清单）", type="primary",
+                            key="cv_pair_go", use_container_width=True)
+        with c6:
+            if st.button("↩ 恢复默认设置", key="cv_pair_reset",
+                         use_container_width=True):
+                st.session_state["cv_pair_reset_flag"] = True
+                st.rerun()
+
+        # ---------- 计算 ----------
+        from collections import Counter as _CP
+        _freq2 = [_CP() for _ in range(6)]
         for _pp, _uu, _aa in seq:
             try:
                 if _up2an:
@@ -759,317 +703,109 @@ def render(df_data, H):
                         _freq2[i][_srt.index(_aa[i]) + 1] += 1
             except Exception:
                 continue
+        _cands2 = {k: sorted(range(1, 7),
+                             key=lambda c: (-_freq2[k].get(c, 0), c))[:int(_N2)]
+                   for k in range(6)}
 
-        _cands2 = {}
-        for k in range(6):
-            _cands2[k] = sorted(range(1, 7),
-                                key=lambda c: (-_freq2[k].get(c, 0), c))[:int(_N2)]
+        if _go or st.session_state.get("cv_pair_shown"):
+            if _go:
+                st.session_state["cv_pair_shown"] = True
 
-        if _up2an:
-            _label_out = "升序{}位 → 按序"
-            _label_in = "升序第{}位"
-            _hdr = "升序1~6位分别落在按序第几球"
-        else:
-            _label_out = "按序{}球 → 升序第"
-            _label_in = "按序第{}球"
-            _hdr = "按序1~6球分别在升序第几位"
-
-        # ---------- 下一期清单 ----------
-        try:
-            _np2 = str(int(seq[-1][0]) + 1)
-        except Exception:
-            _np2 = "下一期"
-        st.markdown(f"#### 一、下一期清单（{_np2} 期）")
-        _l1 = []
-        for k in range(6):
-            _cs = _cands2[k]
-            if _up2an:
-                _l1.append(f"　升序第{k+1}位 → 按序" +
-                           " / ".join(f"第{c}球" for c in _cs))
-            else:
-                _l1.append(f"　按序第{k+1}球 → 升序" +
-                           " / ".join(f"第{c}位" for c in _cs))
-        st.text_area("下一期清单", value="\n".join(_l1), height=200,
-                     key="cv_next_list", label_visibility="collapsed")
-
-        # ---------- 历史回测清单 ----------
-        st.markdown("#### 二、历史回测清单（可看每一位对错）")
-        _b1, _b2 = st.columns([2, 1])
-        with _b1:
-            _bp = st.selectbox("从哪一期开始往前", [x[0] for x in reversed(seq)][:300],
-                               index=0, key="cv_bt_p")
-        with _b2:
-            _bn = st.slider("回测几期", 5, 100, 20, 5, key="cv_bt_n")
-
-        _i0 = [x[0] for x in seq].index(_bp)
-        _l2 = [f"方向：{_dir2}　每期 {_N2} 个候选　（{_hdr}）", ""]
-        _sum_hit = 0
-        _cnt = 0
-        _full = 0
-        for _k in range(_i0, max(-1, _i0 - int(_bn)), -1):
-            _p, _uu, _aa = seq[_k]
+            # 下一期清单
             try:
-                if _up2an:
-                    _act = [_aa[:6].index(_uu[j]) + 1 for j in range(6)]
-                else:
-                    _srt = sorted(_uu[:6])
-                    _act = [_srt.index(_aa[i]) + 1 for i in range(6)]
+                _np2 = str(int(seq[-1][0]) + 1)
             except Exception:
-                continue
-            _hit_idx = [k2 for k2 in range(6) if _act[k2] in _cands2[k2]]
-            _h = len(_hit_idx)
-            _sum_hit += _h
-            _cnt += 1
-            if _h == 6:
-                _full += 1
-            _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _act)}"
-                       f"　对上 {_h}/6")
-            for k2 in range(6):
-                _mark = "✅" if _act[k2] in _cands2[k2] else "❌"
+                _np2 = "下一期"
+            st.markdown(f"#### 一、下一期清单（{_np2} 期）")
+            _l1 = []
+            for k in range(6):
+                _cs = _cands2[k]
                 if _up2an:
-                    _l2.append(f"　{_mark} 升序第{k2+1}位 → 候选"
-                               f"{'/'.join(str(c) for c in _cands2[k2])}"
-                               f"　实际落在按序第{_act[k2]}球")
+                    _l1.append(f"　升序第{k+1}位 → 按序" +
+                               " / ".join(f"第{c}球" for c in _cs))
                 else:
-                    _l2.append(f"　{_mark} 按序第{k2+1}球 → 候选"
-                               f"{'/'.join(str(c) for c in _cands2[k2])}"
-                               f"　实际是升序第{_act[k2]}位")
-            if _hit_idx:
-                if _up2an:
-                    _l2.append("　对上的是：" +
-                               "、".join(f"升序第{x+1}位" for x in _hit_idx))
-                else:
-                    _l2.append("　对上的是：" +
-                               "、".join(f"按序第{x+1}球" for x in _hit_idx))
-            else:
-                _l2.append("　全部未对上")
-            _l2.append("")
-        _avg2 = _sum_hit / _cnt if _cnt else 0
-        _l2.append(f"合计 {_cnt} 期：平均对上 {_avg2:.2f}/6"
-                   f"（随机 {int(_N2):.2f}/6）；6 位全对 {_full} 期")
-        st.text_area("历史回测清单", value="\n".join(_l2), height=380,
-                     key="cv_bt_list", label_visibility="collapsed")
+                    _l1.append(f"　按序第{k+1}球 → 升序" +
+                               " / ".join(f"第{c}位" for c in _cs))
+            st.text_area("下一期清单", value="\n".join(_l1), height=190,
+                         key="cv_next_list", label_visibility="collapsed")
 
-        if _sols is not None:
-            st.divider()
-            if not _sols:
-                st.error("没有合法排列：这些条件互相冲突，请放宽其中几条")
-            else:
-                st.success(f"共 {len(_sols)} 种合法排列（禁用组合 {st.session_state.get('cv_banned',0)} 条）")
-
-                # 每个升序位可落在哪些按序位
-                _rows1 = []
-                for j in range(1, 7):
-                    _can = sorted({p[j - 1] for p in _sols})
-                    _rows1.append({
-                        "升序位": f"第{j}位",
-                        "可能落在按序": " ".join(f"第{i}球" for i in _can) or "无",
-                        "候选数": len(_can),
-                    })
-                st.markdown("**【升序位 → 按序候选】**")
-                st.dataframe(pd.DataFrame(_rows1), use_container_width=True, hide_index=True)
-
-                # 每个按序位可来自哪些升序位
-                _rows2 = []
-                for i in range(1, 7):
-                    _can = sorted({j for j in range(1, 7)
-                                   for p in _sols if p[j - 1] == i})
-                    _rows2.append({
-                        "按序位": f"第{i}球",
-                        "可能来自升序": " ".join(f"第{j}位" for j in _can) or "无",
-                        "候选数": len(_can),
-                    })
-                st.markdown("**【按序位 ← 升序来源】**")
-                st.dataframe(pd.DataFrame(_rows2), use_container_width=True, hide_index=True)
-
-                # 明细
-                with st.expander(f"全部 {len(_sols)} 种合法排列", expanded=False):
-                    _rows3 = []
-                    for k, p in enumerate(_sols[:200], 1):
-                        _rows3.append({"序": k,
-                                       **{f"升序{j}": f"按序{p[j-1]}"
-                                          for j in range(1, 7)}})
-                    st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
-                                 hide_index=True)
-
-                # ---------- 一键定案 ----------
-                st.markdown("**一键定案：把结果收敛成唯一映射**")
-                _nr = len(_sols)
-                if _nr == 1:
-                    _p0 = _sols[0]
-                    st.success("✅ 唯一解 —— 这就是 1 对 1 匹配")
-                    st.markdown(
-                        "　".join(f"升序{j}位→按序{_p0[j-1]}球" for j in range(1, 7)))
-                else:
-                    _prob = 1 / _nr * 100
-                    # 按历史出现频次给所有合法解排序
-                    from collections import Counter as _C3
-                    _hist = _C3()
-                    for _pp, _uu, _aa in seq:
-                        try:
-                            _perm2 = tuple(_aa[:6].index(_uu[j - 1]) + 1
-                                           for j in range(1, 7))
-                        except Exception:
-                            continue
-                        _hist[_perm2] += 1
-                    _ranked = sorted(_sols, key=lambda x: -_hist.get(x, 0))
-                    _top = _ranked[0]
-                    st.info(f"共 {_nr} 种合法解；单注命中率上限 {_prob:.1f}%")
-                    st.markdown("**推荐第 1 种**（历史出现 "
-                                f"{_hist.get(_top,0)} 次）：")
-                    st.markdown(
-                        "　".join(f"升序{j}位→按序{_top[j-1]}球" for j in range(1, 7)))
-                    _rows_r = []
-                    for _k, _pp in enumerate(_ranked[:20], 1):
-                        _rows_r.append({
-                            "序": _k,
-                            "映射": " ".join(str(x) for x in _pp),
-                            "历史出现": _hist.get(_pp, 0),
-                            "单注概率": f"{_prob:.2f}%",
-                        })
-                    st.dataframe(pd.DataFrame(_rows_r), use_container_width=True,
-                                 hide_index=True)
-
-                # ---------- 指定期号核对 ----------
-                st.markdown("**指定期号核对：选期号 / 方向 / 球号**")
-                _pk1, _pk2, _pk3 = st.columns([2, 1, 1])
-                with _pk1:
-                    _recent_p = [x[0] for x in reversed(seq)][:300]
-                    _tgtp = st.selectbox("期号", _recent_p, index=0, key="cv_chk_p")
-                with _pk2:
-                    _d2 = st.selectbox("方向", ["升序→按序", "按序→升序"],
-                                       key="cv_chk_d")
-                with _pk3:
-                    _b2 = st.selectbox("球号", [1, 2, 3, 4, 5, 6],
-                                       key="cv_chk_b")
-
-                _rowp = next((x for x in seq if x[0] == _tgtp), None)
-                if _rowp:
-                    _pp_, _uu_, _aa_ = _rowp
-                    _perm3 = tuple(_aa_[:6].index(_uu_[j - 1]) + 1 for j in range(1, 7))
-                    _ok3 = _perm3 in set(_sols)
-                    st.write(f"**{_tgtp} 期**　升序：{' '.join(f'{n:02d}' for n in _uu_[:6])}"
-                             f"　按序：{' '.join(f'{n:02d}' for n in _aa_[:6])}")
-                    st.write("实际映射：" + "　".join(
-                        f"升序{j}位→按序{_perm3[j-1]}球" for j in range(1, 7)))
-                    if _d2.startswith("升序"):
-                        _act = _perm3[_b2 - 1]
-                        _cand = sorted({x[_b2 - 1] for x in _sols})
-                        st.write(f"升序第{_b2}位 实际落在 **按序第{_act}球**；"
-                                 f"约束给出的可能：{'、'.join(f'按序{c}球' for c in _cand)}")
-                        if _act in _cand:
-                            st.success(f"✅ 在约束范围内（{len(_cand)} 选 1）")
-                        else:
-                            st.error("❌ 不在约束范围内（条件与本期不符）")
+            # 历史回测
+            st.markdown("#### 二、历史回测清单")
+            _i0 = [x[0] for x in seq].index(_bp)
+            _l2 = [f"方向：{_dir2}　每期 {_N2} 个候选", ""]
+            _sum_hit = _cnt = _full = 0
+            for _k in range(_i0, max(-1, _i0 - int(_bn)), -1):
+                _p, _uu, _aa = seq[_k]
+                try:
+                    if _up2an:
+                        _act = [_aa[:6].index(_uu[j]) + 1 for j in range(6)]
                     else:
-                        _rank = _perm3.index(_b2) + 1
-                        _cand2 = sorted({j for j in range(1, 7)
-                                         for x in _sols if x[j - 1] == _b2})
-                        st.write(f"按序第{_b2}球 实际是升序 **第{_rank}位**；"
-                                 f"约束给出的可能：{'、'.join(f'升序第{c}位' for c in _cand2)}")
-                        if _rank in _cand2:
-                            st.success(f"✅ 在约束范围内（{len(_cand2)} 选 1）")
-                        else:
-                            st.error("❌ 不在约束范围内")
-                    st.write(("整体映射符合约束 ✅" if _ok3
-                              else f"整体映射不符合约束 ❌（合法解 {len(_sols)} 种）"))
+                        _srt = sorted(_uu[:6])
+                        _act = [_srt.index(_aa[i]) + 1 for i in range(6)]
+                except Exception:
+                    continue
+                _hit_idx = [k2 for k2 in range(6) if _act[k2] in _cands2[k2]]
+                _h = len(_hit_idx)
+                _sum_hit += _h
+                _cnt += 1
+                if _h == 6:
+                    _full += 1
+                _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _act)}"
+                           f"　对上 {_h}/6")
+                for k2 in range(6):
+                    _mark = "✅" if _act[k2] in _cands2[k2] else "❌"
+                    if _up2an:
+                        _l2.append(
+                            f"　{_mark} 升序第{k2+1}位 → 候选"
+                            f"{'/'.join(str(c) for c in _cands2[k2])}"
+                            f"　实际落在按序第{_act[k2]}球")
+                    else:
+                        _l2.append(
+                            f"　{_mark} 按序第{k2+1}球 → 候选"
+                            f"{'/'.join(str(c) for c in _cands2[k2])}"
+                            f"　实际是升序第{_act[k2]}位")
+                if _hit_idx:
+                    if _up2an:
+                        _l2.append("　对上的是：" +
+                                   "、".join(f"升序第{x+1}位" for x in _hit_idx))
+                    else:
+                        _l2.append("　对上的是：" +
+                                   "、".join(f"按序第{x+1}球" for x in _hit_idx))
+                else:
+                    _l2.append("　全部未对上")
+                _l2.append("")
+            _avg2 = _sum_hit / _cnt if _cnt else 0
+            _l2.append(f"合计 {_cnt} 期：平均对上 {_avg2:.2f}/6"
+                       f"（随机 {int(_N2):.2f}/6）；6 位全对 {_full} 期")
+            st.text_area("历史回测清单", value="\n".join(_l2), height=380,
+                         key="cv_bt_list", label_visibility="collapsed")
+        else:
+            st.info("设置好上面的参数后，点「🚀 开始预测（生成清单）」")
 
-                # ---------- 历史回测 ----------
-                st.markdown("**历史回测：这些约束在历史上成立多少期**")
-                _bc1, _bc2 = st.columns([1, 2])
-                with _bc1:
-                    _bt_n = st.number_input("回测期数", 20, 1000, 200, 20,
-                                            key="cv_solve_bt_n")
-                with _bc2:
-                    st.write("")
-                    _bt = st.button("▶ 开始回测", key="cv_solve_bt")
-
-                if _bt:
-                    _set = set(_sols)
-                    _tot = 0
-                    _ok = 0
-                    _rows_bt = []
-                    _seq_now = st.session_state.get("cv_cache_v1", {}).get("seq") or seq
-                    for _p, _u, _a in list(reversed(_seq_now))[:int(_bt_n)]:
-                        try:
-                            _perm = tuple(_a[:6].index(_u[j - 1]) + 1 for j in range(1, 7))
-                        except Exception:
-                            continue
-                        _tot += 1
-                        _in = _perm in _set
-                        if _in:
-                            _ok += 1
-                        _rows_bt.append({
-                            "期号": _p,
-                            "实际排列": " ".join(str(x) for x in _perm),
-                            "符合约束": "✅" if _in else "❌",
-                        })
-                    if _tot:
-                        _rand = len(_sols) / 720 * 100
-                        st.success(f"最近 {_tot} 期：符合约束 {_ok} 期 = "
-                                   f"{_ok/_tot*100:.1f}%（随机基线 {_rand:.1f}%）")
-                        with st.expander("逐期明细", expanded=False):
-                            st.dataframe(pd.DataFrame(_rows_bt),
-                                         use_container_width=True, hide_index=True)
-
-                # ---------- 文本报告 + 打印 ----------
-                _rl = ["========== 配位求解报告 ==========", ""]
-                _rl.append("【不在约束】")
-                for j in range(1, 7):
-                    if _f_up.get(j):
-                        _rl.append(f"  升序{j}球 不能在按序: "
-                                   + "、".join(str(x) for x in _f_up[j]))
-                for i in range(1, 7):
-                    if _f_an.get(i):
-                        _rl.append(f"  按序{i}球 不能在升序: "
-                                   + "、".join(str(x) for x in _f_an[i]))
-                _rl.append("")
-                _rl.append("【必须在约束】")
-                _any_req = False
-                for j in range(1, 7):
-                    if _req.get(j):
-                        _rl.append(f"  升序{j}位 必须在 按序第{_req[j]}球")
-                        _any_req = True
-                for i in range(1, 7):
-                    if _req_an.get(i):
-                        _rl.append(f"  按序{i}位 必须来自 升序第{_req_an[i]}位")
-                        _any_req = True
-                if not _any_req:
-                    _rl.append("  （无）")
-                _rl.append("")
-                _rl.append(f"【合法排列】共 {len(_sols)} 种")
-                _rl.append("")
-                _rl.append("【升序位 → 按序候选】")
-                for r in _rows1:
-                    _rl.append(f"  {r['升序位']} → {r['可能落在按序']}（{r['候选数']} 个）")
-                _rl.append("")
-                _rl.append("【按序位 ← 升序来源】")
-                for r in _rows2:
-                    _rl.append(f"  {r['按序位']} ← {r['可能来自升序']}（{r['候选数']} 个）")
-                _rl.append("")
-                _rl.append("【全部合法排列】（升序1~6位各自落在按序第几球）")
-                for k, _p in enumerate(_sols, 1):
-                    _rl.append(f"  {k:>3}. " + " ".join(str(x) for x in _p))
-                _report = "\n".join(_rl)
-
-                st.markdown("**报告（可编辑 / 下载 / 打印）**")
-                st.text_area("配位报告", value=_report, height=300,
-                             key="cv_solve_report", label_visibility="collapsed")
-                _pc1, _pc2 = st.columns(2)
-                with _pc1:
-                    st.download_button("📥 下载 TXT", _report.encode("utf-8-sig"),
-                                       file_name="配位求解.txt", mime="text/plain",
-                                       use_container_width=True, key="cv_solve_dl")
-                with _pc2:
-                    print_block(_report)
-
-                if H.get("board_add"):
-                    if st.button("📌 推送到 AI 推演看板", key="cv_solve_push"):
-                        _txt = f"【配位求解】合法排列 {len(_sols)} 种\n"
-                        for r in _rows1:
-                            _txt += f"  {r['升序位']} → {r['可能落在按序']}\n"
-                        H["board_add"]("配位求解", f"{len(_sols)} 种合法排列", _txt)
-                        st.success("已推送到看板")
+        # ---------- 约束（可选，往下） ----------
+        st.divider()
+        with st.expander("约束设置（可选，用于进一步限定配位）", expanded=False):
+            _DEF_UP = {1: [3, 5], 2: [1, 2, 3, 4], 3: [4], 4: [2], 5: [1], 6: [1, 2, 6]}
+            _DEF_AN = {1: [5], 2: [1, 2], 3: [2, 3, 4, 5], 4: [3], 5: [1, 4], 6: [6]}
+            _ver = st.session_state.get("cv_ver", 0)
+            st.caption("升序各球位：不能落在按序的哪几球")
+            _cols = st.columns(6)
+            _f_up = {}
+            for j in range(1, 7):
+                with _cols[j - 1]:
+                    _f_up[j] = st.multiselect(f"升序{j}球", [1, 2, 3, 4, 5, 6],
+                                              default=_DEF_UP.get(j, []),
+                                              key=f"cv_fu{j}_{_ver}")
+            st.caption("按序各球位：不能落在升序的哪几球")
+            _cols2 = st.columns(6)
+            _f_an = {}
+            for i in range(1, 7):
+                with _cols2[i - 1]:
+                    _f_an[i] = st.multiselect(f"按序{i}球", [1, 2, 3, 4, 5, 6],
+                                              default=_DEF_AN.get(i, []),
+                                              key=f"cv_fa{i}_{_ver}")
+            _sols_c, _ = solve_matching(_f_up, _f_an)
+            st.caption(f"当前约束下可行映射：{len(_sols_c)} 种（共 720 种）")
 
     elif mode == "号码组合":
         st.markdown("### 号码组合（号码候选 + 升序递增约束）")
