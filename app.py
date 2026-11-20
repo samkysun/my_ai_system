@@ -436,6 +436,11 @@ _MULTI_RULES = """【多维分析报告格式说明·必须理解】
    - 标有 近6期一致 的触发行是特殊高亮，代表近期高度重合。
 
 4. 一条报告可能给出多个触发行，每个触发行都会给出"上/下"两个后续状态。
+   ★ 关键：触发行里的「上」= 下期要杀掉（排除）的属性值。
+   例：上:龙肖 → 下期不选属龙的号码；
+       上:5尾 → 下期不选尾数为 5 的号码；
+       上:金号(杀木肖火肖) → 下期杀掉属金号码（以及木肖、火肖）。
+   「下」只是参考，不作为杀号依据。
 
 5. 分析任务本质是：从多个属性、多个球位的触发行中，
    找出"下一期该位置最可能的取值"，以及不同属性之间是否互相印证。
@@ -474,6 +479,7 @@ def _parse_multi_blocks(text):
             mu = _re.search(r"上[:：]([^\s(（]+)", s)
             md = _re.search(r"下[:：]([^\s(（\[]+)", s)
             mm = _re.search(r"匹配[:：]([^\)）]*)", s)
+            mk = _re.search(r"杀([^)）]*)", s)
             cur["triggers"].append({
                 "row": f"{mt.group(1)}-{mt.group(2)}",
                 "n": int(mt.group(3)),
@@ -482,6 +488,7 @@ def _parse_multi_blocks(text):
                 "match": mm.group(1).strip() if mm else "",
                 "self": "自身参考列" in s,
                 "hot": "一致" in s,
+                "kill": mk.group(1).strip() if mk else "",
             })
     return blocks
 
@@ -511,6 +518,84 @@ def _multi_summary_text(blocks):
     return "\n".join(lines)
 
 
+_ATTR_GROUP = [
+    ("生肖五行与数字五行", "生肖五行·交叉"),
+    ("数字五行与生肖五行", "生肖五行·交叉"),
+    ("生肖五行", "生肖五行"),
+    ("尾五行", "尾五行"),
+    ("数字五行", "数字五行"),
+    ("生肖", "生肖"),
+    ("尾数", "尾数"),
+    ("数字合", "合数"),
+    ("段数", "段数"),
+    ("门数", "门数"),
+    ("波", "波色单双"),
+    ("方位", "方位"),
+    ("福禄寿", "福禄寿"),
+    ("物象", "物象"),
+    ("阴阳天地", "阴阳天地"),
+    ("颜色肖", "颜色肖"),
+    ("大小肖", "大小肖"),
+    ("3模", "3模"),
+]
+
+
+def _attr_group(attr):
+    for key, name in _ATTR_GROUP:
+        if key in attr:
+            return name
+    return attr
+
+
+def _clean_kill(v):
+    """把「龙肖 / 5尾 / 06合 / 金号(杀木肖火肖)」整理成可读值"""
+    v = (v or "").strip()
+    for sep in ("（", "("):
+        if sep in v:
+            v = v.split(sep)[0]
+    return v.strip()
+
+
+def _kill_items(grp, up, kill):
+    """决定这一条要杀什么
+       · 有「杀X杀Y」→ 只认括号里的
+       · 没有 → 用「上」的值"""
+    import re as _re
+    up = _clean_kill(up)
+    kill = (kill or "").strip()
+    if kill:
+        items = _re.findall(r"([^\s、，,()（）]+?(?:肖|号|尾|合|段|门))", kill)
+        if items:
+            return items, True
+    return ([up] if up else []), False
+
+
+def kill_summary(blocks):
+    """返回 [(属性组, 杀值, 次数, 明细)]，按次数降序"""
+    from collections import Counter, defaultdict
+    cnt = Counter()
+    src = defaultdict(set)
+    for b in blocks:
+        grp = _attr_group(b["attr"])
+        for tg in b["triggers"]:
+            items, from_paren = _kill_items(grp, tg.get("up", ""), tg.get("kill", ""))
+            for it in items:
+                if not it:
+                    continue
+                if from_paren:
+                    g2 = "生肖" if it.endswith("肖") else (
+                        "数字五行" if it.endswith("号") else grp)
+                else:
+                    g2 = grp
+                key = (g2, it)
+                cnt[key] += 1
+                src[key].add(f"第{b['ball']}球·{b['attr']}"
+                             + ("（括号内）" if from_paren else ""))
+    out = [(g, v, n, sorted(src[(g, v)])) for (g, v), n in cnt.items()]
+    out.sort(key=lambda x: (-x[2], x[0], x[1]))
+    return out
+
+
 def _multi_ai_analyze(question, raw_text=None):
     """解析报告并交给 AI"""
     text = raw_text or ""
@@ -530,7 +615,9 @@ def _multi_ai_analyze(question, raw_text=None):
               f"2) 汇总所有属性中「下期值」出现最多的取值（若同一属性多个触发行，分别列出）\n"
               f"3) 指出哪些属性的结论一致、哪些互相矛盾\n"
               f"4) 给出下一期各位置最可能的属性取值（克制、注明依据与不确定性）\n"
-              f"5) 如果证据不足，明确说「无法判断」")
+              f"5) 如果证据不足，明确说「无法判断」\n"
+              f"6) 注意：报告里的「上」才是要杀掉的属性（不是「下」），"
+              f"请汇总成杀号清单，不要当成要选的号码")
     return call_deepseek_api(prompt, _MULTI_RULES), None
 
 
@@ -547,10 +634,12 @@ def _multi_ai_ui():
                                 placeholder="=========2026124期升序-生肖2球=======…")
         _q = st.text_area(
             "你想问什么",
-            value="1) 每个属性历史上匹配到几段，上期值和下期值分别是什么\n"
-                  "2) 所有属性里「下期值」出现最多的是什么\n"
-                  "3) 哪些属性结论一致、哪些矛盾\n"
-                  "4) 下一期各位置最可能的取值是什么",
+            value="1) 逐条列出每个属性报告里的「上」是什么（也就是要杀的对象）\n"
+                  "2) 把所有要杀的对象按属性归类：生肖杀哪几个、尾数杀哪几个、"
+                  "五行杀哪些、合数/门数/段数等分别杀什么\n"
+                  "3) 同一个值被多个属性同时杀（重叠）的有哪些？重叠越多越可靠\n"
+                  "4) 有没有属性之间互相矛盾（一个要杀、一个保留）？指出来\n"
+                  "5) 最后给出一份下期「杀号清单」，按可信度从高到低排列",
             height=120, key="multi_q")
         c1, c2 = st.columns([1, 2])
         with c1:
@@ -560,7 +649,40 @@ def _multi_ai_ui():
             st.caption("会先解析成结构化表格，再交给 AI，避免它看不懂格式。")
 
         if _go:
-            with st.spinner("解析并分析中（约 10~30 秒）…"):
+            # 先做本地解析 + 杀号清单（不依赖 AI）
+            _txt = _raw
+            if not _txt.strip():
+                _board = _board_sync_load() or []
+                _txt = "\n\n".join(e.get("text", "") for e in _board
+                                    if "基准行排列" in (e.get("text") or ""))
+            _blocks = _parse_multi_blocks(_txt)
+            if _blocks:
+                st.markdown(f"**解析到 {len(_blocks)} 条属性报告**")
+                _rows_b = []
+                for b in _blocks:
+                    _rows_b.append({
+                        "属性": b["attr"], "球位": b["ball"],
+                        "触发行数": len(b["triggers"]),
+                        "上期值(杀)": "、".join(
+                            _clean_kill(tg["up"]) for tg in b["triggers"]) or "—",
+                    })
+                st.dataframe(pd.DataFrame(_rows_b), use_container_width=True,
+                             hide_index=True)
+
+                _ks = kill_summary(_blocks)
+                if _ks:
+                    st.markdown("**🔪 杀号清单（按出现次数排序）**")
+                    _rows_k = [{"属性": g, "杀值": v, "次数": n,
+                                "来自": "；".join(d)}
+                               for g, v, n, d in _ks]
+                    st.dataframe(pd.DataFrame(_rows_k), use_container_width=True,
+                                 hide_index=True, height=360)
+                    _multi = [r for r in _rows_k if r["次数"] >= 2]
+                    if _multi:
+                        st.success("多个属性同时杀（更可靠）：" +
+                                   "、".join(f"{r['属性']}{r['杀值']}"
+                                            for r in _multi[:12]))
+            with st.spinner("AI 综合分析中（约 10~30 秒）…"):
                 try:
                     _ans, _err = _multi_ai_analyze(_q, _raw)
                 except Exception as _e:
