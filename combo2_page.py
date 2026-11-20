@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""三中三组合池
-   ① 选一期 → 其 6 个平码拆成 20 组（C(6,3)）
-   ② 这 20 组去历史里找「同时出现这 3 个号」的期（触发期）
-   ③ 每个触发期的「下一期」6 个平码，同样拆成 20 组，汇总
-   ④ 按出现次数降序成表（去重）
-   ⑤ 可排除含指定数字的组合
-   ⑥ 输入新开奖号码 → 检查表格中有多少组「三中三」
+"""三码组合池（严格还原 Excel「组合分析」）
+   ① 选一期 → 取该期 7 个号 → C(7,3)=35 组（可切换 2~5 码）
+   ② 只在该期之前的历史里找「7 个号包含某个组合」的期
+   ③ 命中则取它的下一期，收集下一期的 7 个号
+   ④ 下一期再拆 35 组，全局统计出现次数与出现过的期号
+   ⑤ 只保留出现次数 >= 2 的组合，按次数降序
+   ⑥ 用「选中期的下一期」实际开奖号做命中高亮
 """
 import csv
 import itertools
@@ -40,7 +40,7 @@ def _parse_zong(rows):
             except Exception:
                 ok = False
                 break
-        if not ok or sum(1 for x in nums[:6] if x) < 6:
+        if not ok or sum(1 for x in nums if x) < 7:
             continue
         out.append((p, nums))
     out.sort(key=lambda x: x[0])
@@ -61,51 +61,79 @@ def _parse_index(rows):
                 nums.append(int(float(r[1 + k] or 0)))
             except Exception:
                 nums.append(0)
-        if sum(1 for x in nums[:6] if x) < 6:
+        if sum(1 for x in nums if x) < 7:
             continue
         out.append((p, nums))
     out.sort(key=lambda x: x[0])
     return out
 
 
-def combos3(nums6):
-    """6 个平码 → 20 组（升序排列、去重）"""
+def combos_of(nums, k):
+    """从 7 个号里取 k 个 → 去重的组合（升序元组）"""
     seen, out = set(), []
-    for a, b, c in itertools.combinations(sorted(nums6), 3):
-        t = (a, b, c)
-        if t in seen:
+    for c in itertools.combinations(sorted(nums), k):
+        if c in seen:
             continue
-        seen.add(t)
-        out.append(t)
+        seen.add(c)
+        out.append(c)
     return out
 
 
-def build_pool(data, seed_nums6):
-    """返回 (触发期列表, 组合计数 Counter, 明细: [(触发期, 下一期, 组合列表)])"""
-    seed = combos3(seed_nums6)
+def analyze(data, sel_period, k):
+    """返回 dict：pool(计数器)、periods(每组出现在哪些期)、
+       trigger_periods、next_periods、target(下一期)、total"""
     idx_of = {p: i for i, (p, _) in enumerate(data)}
-    triggers = []          # 触发期期号
-    detail = []
-    for cmb in seed:
-        s = set(cmb)
-        for i, (p, nums) in enumerate(data):
-            if s.issubset({v for v in nums[:6] if v}):
-                if i + 1 < len(data):
-                    nxt_p, nxt_nums = data[i + 1]
-                    if sum(1 for v in nxt_nums[:6] if v) == 6:
-                        triggers.append(p)
-                        detail.append((p, nxt_p, nxt_nums[:6], combos3(nxt_nums[:6])))
+    if sel_period not in idx_of:
+        return None
+    si = idx_of[sel_period]
+    base_nums = [v for v in data[si][1] if v]
+    pool_combo_list = combos_of(base_nums, k)
+    pool_set = set(pool_combo_list)
+
+    # ② 历史对碰（只看选中期之前）
+    triggers = []
+    next_periods = []
+    for i in range(si):
+        p, nums = data[i]
+        ns = {v for v in nums if v}
+        hit = any(set(c).issubset(ns) for c in pool_set)
+        if not hit:
+            continue
+        ni = i + 1
+        if ni >= si:                     # 下一期必须早于选中期
+            continue
+        np_, nn = data[ni]
+        triggers.append(p)
+        next_periods.append((np_, [v for v in nn if v]))
+
+    # ④ 下一期再拆 k 码，全局统计
     cnt = Counter()
-    for _, _, _, cs in detail:
-        for c in cs:
+    where = defaultdict(list)
+    for np_, nn in next_periods:
+        for c in combos_of(nn, k):
             cnt[c] += 1
-    return sorted(set(triggers)), cnt, detail
+            where[c].append(np_)
+
+    # ⑤ 只保留 >= 2 次
+    items = [(c, n) for c, n in cnt.most_common() if n >= 2]
+
+    target = data[si + 1] if si + 1 < len(data) else None
+    return {
+        "base": base_nums,
+        "pool": pool_combo_list,
+        "triggers": triggers,
+        "next_periods": next_periods,
+        "items": items,
+        "where": where,
+        "target": target,
+        "total": len(items),
+    }
 
 
 def render(df_data, H):
-    st.title("🎯 三中三组合池")
-    st.caption("选一期 → 20 组三号组合 → 找历史上同时出现这些组合的期 → "
-               "取它们的下一期再拆 20 组 → 汇总成表。")
+    st.title("🎯 三码组合池")
+    st.caption("选一期 → 7 个号拆成 N 组 → 历史里找包含这些组合的期 → "
+               "取它们的下一期再拆 → 统计出现 ≥2 次的组合。")
 
     # ---------- 数据 ----------
     data = []
@@ -127,80 +155,88 @@ def render(df_data, H):
         return
     st.caption(f"数据源：总数据表　共 {len(data)} 期（{data[0][0]} ~ {data[-1][0]}）")
 
-    # ---------- 一、选期 ----------
-    st.markdown("### 一、选期数")
+    # ---------- 一、参数 ----------
+    st.markdown("### 一、选期与码数")
+    c1, c2, c3 = st.columns([2, 1, 3])
     per_list = [p for p, _ in reversed(data)]
-    c1, c2 = st.columns([2, 3])
     with c1:
-        pick = st.selectbox("选一期", per_list, index=0, key="c2_period")
-    row = dict(data).get(pick, [0] * 7)
-    seed6 = [v for v in row[:6] if v]
+        pick = st.selectbox("选一期（已开奖）", per_list, index=0, key="c2_period")
     with c2:
-        st.markdown(f"该期平码：**{' '.join(f'{v:02d}' for v in seed6)}**"
-                    f"　特码：{row[6]:02d}")
-        st.markdown("20 组：" + "　".join(
-            ",".join(f"{x:02d}" for x in c))[:1] + "")
-        st.caption("20 组：" + " ｜ ".join(
-            ",".join(f"{x:02d}" for x in c) for c in combos3(seed6)))
+        k = st.selectbox("几码一组", [2, 3, 4, 5], index=1, key="c2_k")
+    with c3:
+        st.write("")
+        st.caption(f"{k} 码组合数：C(7,{k}) = {len(combos_of(list(range(1, 8)), k))}")
 
-    if st.button("▶ 生成并汇总", type="primary", key="c2_run"):
+    row = dict(data).get(pick, [0] * 7)
+    st.markdown(f"**{pick} 期 7 个号：** {' '.join(f'{v:02d}' for v in row if v)}")
+    st.caption("本池组合（前 10）：" + "　".join(
+        ",".join(f"{x:02d}" for x in c)
+        for c in combos_of([v for v in row if v], k)[:10]))
+
+    if st.button("▶ 开始计算", type="primary", key="c2_run"):
         st.session_state["c2_go"] = True
 
     if not st.session_state.get("c2_go"):
-        st.info("点「生成并汇总」开始计算")
+        st.info("点「开始计算」")
         return
 
-    with st.spinner("正在扫描历史…"):
-        trig, cnt, detail = build_pool(data, seed6)
+    with st.spinner("扫描历史…"):
+        r = analyze(data, pick, int(k))
+    if not r:
+        st.error("找不到该期")
+        return
 
-    st.markdown(f"### 二、结果概览")
-    st.markdown(f"- 触发期数：**{len(trig)}** 期")
-    st.markdown(f"- 汇总组合（去重后）：**{len(cnt)}** 组")
-    if trig:
-        st.caption("触发期（前 20）：" + "、".join(trig[:20])
-                   + ("…" if len(trig) > 20 else ""))
+    # ---------- 二、概览 ----------
+    st.markdown("### 二、结果概览")
+    st.markdown(f"- 本池组合：**{len(r['pool'])}** 组")
+    st.markdown(f"- 命中的历史触发期：**{len(r['triggers'])}** 期")
+    st.markdown(f"- 取到的下一期：**{len(r['next_periods'])}** 期")
+    st.markdown(f"- 出现 ≥2 次的组合（A 列总行数）：**{r['total']}** 组")
+    if r["triggers"]:
+        st.caption("触发期（前 15）：" + "、".join(r["triggers"][:15])
+                   + ("…" if len(r["triggers"]) > 15 else ""))
 
-    # ---------- 三、排除数字 ----------
-    st.markdown("### 三、排除数字")
-    ex_txt = st.text_input("不想出现的数字（逗号分隔，如 12,35）", "",
-                           key="c2_ex")
-    excl = {int(x) for x in re.findall(r"\d+", ex_txt)}
-    if excl:
-        st.caption("已排除： " + " ".join(f"{x:02d}" for x in sorted(excl)))
+    # ---------- 三、表格 ----------
+    st.markdown("### 三、组合统计表（按出现次数降序）")
+    if not r["items"]:
+        st.warning("没有出现 2 次及以上的组合")
+        return
 
-    items = [(c, n) for c, n in cnt.most_common()
-             if not (set(c) & excl)]
-    st.markdown(f"### 四、组合汇总表（按出现次数降序，共 {len(items)} 组）")
+    target = r["target"]
+    win = [v for v in target[1] if v] if target else []
+    rows = []
+    hit_total = 0
+    for i, (c, n) in enumerate(r["items"], 1):
+        mark = ""
+        if win:
+            got = len(set(c) & set(win))
+            if got == len(c):
+                mark = f"全中{len(c)}码"
+                hit_total += 1
+            elif got > 0:
+                mark = f"中{got}个"
+        rows.append({
+            "序": i,
+            "组合": ",".join(f"{x:02d}" for x in c),
+            "共同出现次数": n,
+            "出现在哪些下一期": "|".join(sorted(set(r["where"][c]))),
+            "本期命中": mark,
+        })
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True, height=430)
 
-    rows = [{"序": i, "组合": ",".join(f"{x:02d}" for x in c), "出现次数": n}
-            for i, (c, n) in enumerate(items, 1)]
-    df_show = pd.DataFrame(rows)
-    st.dataframe(df_show, use_container_width=True, hide_index=True, height=420)
-
-    st.download_button("📥 下载表格（CSV）",
-                       df_show.to_csv(index=False).encode("utf-8-sig"),
-                       file_name=f"三中三_{pick}.csv", mime="text/csv",
+    st.download_button("📥 下载 CSV", df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"三码组合池_{pick}.csv", mime="text/csv",
                        key="c2_dl")
 
-    # ---------- 五、中奖核对 ----------
-    st.markdown("### 五、开奖核对（三中三）")
-    z_txt = st.text_input("输入开奖号码（6 个平码，逗号分隔）", "",
-                          key="c2_win")
-    zs = [int(x) for x in re.findall(r"\d+", z_txt)][:6]
-    if len(zs) == 6:
-        pool = {c: n for c, n in items}
-        win_combos = combos3(zs)
-        hits = [(c, pool[c]) for c in win_combos if c in pool]
-        st.markdown(f"**开奖号码：{' '.join(f'{v:02d}' for v in zs)}**")
-        if hits:
-            total = sum(n for _, n in hits)
-            st.success(f"🎉 恭喜！三中三命中 **{len(hits)}** 组"
-                       f"（累计出现次数 {total}）")
-            hrows = [{"组合": ",".join(f"{x:02d}" for x in c),
-                      "出现次数": n} for c, n in sorted(hits, key=lambda t: -t[1])]
-            st.dataframe(pd.DataFrame(hrows), use_container_width=True,
-                         hide_index=True)
+    # ---------- 四、命中核对 ----------
+    if target:
+        st.markdown("### 四、下一期开奖核对")
+        st.markdown(f"**{pick} 的下一期：{target[0]} 期**　号码："
+                    f"{' '.join(f'{v:02d}' for v in win)}")
+        if hit_total:
+            st.success(f"🎉 恭喜！全中{int(k)}码的组合共 **{hit_total}** 组")
         else:
-            st.warning("本期没有命中三中三组合")
+            st.warning(f"本期没有全中{int(k)}码的组合")
     else:
-        st.caption("填满 6 个号码后自动核对")
+        st.info(f"{pick} 是最新一期，还没有下一期开奖数据")
