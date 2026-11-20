@@ -730,67 +730,76 @@ def render(df_data, H):
                 for j, a, b in _conflict))
         _sols, _banned = solve_matching(_f_up, _f_an, _req_all)
 
-        # ---------- 实际配位表（文字版） ----------
+        # ---------- 下一期位置匹配清单 ----------
         st.divider()
-        st.markdown("### 一、历史配位（逐期核对）")
-        st.caption("读法：升序第1位是当期最小的号，它落在落球顺序的第几球。")
-        _n_show = st.slider("列出最近几期", 5, 60, 12, 1, key="cv_tbl_n")
-        _lines = ["========== 历史配位表 ==========",
-                  "格式：期号 / 升序6号 / 按序6号 / 配位（升序1~6位落在按序第几球）", ""]
-        _cnt_ok = 0
-        _cnt_all = 0
-        for _p, _u, _a in list(reversed(seq))[:int(_n_show)]:
-            try:
-                _perm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
-            except Exception:
-                continue
-            _cnt_all += 1
-            _in = tuple(_perm) in set(_sols)
-            if _in:
-                _cnt_ok += 1
-            _lines.append(f"{_p}期  {'符合' if _in else '不符合'}当前约束")
-            _lines.append("　升序：" + " ".join(f"{n:02d}" for n in _u[:6]))
-            _lines.append("　按序：" + " ".join(f"{n:02d}" for n in _a[:6]))
-            _lines.append("　配位：" + " ".join(str(x) for x in _perm)
-                          + "　（依次＝升序1~6位各落在按序第几球）")
-            _lines.append("")
-        _lines.append(f"合计：{_cnt_all} 期，符合约束 {_cnt_ok} 期"
-                      f"（{_cnt_ok/_cnt_all*100 if _cnt_all else 0:.1f}%）；"
-                      f"当前合法解 {len(_sols)} 种，随机基线 "
-                      f"{len(_sols)/720*100:.1f}%")
-        _txt = "\n".join(_lines)
-        st.text_area("历史配位表", value=_txt, height=300,
-                     key="cv_pair_txt", label_visibility="collapsed")
-
-        # ---------- 待开奖配对（文字版） ----------
-        st.markdown("### 二、待开奖配对")
+        st.markdown("### 一、下一期位置匹配清单")
         _np = ""
         try:
             _np = str(int(seq[-1][0]) + 1)
         except Exception:
             _np = "下一期"
-        st.caption(f"目标期号 {_np}（上一期 {seq[-1][0]} 已开奖）")
 
-        _l2 = [f"========== {_np} 期配对预测 ==========", ""]
+        # 选一个映射作为「预测」
         if _sols:
+            from collections import Counter as _C5
+            _hf = _C5()
+            for _pp, _uu, _aa in seq:
+                try:
+                    _pm = tuple(_aa[:6].index(_uu[j - 1]) + 1 for j in range(6))
+                except Exception:
+                    continue
+                _hf[_pm] += 1
+            _pred_perm = max(_sols, key=lambda x: (_hf.get(x, 0), tuple(x)))
+            st.markdown(f"**{_np} 期**")
+            _l1 = []
             for _j in range(1, 7):
-                _cs = sorted({x[_j - 1] for x in _sols})
-                _l2.append(f"升序第{_j}位 → 可能落在：" +
-                           "、".join(f"按序第{c}球" for c in _cs) +
-                           f"（{len(_cs)} 种可能）")
-            _l2.append("")
-            _bp = sorted(_sols)[0]
-            _l2.append("最推荐的一种配对：")
-            for _j in range(1, 7):
-                _l2.append(f"　升序第{_j}位 → 按序第{_bp[_j-1]}球")
-            _l2.append("")
-            _l2.append(f"说明：当前共 {len(_sols)} 种合法配对，"
-                       f"每种可能性约 {1/len(_sols)*100:.1f}%。")
+                _l1.append(f"　升序第{_j}位 → 按序第{_pred_perm[_j-1]}球")
+            st.text_area("下一期清单", value="\n".join(_l1), height=190,
+                         key="cv_next_list", label_visibility="collapsed")
+            st.caption(f"（该映射在历史上出现过 {_hf.get(_pred_perm, 0)} 次；"
+                       f"当前约束下共 {len(_sols)} 种可行映射）")
         else:
-            _l2.append("当前条件没有合法配对，请放宽约束。")
-        _txt2 = "\n".join(_l2)
-        st.text_area("待开奖配对", value=_txt2, height=260,
-                     key="cv_next_txt", label_visibility="collapsed")
+            st.warning("当前约束没有可行映射，请放宽条件")
+            _pred_perm = None
+
+        # ---------- 历史匹配清单 ----------
+        st.markdown("### 二、历史匹配清单（逐期核对）")
+        if _pred_perm is not None:
+            _hc1, _hc2 = st.columns([2, 1])
+            with _hc1:
+                _start_p = st.selectbox("从哪一期开始往前看",
+                                        [x[0] for x in reversed(seq)][:300],
+                                        index=0, key="cv_hist_p")
+            with _hc2:
+                _cnt_n = st.slider("看几期", 5, 100, 20, 5, key="cv_hist_n")
+
+            _idx0 = [x[0] for x in seq].index(_start_p)
+            _l2 = [f"预测映射：{' '.join(str(x) for x in _pred_perm)}"
+                   f"（升序1~6位对应按序第几球）", ""]
+            _tot_hit = 0
+            _n = 0
+            _full = 0
+            for _k in range(_idx0, max(-1, _idx0 - int(_cnt_n)), -1):
+                _p, _u, _a = seq[_k]
+                try:
+                    _pm = [_a[:6].index(_u[j]) + 1 for j in range(6)]
+                except Exception:
+                    continue
+                _h = sum(1 for j in range(6) if _pm[j] == _pred_perm[j])
+                _tot_hit += _h
+                _n += 1
+                if _h == 6:
+                    _full += 1
+                _l2.append(f"{_p}期　实际：{' '.join(str(x) for x in _pm)}"
+                           f"　对上 {_h}/6")
+            _avg = _tot_hit / _n if _n else 0
+            _l2.append("")
+            _l2.append(f"合计 {_n} 期：平均对上 {_avg:.2f}/6（随机 1.00/6）；"
+                       f"6 位全对 {_full} 期")
+            st.text_area("历史匹配清单", value="\n".join(_l2), height=340,
+                         key="cv_hist_list", label_visibility="collapsed")
+            st.caption("「实际」= 该期升序1~6位分别落在按序第几球；"
+                       "「对上 X/6」= 与预测映射相同的位数。")
 
         if _sols is not None:
             st.divider()
