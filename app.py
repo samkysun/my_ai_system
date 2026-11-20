@@ -73,10 +73,25 @@ div[data-testid="stDataFrame"] * {
 
 
 st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
-st.markdown(GLOBAL_RESULT_CSS, unsafe_allow_html=True)
+
+
+def _inject_css(css, key=""):
+    """优先用 st.html（1.33+），旧版回退 markdown；两者都不炸页面"""
+    try:
+        st.html(css)
+        return
+    except Exception:
+        pass
+    try:
+        st.markdown(css, unsafe_allow_html=True)
+    except Exception:
+        pass
+
+
+_inject_css(GLOBAL_RESULT_CSS)
 
 # 号码球样式（原来只用了类名没有定义，补上）
-st.markdown("""
+_BALL_CSS = """
 <style>
 .ball-container{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 4px 0}
 .ball{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;
@@ -85,7 +100,8 @@ st.markdown("""
 .ball-blue{background:linear-gradient(145deg,#3b82f6,#1d4ed8)}
 .ball-green{background:linear-gradient(145deg,#22c55e,#15803d)}
 </style>
-""", unsafe_allow_html=True)
+"""
+_inject_css(_BALL_CSS)
 
 EXCEL_FILE = "总数据.xlsx"
 SHEET_NAME = "总数据表"
@@ -4415,6 +4431,9 @@ def login_page():
                     st.rerun()
                 else:
                     st.error(msg)
+
+
+_APP_BUILD = "v2026-11-20-16d"
 
 
 def main_app():
