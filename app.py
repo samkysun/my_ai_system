@@ -2389,11 +2389,69 @@ def _pred_gh_write(data, sha, msg="推演存档更新"):
         return False
 
 
+def _sup_rows(table, order=None):
+    """通用：读 Supabase 表；失败返回 None"""
+    client = get_supabase_client()
+    if not client:
+        return None
+    try:
+        q = client.table(table).select("*")
+        if order:
+            q = q.order(order, desc=False)
+        return q.execute().data or []
+    except Exception:
+        return None
+
+
+def _pred_sup_read():
+    rows = _sup_rows("ai_pred_archive", "ts")
+    if rows is None:
+        return None
+    out = {}
+    for r in rows:
+        _nums = r.get("nums") or []
+        if isinstance(_nums, str):
+            _nums = [int(x) for x in _nums.split(",") if str(x).strip().isdigit()]
+        k = f"{r.get('period')}|{r.get('ball')}|{r.get('order_type') or ''}"
+        out[k] = {"period": r.get("period"), "ball": r.get("ball"),
+                  "order": r.get("order_type") or "",
+                  "nums": [int(x) for x in _nums], "ts": r.get("ts") or "",
+                  "sig": r.get("sig") or "", "psig": r.get("psig") or "",
+                  "history": r.get("history") or []}
+    return out
+
+
+def _pred_sup_write(data):
+    """整表重写：清空再批量插入"""
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        client.table("ai_pred_archive").delete().neq("period", "__none__").execute()
+        rows = []
+        for v in data.values():
+            rows.append({
+                "period": str(v.get("period")), "ball": str(v.get("ball")),
+                "order_type": str(v.get("order") or ""),
+                "nums": v.get("nums") or [], "ts": str(v.get("ts") or ""),
+                "sig": str(v.get("sig") or ""), "psig": str(v.get("psig") or ""),
+                "history": v.get("history") or [],
+            })
+        for i in range(0, len(rows), 50):
+            client.table("ai_pred_archive").insert(rows[i:i + 50]).execute()
+        return True
+    except Exception:
+        return False
+
+
 def _pred_load_all():
-    """全部存档 {f"{period}|{ball}": {"period","ball","order","nums","ts"}}"""
+    """全部存档；优先 Supabase，失败回退 GitHub / 本地 sqlite"""
     if "_pred_cache" not in st.session_state:
-        data, sha = _pred_gh_read()
-        if data is None:                      # GitHub 不可用 -> 本地 sqlite 兜底
+        data = _pred_sup_read()
+        sha = None
+        if data is None:
+            data, sha = _pred_gh_read()
+        if data is None:                      # 都不可用 -> 本地 sqlite 兜底
             data = {}
             try:
                 conn = sqlite3.connect(_pred_db_path(), timeout=10)
@@ -2422,6 +2480,8 @@ def _pred_load_all():
 
 def _pred_persist(msg="推演存档更新"):
     data = st.session_state.get("_pred_cache") or {}
+    if _pred_sup_write(data):
+        return True
     ok = _pred_gh_write(data, st.session_state.get("_pred_sha"), msg)
     if not ok:                                # 兜底写本地
         try:
@@ -2496,7 +2556,32 @@ _AUDIT_FILE = "_audit_log.json"
 _AUDIT_CACHE = 200
 
 
+def _audit_sup_read():
+    rows = _sup_rows("ai_audit_log", "id")
+    if rows is None:
+        return None
+    return [{"ts": r.get("ts", ""), "user": r.get("user", ""),
+             "action": r.get("action", ""), "detail": r.get("detail", ""),
+             "sig": r.get("sig", "")} for r in rows]
+
+
+def _audit_sup_append(rec):
+    client = get_supabase_client()
+    if not client:
+        return False
+    try:
+        client.table("ai_audit_log").insert({
+            "ts": rec["ts"], "user": rec["user"], "action": rec["action"],
+            "detail": rec["detail"], "sig": rec["sig"]}).execute()
+        return True
+    except Exception:
+        return False
+
+
 def _audit_read():
+    _rows = _audit_sup_read()
+    if _rows is not None:
+        return _rows, None
     token, repo, hdrs = _pred_gh_headers()
     if not token:
         return [], None
@@ -2531,6 +2616,8 @@ def _audit_append(action, detail=""):
         rec["sig"] = _pred_sig({"period": rec["ts"], "ball": rec["user"],
                                 "order": rec["action"], "nums": [],
                                 "ts": rec["detail"]}, prev)
+        if _audit_sup_append(rec):
+            return True
         logs.append(rec)
         logs = logs[-500:]
         body = {"message": f"审计：{rec['user']} {action}",
