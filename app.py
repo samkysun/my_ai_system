@@ -634,6 +634,27 @@ def kill_to_numbers(item, amap):
     # 大小肖
     if it.endswith("肖") and it[:-1] in ("大", "小"):
         return [n for n, a in amap.items() if a.get("大小肖") == it]
+    # 尾五行：木尾 / 火尾 / 金尾
+    if it.endswith("尾") and it[:-1] in _WX_CHARS:
+        return [n for n, a in amap.items() if a.get("尾五行") == it[:-1]]
+    # 头数：单头 / 双头
+    if it in ("单头", "双头"):
+        return [n for n, a in amap.items() if a.get("头数") == it]
+    # 单双：单数 / 双数
+    if it in ("单数", "双数"):
+        return [n for n, a in amap.items() if a.get("单双") == it]
+    # 单双组合：双双 / 单双 / 双单 / 单单
+    if it in ("双双", "单双", "双单", "单单"):
+        return [n for n, a in amap.items() if a.get("单双组合") == it]
+    # 阴阳 / 家野 / 天地 / 吉凶 / 男女 / 四宝
+    for _col, _vals in (("阴阳", ("阴", "阳")),
+                        ("家野", ("家", "野")),
+                        ("天地", ("天", "地")),
+                        ("吉凶", ("吉", "凶")),
+                        ("男女", ("男", "女")),
+                        ("四宝", ("书", "棋", "画", "琴"))):
+        if it in _vals:
+            return [n for n, a in amap.items() if a.get(_col) == it]
     # 波色单双
     if "波" in it:
         return [n for n, a in amap.items() if a.get("波单双") == it]
@@ -751,42 +772,50 @@ def _render_kill_group(label, blocks, amap, range_label=None):
         return
     st.caption(f"本球位号码区间：{_lo}~{_hi}（只在此区间内计算）")
     kill_set = set(num_kill.keys())
+    _span = _hi - _lo + 1
     keep_nums = [n for n in range(_lo, _hi + 1) if n not in kill_set]
-    if len(kill_set) >= 49:
-        for thr in range(2, 11):
+    thr_used = 1
+    if len(kill_set) >= _span:
+        for thr in range(2, max(3, max(num_kill.values()) + 1)):
             cand = [n for n in range(_lo, _hi + 1) if num_kill.get(n, 0) < thr]
             if cand:
                 keep_nums = cand
-                st.info(f"本组把 49 个号全杀光了 → 自动放宽："
-                        f"只杀出现 {thr} 次及以上的，保留 {len(cand)} 个号码")
+                thr_used = thr
+                st.info(f"本区间（{_lo}~{_hi}）的 {_span} 个号全被杀光了 → "
+                        f"自动放宽：只杀出现 {thr} 次及以上的，"
+                        f"保留 {len(cand)} 个号码")
                 break
+    kill_final = [n for n in kill_set if n not in keep_nums]
 
-    _sorted = sorted(num_kill.items(), key=lambda x: (-x[1], x[0]))
+    _sorted = sorted(((n, num_kill[n]) for n in kill_final),
+                     key=lambda x: (-x[1], x[0]))
     rows_n = [{"号码": f"{n:02d}", "被杀次数": c,
-               "是否矛盾": "⚠️" if n in num_conf else "",
                "被这些条件杀": "、".join(num_src[n])} for n, c in _sorted]
-    st.dataframe(pd.DataFrame(rows_n), use_container_width=True,
-                 hide_index=True, height=300)
+    if rows_n:
+        st.dataframe(pd.DataFrame(rows_n), use_container_width=True,
+                     hide_index=True, height=280)
 
     strong = [(n, c) for n, c in _sorted if c >= 2]
-    risky = []
     if strong:
-        st.error("⛔ 本组必杀号码（多次触犯且无矛盾）：" +
+        st.error("⛔ 本组必杀号码（多次触犯）：" +
                  "　".join(f"{n:02d}({c}次)" for n, c in strong))
-    if risky:
-        st.warning("⚠️ 高频但存在矛盾（上杀下留，慎杀）：" +
-                   "　".join(f"{n:02d}({c}次)" for n, c in risky))
+    elif _sorted:
+        st.warning("本组只有单次杀号（无多次触犯），参考价值一般")
+
     keep = [f"{n:02d}" for n in keep_nums]
     if keep:
-        st.success(f"保留号码（{len(keep)} 个）：" + " ".join(keep))
+        st.success(f"✅ 本组保留号码（{len(keep)} 个）：" + " ".join(keep))
+    else:
+        st.warning("本区间没有保留号码")
+
     st.download_button(f"📥 下载 {label} 杀号清单",
-                       pd.DataFrame(rows_n).to_csv(index=False).encode("utf-8-sig"),
+                       pd.DataFrame(rows_n or [{"号码": "无", "被杀次数": 0,
+                                                "被这些条件杀": ""}]
+                                    ).to_csv(index=False).encode("utf-8-sig"),
                        file_name=f"杀号_{label}.csv", mime="text/csv",
                        key=f"kill_dl_{label}")
     if unmapped:
         st.caption("未能翻译的条件：" + "、".join(unmapped))
-
-
 def _multi_struct_text(blocks):
     """只输出标题信息 + 上/杀括号，不含基准行与「下」"""
     groups = {}
