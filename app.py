@@ -792,39 +792,56 @@ def _multi_ai_ui():
 
         if _go:
             # 先做本地解析 + 杀号清单（不依赖 AI）
+            _items = _board_sync_load() or []
             _txt = _raw
+            _merged_mode = False
             if not _txt.strip():
-                _board = _board_sync_load() or []
-                _txt = "\n\n".join(e.get("text", "") for e in _board
-                                    if "基准行排列" in (e.get("text") or ""))
+                if not _items:
+                    st.warning("看板里没有内容，也没有粘贴文本")
+                else:
+                    _opts = [f"{i+1}. {e.get('source','')}｜{e.get('title','')}"
+                             for i, e in enumerate(_items)]
+                    st.markdown("**选择要分析的看板条目**")
+                    _sel = st.multiselect("（可多选；不选=全部）", _opts,
+                                          default=[], key="multi_pick")
+                    _idxs = ([int(x.split(".")[0]) - 1 for x in _sel]
+                             if _sel else list(range(len(_items))))
+                    _txt = "\n\n".join(
+                        _items[i].get("text", "") for i in _idxs
+                        if "基准行排列" in (_items[i].get("text") or ""))
+                    _merged_mode = st.radio(
+                        "分析方式", ["每个球位分开", "选中的全部合并成一份"],
+                        horizontal=True, key="multi_mode") == "选中的全部合并成一份"
+
             _blocks = _parse_multi_blocks(_txt)
             if _blocks:
                 st.markdown(f"**解析到 {len(_blocks)} 条属性报告**")
-                # 按「升/按序 + 球位」分组
                 _groups = {}
                 for b in _blocks:
                     key = f"{b['order']}{b['ball']}球"
                     _groups.setdefault(key, []).append(b)
 
-                _labels = list(_groups.keys())
-                st.caption("默认每个球位单独计算；需要合并时在下面选择。")
-                _merge = st.multiselect(
-                    "合并这些球位一起杀（可选）", _labels, default=[],
-                    key="multi_merge")
-
                 _amap = _load_attr_map()
-                if _merge:
-                    _merged_blocks = [b for k in _merge for b in _groups[k]]
-                    with st.expander("＋ 合并分析：" + " + ".join(_merge),
+                if _merged_mode:
+                    with st.expander(f"＋ 合并分析（{len(_groups)} 个球位合在一起）",
                                      expanded=True):
-                        _render_kill_group("合并_" + "_".join(_merge),
-                                           _merged_blocks, _amap)
-
-                _单独 = [k for k in _labels if k not in _merge]
-                for k in _单独:
-                    with st.expander(f"■ {k}（{len(_groups[k])} 个属性）",
-                                     expanded=True):
-                        _render_kill_group(k, _groups[k], _amap)
+                        _render_kill_group("合并", _blocks, _amap)
+                else:
+                    _labels = list(_groups.keys())
+                    _merge = st.multiselect(
+                        "或勾选几个球位合并（其余仍分开）", _labels,
+                        default=[], key="multi_merge")
+                    if _merge:
+                        _mb = [b for k in _merge for b in _groups[k]]
+                        with st.expander("＋ 合并：" + " + ".join(_merge),
+                                         expanded=True):
+                            _render_kill_group("合并_" + "_".join(_merge),
+                                               _mb, _amap)
+                    for k in [x for x in _labels if x not in _merge]:
+                        with st.expander(f"■ {k}（{len(_groups[k])} 个属性）",
+                                         expanded=True):
+                            _render_kill_group(k, _groups[k], _amap)
+            _spinner_text = "AI 综合分析中（约 10~30 秒）…"
             _spinner_text = "AI 综合分析中（约 10~30 秒）…"
             with st.spinner(_spinner_text):
                 try:
