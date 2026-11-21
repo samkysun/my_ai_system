@@ -3135,10 +3135,19 @@ def _pred_sup_write(data):
 
 
 def _pred_load_all():
-    """全部存档；优先 Supabase，失败回退 GitHub / 本地 sqlite"""
+    """全部存档；优先 Supabase，空则从 GitHub 旧文件回填"""
     if "_pred_cache" not in st.session_state:
         data = _pred_sup_read()
         sha = None
+        if data is not None and not data:
+            # Supabase 表是空的 -> 尝试用 GitHub 旧存档恢复一次
+            _gh, _gh_sha = _pred_gh_read()
+            if _gh:
+                data = _gh
+                try:
+                    _pred_sup_write(data)      # 回填到云端表
+                except Exception:
+                    pass
         if data is None:
             data, sha = _pred_gh_read()
         if data is None:                      # 都不可用 -> 本地 sqlite 兜底
@@ -3270,8 +3279,29 @@ def _audit_sup_append(rec):
 
 def _audit_read():
     _rows = _audit_sup_read()
-    if _rows is not None:
+    if _rows:
         return _rows, None
+    if _rows is not None and not _rows:
+        # 云端表空 -> 尝试从 GitHub 旧日志恢复
+        _tok, _repo, _hdrs = _pred_gh_headers()
+        if _tok:
+            try:
+                _r = requests.get(
+                    f"https://api.github.com/repos/{_repo}/contents/{_AUDIT_FILE}",
+                    headers=_hdrs, timeout=20)
+                if _r.status_code == 200:
+                    _info = _r.json()
+                    _old = json.loads(base64.b64decode(_info["content"]).decode("utf-8"))
+                    if _old:
+                        for _rec in _old:
+                            try:
+                                _audit_sup_append(_rec)
+                            except Exception:
+                                pass
+                        return _old, None
+            except Exception:
+                pass
+        return [], None
     token, repo, hdrs = _pred_gh_headers()
     if not token:
         return [], None
