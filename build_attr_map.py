@@ -43,6 +43,9 @@ for r in rows[2:]:
         for k, c1 in COLS.items():
             idx = base + c1
             attrs[k] = r[idx].strip() if idx < len(r) else ""
+        # 尾数与合数直接用号码算，避免个别行错位
+        attrs["尾数"] = str(num % 10)
+        attrs["数字合"] = f"{sum(int(c) for c in str(num)):02d}合"
         old = best.get(num)
         if old is None or period > old[0]:
             best[num] = (period, attrs)
