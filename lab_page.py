@@ -233,10 +233,12 @@ def _exp_pool(loader):
 # 实验 C：门数三三组合（3 期 × 3 位置）
 # =====================================================================
 def _exp_gate3(loader):
-    st.markdown("#### 实验 C：门数组合（多期 × 3 位置）")
-    st.caption("把最近 N 期的指定 3 个位置，按「门数」（十位数字 0~4）拼成数字串，"
-               "回历史查相同形态，看下一期这 3 个位置的门数。")
+    st.markdown("#### 实验 C：数字形态组合（门数 / 尾数）")
+    st.caption("把最近 N 期的指定 3 个位置，按「门数」或「尾数」拼成数字串，"
+               "回历史查相同形态，看下一期这 3 个位置的对应属性。")
 
+    _en = st.radio("编码方式", ["门数（十位）", "尾数（个位）"],
+                    horizontal=True, key="lab_c_enc")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         ps = st.multiselect("3 个位置", list(range(1, 8)),
@@ -266,8 +268,11 @@ def _exp_gate3(loader):
         else:
             idx = len(data) - 1
 
+        _is_tail = ("尾数" in _en)
+        _unit = "尾数" if _is_tail else "门数"
+
         def gate(n):
-            return str(n // 10)
+            return str(n % 10) if _is_tail else str(n // 10)
 
         def pat_at(i):
             return "".join(gate(data[i][1][b - 1]) for b in sorted(ps))
@@ -276,14 +281,14 @@ def _exp_gate3(loader):
             st.warning("历史不足")
             return
         pattern = "".join(pat_at(idx - k) for k in range(nper))
-        st.markdown(f"**基准形态（{nper} 期 × 3 位 = {len(pattern)} 位）**："
+        st.markdown(f"**基准形态（{nper} 期 × 3 位，{_unit} = {len(pattern)} 位）**："
                     f"`{pattern}`")
         for k in range(nper):
             _pp, _nn = data[idx - k]
             _vals = [f"{_nn[b - 1]:02d}" for b in sorted(ps)]
             _gs = [gate(_nn[b - 1]) for b in sorted(ps)]
             st.caption(f"  {_pp} 期　位置{sorted(ps)}：{' '.join(_vals)}"
-                       f"　→ 门数 {''.join(_gs)}")
+                       f"　→ {_unit} {''.join(_gs)}")
 
         matches = []
         for i in range(nper - 1, min(idx, len(data) - 1)):
@@ -291,7 +296,7 @@ def _exp_gate3(loader):
                 matches.append(i)
         st.metric("历史出现次数", len(matches))
         if not matches:
-            st.info("历史上没有出现相同形态（可减少对比期数再试）")
+            st.info("历史上没有出现相同形态（可减少对比期数或换尾数再试）")
             return
 
         from collections import Counter
@@ -303,10 +308,10 @@ def _exp_gate3(loader):
             vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
             rows.append({"出现期号": data[i][0], "下一期": data[i + 1][0],
                          "下一期号码": " ".join(vals),
-                         "下一期门数": npat})
-        st.markdown("**下一期门数分布**")
+                         f"下一期{_unit}": npat})
+        st.markdown(f"**下一期{_unit}分布**")
         st.dataframe(pd.DataFrame(
-            [{"门数组合": k, "次数": v, "占比": f"{v/len(matches)*100:.1f}%"}
+            [{f"{_unit}组合": k, "次数": v, "占比": f"{v/len(matches)*100:.1f}%"}
              for k, v in nxt.most_common()]),
             use_container_width=True, hide_index=True)
         st.markdown("**明细**")
@@ -317,7 +322,7 @@ def _exp_gate3(loader):
                 f"历史出现 {len(matches)} 次\n"
                 + "\n".join(f"{k}：{v} 次（{v/len(matches)*100:.1f}%）"
                             for k, v in nxt.most_common()))
-        _save(loader, f"实验C 门数 {sorted(ps)} {nper}期 {pattern}", _txt)
+        _save(loader, f"实验C {_unit} {sorted(ps)} {nper}期 {pattern}", _txt)
 
 
 # =====================================================================
