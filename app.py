@@ -938,7 +938,15 @@ def _multi_ai_ui():
             else:
                 st.info("看板为空，可改用「手动粘贴」")
 
+        if _txt.strip():
+            st.session_state["_multi_text"] = _txt
         _blocks = _parse_multi_blocks(_txt)
+        if not _blocks:
+            # 本次没内容 -> 用上次解析成功的文本，保证控件不消失
+            _cached = st.session_state.get("_multi_text", "")
+            if _cached:
+                _blocks = _parse_multi_blocks(_cached)
+                _txt = _cached
         if not _blocks:
             st.warning("没有解析到报告内容")
             return
@@ -951,13 +959,13 @@ def _multi_ai_ui():
         st.caption(f"已解析 {len(_blocks)} 条属性报告，分布在 {len(_labels)} 个球位")
 
         # ---- 设置区（常显、紧凑） ----
-        _s1, _s2 = st.columns([1, 2])
+        _s1, _s2 = st.columns([1, 3])
         with _s1:
             _dom = st.selectbox("★ 主导球位（决定取值区间）", _labels,
                                 index=0, key="multi_dom")
         with _s2:
             _merge_sel = st.multiselect(
-                "辅助球位（勾选后并入主导一起算）", _labels, default=[],
+                "辅助球位（可多选，并入主导一起算）", _labels, default=[],
                 key="multi_merge")
         _merge = [k for k in _merge_sel if k != _dom]
         _dlo, _dhi = _range_of(_dom)
