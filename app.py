@@ -909,82 +909,74 @@ def _multi_ai_analyze(question, raw_text=None, evidence=""):
 
 
 def _multi_ai_ui():
-    """多维报告分析入口（控件常显、自动解析）"""
+    """多维报告分析：设置在上，结果分三个标签页"""
     with st.expander("📊 多维报告分析（触发行 → 杀号清单）", expanded=True):
         st.caption("规则：只看触发行；有（杀XXX）只认括号内，否则杀「上」；"
-                   "不同球位默认分开，可勾选合并并指定主导区间。")
+                   "不同球位默认分开。")
 
         _items = _board_sync_load() or []
-        _src = st.radio("数据来源", ["自动读看板", "手动粘贴"], horizontal=True,
-                        key="multi_src")
+        _c1, _c2 = st.columns([1, 2])
+        with _c1:
+            _src = st.radio("数据来源", ["自动读看板", "手动粘贴"],
+                            horizontal=True, key="multi_src")
         _txt = ""
-        if _src == "手动粘贴":
-            _txt = st.text_area("把报告粘进来", height=160, key="multi_raw",
-                                placeholder="=========2026124期升序-生肖2球=======…")
-        else:
-            if not _items:
-                st.info("看板里还没有内容，请先从其它页面推送，或改用「手动粘贴」。")
-            else:
+        with _c2:
+            if _src == "手动粘贴":
+                _txt = st.text_area("把报告粘进来", height=90, key="multi_raw",
+                                    label_visibility="collapsed",
+                                    placeholder="=========2026124期升序-生肖2球=======…")
+            elif _items:
                 _opts = [f"{i+1}. {e.get('source','')}｜{e.get('title','')}"
                          for i, e in enumerate(_items)]
-                _sel = st.multiselect(
-                    "选择看板条目（不选=全部）", _opts, default=[],
-                    key="multi_pick")
+                _sel = st.multiselect("选择看板条目（不选=全部）", _opts,
+                                      default=[], key="multi_pick")
                 _idxs = ([int(x.split(".")[0]) - 1 for x in _sel]
                          if _sel else list(range(len(_items))))
                 _txt = "\n\n".join(
                     _items[i].get("text", "") for i in _idxs
                     if "基准行排列" in (_items[i].get("text") or ""))
+            else:
+                st.info("看板为空，可改用「手动粘贴」")
 
         _blocks = _parse_multi_blocks(_txt)
         if not _blocks:
-            st.warning("没有解析到报告内容（需要包含【基准行排列】和触发行）")
+            st.warning("没有解析到报告内容")
             return
 
-        st.success(f"解析到 {len(_blocks)} 条属性报告")
         _groups = {}
         for b in _blocks:
             key = f"{b['order']}第{b['ball']}球"
             _groups.setdefault(key, []).append(b)
         _labels = list(_groups.keys())
+        st.caption(f"已解析 {len(_blocks)} 条属性报告，分布在 {len(_labels)} 个球位")
 
-        st.markdown("**① 合并设置（主导 + 辅助）**")
-        _dom = st.selectbox(
-            "★ 主导球位（决定取值区间）", _labels, index=0, key="multi_dom",
-            help="合并计算时，所有号码都按这个球位的区间取值")
-        _dlo, _dhi = _range_of(_dom)
-        _merge_sel = st.multiselect(
-            "辅助球位（勾选后其杀号条件并入主导一起算）", _labels,
-            default=[], key="multi_merge")
+        # ---- 设置区（常显、紧凑） ----
+        _s1, _s2 = st.columns([1, 2])
+        with _s1:
+            _dom = st.selectbox("★ 主导球位（决定取值区间）", _labels,
+                                index=0, key="multi_dom")
+        with _s2:
+            _merge_sel = st.multiselect(
+                "辅助球位（勾选后并入主导一起算）", _labels, default=[],
+                key="multi_merge")
         _merge = [k for k in _merge_sel if k != _dom]
-        st.info(f"主导：**{_dom}**（取值区间 {_dlo}~{_dhi}）"
-                + (f"　＋　辅助：{'、'.join(_merge)}" if _merge else
-                   "　（未选辅助 → 各球位单独计算）")
-                + (f"\n→ 合并后只在 **{_dlo}~{_dhi}** 里取号" if _merge else ""))
+        _dlo, _dhi = _range_of(_dom)
+        if _merge:
+            st.info(f"主导 {_dom}（区间 {_dlo}~{_dhi}）＋ 辅助 "
+                    f"{'、'.join(_merge)} → 合并后只在 {_dlo}~{_dhi} 取号")
+        else:
+            st.caption(f"当前每个球位单独计算；主导区间 {_dlo}~{_dhi}")
 
-        # ② 佐证资料（可多选，参与计算）
-        st.markdown("**② 佐证资料（可多选，参与计算）**")
+        # ---- 佐证 ----
         _ev_items = []
         if _items:
             _ev_opts = [f"{i+1}. {e.get('source','')}｜{e.get('title','')}"
                         for i, e in enumerate(_items)]
-            _ev_sel = st.multiselect(
-                "从看板里选佐证（例如深度联动的各球位结果，可多套）",
-                _ev_opts, default=[], key="multi_ev")
+            _ev_sel = st.multiselect("佐证资料（可多选，参与计算）", _ev_opts,
+                                     default=[], key="multi_ev")
             _ev_items = [_items[int(x.split(".")[0]) - 1] for x in _ev_sel]
-            if _ev_items:
-                st.caption("已选佐证：" + "；".join(
-                    f"{e.get('title','')}" for e in _ev_items[:8])
-                    + ("…" if len(_ev_items) > 8 else ""))
-        _ev_text = "\n\n".join(
-            f"【{e.get('title','')}】\n{(e.get('text') or '')[:1500]}"
-            for e in _ev_items)
-
-        # 佐证里的「杀」也并入筛选条件
         _use_ev = st.checkbox("把佐证里的「杀」也并入筛选条件", value=True,
-                              key="multi_use_ev",
-                              help="例如 杀(鼠,牛,虎)、杀(1,2,4,6)、杀(1门,4门) "
-                                   "都会一起参与计算")
+                              key="multi_use_ev")
         _ev_blocks = []
         if _use_ev:
             for _e in _ev_items:
@@ -992,8 +984,6 @@ def _multi_ai_ui():
                     _ev_blocks += _parse_multi_blocks(_e.get("text") or "")
                 except Exception:
                     pass
-            if _ev_blocks:
-                st.caption(f"佐证杀号条件：{len(_ev_blocks)} 条（已并入计算）")
 
         def _ev_for(order, ball):
             return [b for b in _ev_blocks
@@ -1001,75 +991,79 @@ def _multi_ai_ui():
 
         _amap = _load_attr_map()
         if not _amap:
-            st.error("缺少 _attr_map.csv，无法把杀号翻译成号码")
+            st.error("缺少 _attr_map.csv")
 
-        # 合并结果先显示
-        if _merge and _amap:
-            st.markdown("**③ 合并计算结果**")
-            _allk = [_dom] + _merge
-            _mb = [b for k in _allk for b in _groups.get(k, [])]
-            for _k in _allk:
-                _m = re.match(r"(升序|按序)第?(\d)球", _k)
-                if _m:
-                    _add = _ev_for(_m.group(1), _m.group(2))
-                    if _add:
-                        _mb = _mb + _add
-            with st.expander("＋ 合并：" + " + ".join(_allk) +
-                             f"（取值区间 {_dlo}~{_dhi}）", expanded=True):
-                _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
-                                   range_label=_dom)
+        # ---- 三个标签页放结果 ----
+        _t1, _t2, _t3 = st.tabs(["① 单套核算", "② 合并计算", "③ AI 分析"])
 
-        # 单独结果
-        _单独 = [k for k in _labels
-                 if k not in _merge and not (_merge and k == _dom)]
-        if _单独:
-            st.markdown("**③ 单独计算结果**")
-            for k in _单独:
+        with _t1:
+            st.caption(f"{len(_labels)} 个球位，点标题展开查看")
+            for k in _labels:
                 _klo, _khi = _range_of(k)
                 with st.expander(f"■ {k}（{len(_groups[k])} 个属性，"
-                                 f"区间 {_klo}~{_khi}）", expanded=True):
+                                 f"区间 {_klo}~{_khi}）", expanded=False):
                     _kg = list(_groups[k])
                     _km = re.match(r"(升序|按序)第?(\d)球", k)
                     if _km:
                         _kg += _ev_for(_km.group(1), _km.group(2))
                     _render_kill_group(k, _kg, _amap)
 
-        # 解析详情
-        with st.expander("🔍 解析详情（排查用）", expanded=False):
-            _dbgrows = []
-            for b in _blocks:
-                _ups = "、".join(_clean_kill(tg.get("up", ""))
-                                 for tg in b["triggers"]) or "—"
-                _kls = "、".join(tg.get("kill", "") for tg in b["triggers"]) or "—"
-                _dbgrows.append({"属性": b["attr"], "球位": b["ball"],
-                                 "触发行": len(b["triggers"]),
-                                 "上值": _ups, "杀括号": _kls})
-            st.dataframe(pd.DataFrame(_dbgrows), use_container_width=True,
-                         hide_index=True)
+        with _t2:
+            if not _merge:
+                st.info("在上方「辅助球位」里勾选球位后，这里显示合并结果")
+            elif not _amap:
+                st.info("缺少属性对照表")
+            else:
+                _allk = [_dom] + _merge
+                _mb = [b for k in _allk for b in _groups.get(k, [])]
+                for _k in _allk:
+                    _m = re.match(r"(升序|按序)第?(\d)球", _k)
+                    if _m:
+                        _mb += _ev_for(_m.group(1), _m.group(2))
+                with st.expander("＋ 合并：" + " + ".join(_allk) +
+                                 f"（区间 {_dlo}~{_dhi}）", expanded=True):
+                    _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
+                                       range_label=_dom)
 
-        # AI 解读
-        st.markdown("**④ AI 解读（可选）**")
-        _q = st.text_area(
-            "你想问什么",
-            value="按球位分别汇总：每个属性要杀什么、每个球位的必杀号码与保留号码。",
-            height=90, key="multi_q")
-        if st.button("▶ 让 AI 解读", type="primary", key="multi_go"):
-            with st.spinner("AI 分析中（约 10~30 秒）…"):
-                try:
-                    _ans, _err = _multi_ai_analyze(_q, _txt, _ev_text)
-                except Exception as _e:
-                    _ans, _err = None, f"{type(_e).__name__}: {_e}"
-            if _err:
-                st.warning(_err)
-            elif _ans:
-                st.session_state["multi_ai_ans"] = _ans
-        _ans = st.session_state.get("multi_ai_ans")
-        if _ans:
-            st.code(_ans, language=None)
-            if st.button("📌 结果放回看板", key="multi_ai_save"):
-                _board_add("多维分析AI", f"综合解读 {datetime.now():%m-%d %H:%M}",
-                           _ans)
-                st.success("已放回看板")
+        with _t3:
+            st.caption("把结果交给 AI 做文字解读（可选）")
+            _q = st.text_area(
+                "你想问什么",
+                value="按球位汇总：每个属性要杀什么、必杀号码、保留号码。",
+                height=80, key="multi_q")
+            if st.button("▶ 让 AI 解读", type="primary", key="multi_go"):
+                _ev_text = "\n\n".join(
+                    f"【{e.get('title','')}】\n{(e.get('text') or '')[:1200]}"
+                    for e in _ev_items)
+                with st.spinner("AI 分析中…"):
+                    try:
+                        _ans, _err = _multi_ai_analyze(_q, _txt, _ev_text)
+                    except Exception as _e:
+                        _ans, _err = None, f"{type(_e).__name__}: {_e}"
+                if _err:
+                    st.warning(_err)
+                elif _ans:
+                    st.session_state["multi_ai_ans"] = _ans
+            _ans = st.session_state.get("multi_ai_ans")
+            if _ans:
+                st.code(_ans, language=None)
+                if st.button("📌 结果放回看板", key="multi_ai_save"):
+                    _board_add("多维分析AI",
+                               f"综合解读 {datetime.now():%m-%d %H:%M}", _ans)
+                    st.success("已放回看板")
+
+        with st.expander("🔍 解析详情（排查用）", expanded=False):
+            _rows_d = []
+            for b in _blocks:
+                _rows_d.append({
+                    "属性": b["attr"], "球位": b["ball"],
+                    "触发行": len(b["triggers"]),
+                    "上值": "、".join(_clean_kill(tg.get("up", ""))
+                                     for tg in b["triggers"]) or "—",
+                    "杀括号": "、".join(tg.get("kill", "")
+                                       for tg in b["triggers"]) or "—"})
+            st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
+                         hide_index=True)
 
 
 def _board_ai_ui():
