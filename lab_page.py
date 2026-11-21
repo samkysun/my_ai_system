@@ -233,13 +233,13 @@ def _exp_pool(loader):
 # 实验 C：门数三三组合（3 期 × 3 位置）
 # =====================================================================
 def _exp_gate3(loader):
-    st.markdown("#### 实验 C：数字形态组合（门数 / 尾数）")
-    st.caption("把最近 N 期的指定若干位置，按「门数」或「尾数」拼成数字串，"
-               "回历史查相似形态，看下一期这些位置的对应属性。")
+    st.markdown("#### 实验 C：数字形态组合（严格完全一致）")
+    st.caption("把最近 N 期的指定位置按「门数」或「尾数」拼成数字串，"
+               "要求历史中完全相同，统计下一期这些位置的形态。")
 
     _en = st.radio("编码方式", ["门数（十位）", "尾数（个位）"],
-                    horizontal=True, key="lab_c_enc")
-    r1c1, r1c2, r1c3 = st.columns(3)
+                   horizontal=True, key="lab_c_enc")
+    r1c1, r1c2, r1c3, r1c4 = st.columns(4)
     with r1c1:
         npos = st.slider("球位数量", 2, 6, 3, 1, key="lab_c_npos")
     with r1c2:
@@ -247,17 +247,9 @@ def _exp_gate3(loader):
                             default=list(range(1, int(npos) + 1)),
                             max_selections=int(npos), key="lab_c_pos")
     with r1c3:
-        nper = st.slider("对比期数", 2, 7, 3, 1, key="lab_c_nper")
-    r2c1, r2c2, r2c3 = st.columns(3)
-    with r2c1:
-        _len = int(npos) * int(nper)
-        _tol = st.slider("容错位数", 0, max(1, _len - 1),
-                         min(2, max(1, _len - 1)), 1, key="lab_c_tol",
-                         help="0 = 完全一致（样本少）；越大样本越多但越宽松")
-    with r2c2:
         period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
-    with r2c3:
-        show_n = st.number_input("显示条数", 5, 50, 10, 5, key="lab_c_show")
+    with r1c4:
+        show_n = st.number_input("明细条数", 5, 50, 10, 5, key="lab_c_show")
 
     if st.button("▶ 运行实验 C", key="lab_c_run"):
         if len(ps) != int(npos):
@@ -285,60 +277,59 @@ def _exp_gate3(loader):
         def pat_at(i):
             return "".join(gate(data[i][1][b - 1]) for b in sorted(ps))
 
-        if idx < nper - 1:
-            st.warning("历史不足")
-            return
-        pattern = "".join(pat_at(idx - k) for k in range(nper))
-        st.markdown(f"**基准形态（{nper} 期 × 3 位，{_unit} = {len(pattern)} 位，容错 {int(_tol)} 位）**："
-                    f"`{pattern}`")
-        for k in range(nper):
-            _pp, _nn = data[idx - k]
-            _vals = [f"{_nn[b - 1]:02d}" for b in sorted(ps)]
-            _gs = [gate(_nn[b - 1]) for b in sorted(ps)]
-            st.caption(f"  {_pp} 期　位置{sorted(ps)}：{' '.join(_vals)}"
-                       f"　→ {_unit} {''.join(_gs)}")
-
-        def _dist(a, b):
-            return sum(1 for x, y in zip(a, b) if x != y)
-
-        matches = []
-        _dists = {}
-        for i in range(nper - 1, min(idx, len(data) - 1)):
-            _p = "".join(pat_at(i - k) for k in range(nper))
-            _d = _dist(_p, pattern)
-            if _d <= int(_tol):
-                matches.append(i)
-                _dists[i] = _d
-        st.metric("历史出现次数", len(matches))
-        if not matches:
-            st.info("历史上没有出现相同形态（可减少对比期数或换尾数再试）")
-            return
-
         from collections import Counter
-        nxt = Counter()
-        rows = []
-        for i in matches:
-            npat = pat_at(i + 1)
-            nxt[npat] += 1
-            vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
-            rows.append({"出现期号": data[i][0], "差异": _dists.get(i, 0),
-                         "下一期": data[i + 1][0],
-                         "下一期号码": " ".join(vals),
-                         f"下一期{_unit}": npat})
-        st.markdown(f"**下一期{_unit}分布**")
-        st.dataframe(pd.DataFrame(
-            [{f"{_unit}组合": k, "次数": v, "占比": f"{v/len(matches)*100:.1f}%"}
-             for k, v in nxt.most_common()]),
-            use_container_width=True, hide_index=True)
-        st.markdown("**明细**")
-        st.dataframe(pd.DataFrame(rows[:int(show_n)]), use_container_width=True,
+        _summ = []
+        _details = {}
+        for _nper in range(2, 8):
+            if idx < _nper - 1:
+                continue
+            _pat = "".join(pat_at(idx - k) for k in range(_nper))
+            _ms = [i for i in range(_nper - 1, min(idx, len(data) - 1))
+                   if "".join(pat_at(i - k) for k in range(_nper)) == _pat]
+            _nxt = Counter(pat_at(i + 1) for i in _ms)
+            _top = _nxt.most_common(1)[0] if _nxt else ("—", 0)
+            _summ.append({
+                "对比期数": _nper,
+                "形态": _pat,
+                "历史出现": len(_ms),
+                "最常见下一期": _top[0] + (f"（{_top[1]}次）" if _nxt else ""),
+                "集中度": f"{_top[1]/len(_ms)*100:.1f}%" if _ms else "—",
+            })
+            _details[_nper] = (_pat, _ms, _nxt)
+
+        st.markdown(f"**{_unit}编码 · 位置 {sorted(ps)} · 严格匹配（不允许容错）**")
+        st.dataframe(pd.DataFrame(_summ), use_container_width=True,
                      hide_index=True)
 
-        _txt = (f"门数组合｜位置 {sorted(ps)}｜{nper} 期｜基准 {pattern}\n"
-                f"历史出现 {len(matches)} 次\n"
-                + "\n".join(f"{k}：{v} 次（{v/len(matches)*100:.1f}%）"
-                            for k, v in nxt.most_common()))
-        _save(loader, f"实验C {_unit} {sorted(ps)} {nper}期 {pattern}", _txt)
+        _ok = [x for x in _summ if x["历史出现"] > 0]
+        if not _ok:
+            st.warning("2~7 期都没有完全相同的历史形态 —— 说明这个形态太罕见，"
+                       "可以减少球位数量或换位置组合")
+            return
+
+        _best = max(_ok, key=lambda x: x["历史出现"])
+        _nper = _best["对比期数"]
+        _pat, _ms, _nxt = _details[_nper]
+        st.markdown(f"**明细（对比 {_nper} 期，出现 {len(_ms)} 次）**")
+        _rows = []
+        for i in _ms[:int(show_n)]:
+            _vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
+            _rows.append({"出现期号": data[i][0], "下一期": data[i + 1][0],
+                          "下一期号码": " ".join(_vals),
+                          f"下一期{_unit}": pat_at(i + 1)})
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True,
+                     hide_index=True)
+        st.markdown(f"**下一期{_unit}分布**")
+        st.dataframe(pd.DataFrame(
+            [{f"{_unit}组合": k, "次数": v,
+              "占比": f"{v/len(_ms)*100:.1f}%"} for k, v in _nxt.most_common()]),
+            use_container_width=True, hide_index=True)
+
+        _txt = (f"实验C｜{_unit}｜位置 {sorted(ps)}｜严格匹配\n"
+                + "\n".join(f"{x['对比期数']}期 {x['形态']}："
+                            f"{x['历史出现']} 次，最常见 {x['最常见下一期']}"
+                            for x in _summ))
+        _save(loader, f"实验C {_unit} {sorted(ps)} 扫描", _txt)
 
 
 # =====================================================================
