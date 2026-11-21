@@ -250,6 +250,8 @@ def _exp_gate3(loader):
         period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
     with c4:
         show_n = st.number_input("显示条数", 5, 50, 10, 5, key="lab_c_show")
+    _tol = st.slider("容错位数（允许几位不同）", 0, 6, 2, 1, key="lab_c_tol",
+                     help="0 = 完全一致（样本少）；数字越大样本越多但越宽松")
 
     if st.button("▶ 运行实验 C", key="lab_c_run"):
         if len(ps) != 3:
@@ -281,7 +283,7 @@ def _exp_gate3(loader):
             st.warning("历史不足")
             return
         pattern = "".join(pat_at(idx - k) for k in range(nper))
-        st.markdown(f"**基准形态（{nper} 期 × 3 位，{_unit} = {len(pattern)} 位）**："
+        st.markdown(f"**基准形态（{nper} 期 × 3 位，{_unit} = {len(pattern)} 位，容错 {int(_tol)} 位）**："
                     f"`{pattern}`")
         for k in range(nper):
             _pp, _nn = data[idx - k]
@@ -290,10 +292,17 @@ def _exp_gate3(loader):
             st.caption(f"  {_pp} 期　位置{sorted(ps)}：{' '.join(_vals)}"
                        f"　→ {_unit} {''.join(_gs)}")
 
+        def _dist(a, b):
+            return sum(1 for x, y in zip(a, b) if x != y)
+
         matches = []
+        _dists = {}
         for i in range(nper - 1, min(idx, len(data) - 1)):
-            if "".join(pat_at(i - k) for k in range(nper)) == pattern:
+            _p = "".join(pat_at(i - k) for k in range(nper))
+            _d = _dist(_p, pattern)
+            if _d <= int(_tol):
                 matches.append(i)
+                _dists[i] = _d
         st.metric("历史出现次数", len(matches))
         if not matches:
             st.info("历史上没有出现相同形态（可减少对比期数或换尾数再试）")
@@ -306,7 +315,8 @@ def _exp_gate3(loader):
             npat = pat_at(i + 1)
             nxt[npat] += 1
             vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
-            rows.append({"出现期号": data[i][0], "下一期": data[i + 1][0],
+            rows.append({"出现期号": data[i][0], "差异": _dists.get(i, 0),
+                         "下一期": data[i + 1][0],
                          "下一期号码": " ".join(vals),
                          f"下一期{_unit}": npat})
         st.markdown(f"**下一期{_unit}分布**")
