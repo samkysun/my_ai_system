@@ -3401,11 +3401,12 @@ def _pred_verify():
 
 
 def _pred_sign_all():
-    """为全部记录补算指纹链（迁移旧数据用）"""
+    """为全部记录重建指纹链，同时补上 psig 锚点（旧记录升级用）"""
     data = _pred_load_all()
     prev = ""
     for k in sorted(data.keys()):
         rec = data[k]
+        rec["psig"] = prev                 # 关键：补锚点
         rec["sig"] = _pred_sig(rec, prev)
         prev = rec["sig"]
     st.session_state["_pred_cache"] = data
