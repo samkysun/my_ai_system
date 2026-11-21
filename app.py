@@ -842,7 +842,8 @@ def _render_kill_group(label, blocks, amap, range_label=None):
     if st.button(f"📌 保存「{label}」结果到看板", key=f"save_{label}"):
         try:
             _board_add("杀号结果", f"{_period} {label}", _save_txt)
-            st.success("已保存到看板（云端）")
+            st.session_state["_board_flash"] = f"已保存「{label}」到看板"
+            st.rerun()
         except Exception as _e:
             st.warning(f"保存失败：{_e}")
 
@@ -1109,7 +1110,18 @@ def _board_render():
     if not board:
         return
     # 字体由全局 CSS 统一控制
-    with st.expander(f"📋 汇总看板（{len(board)} 条结果，来自其它页面）", expanded=True):
+    _flash = st.session_state.pop("_board_flash", None)
+    if _flash:
+        st.success(_flash)
+    board = list(reversed(board))          # 最新在前
+    _kw = st.text_input("🔍 在看板里搜索（期号 / 来源 / 标题）",
+                        key="board_search", placeholder="例如 2026124 或 杀号结果")
+    if _kw.strip():
+        _k = _kw.strip()
+        board = [e for e in board
+                 if _k in str(e.get("title", "")) or _k in str(e.get("source", ""))
+                 or _k in str(e.get("text", ""))[:200]]
+    with st.expander(f"📋 汇总看板（显示 {len(board)} 条，来自其它页面）", expanded=True):
         c1, c2 = st.columns([1, 3])
         with c1:
             if st.button("🗑 清空看板", use_container_width=True, key="board_clear"):
@@ -1126,11 +1138,17 @@ def _board_render():
                                key="board_export")
 
         for i, e in enumerate(board):
+            _orig = e.get("_orig_idx")
             with st.expander(f"{e['source']} · {e['title']}　({e['ts']})", expanded=False):
                 st.text_area("内容", value=e["text"], height=340,
                              key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
                 if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
-                    st.session_state.ai_board.pop(i)
+                    _lst = st.session_state.get("ai_board") or []
+                    for _j, _it in enumerate(_lst):
+                        if (_it.get("source") == e.get("source")
+                                and _it.get("title") == e.get("title")):
+                            _lst.pop(_j)
+                            break
                     _board_cloud_delete(e.get("source", ""), e.get("title", ""))
                     st.rerun()
 
