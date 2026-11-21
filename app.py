@@ -457,6 +457,10 @@ _MULTI_RULES = """【硬规则·违反即视为错误】
 
 def _parse_multi_blocks(text):
     """按行解析多维分析报告"""
+    if text and "【基准行排列】" not in text and "第1球" in text:
+        _lb = _parse_link_blocks(text)
+        if _lb:
+            return _lb
     import re as _re
     blocks = []
     cur = None
@@ -2897,12 +2901,97 @@ def render_deep_linkage(df_data):
 
         _dl_print_and_save(_dl_print_html, _dl_txt, _dl_txt_file, _dl_html_file)
 
-        if st.button("📌 送到 AI 推演", use_container_width=True, key="dl_to_board"):
-            _board_add("深度联动", f"{mode} {selected_period}", _dl_txt)
-            st.success("已送到 AI 推演的汇总看板")
+        _dlc1, _dlc2 = st.columns(2)
+        with _dlc1:
+            if st.button("📌 整份送到看板", use_container_width=True,
+                         key="dl_to_board"):
+                _board_add("深度联动", f"{mode} {selected_period}", _dl_txt)
+                st.success("已送到汇总看板")
+        with _dlc2:
+            if st.button("📤 按球位分别送", use_container_width=True,
+                         key="dl_to_board_each",
+                         help="每个球位单独一条，方便在智能分析里分开算"):
+                _parts = _split_link_by_ball(_dl_txt, f"{mode}", selected_period)
+                if _parts:
+                    for _title, _body in _parts:
+                        _board_add("深度联动", _title, _body)
+                    st.success(f"已按球位送出 {len(_parts)} 条")
+                else:
+                    st.warning("没有识别到球位行")
 
     elif st.session_state.get("deep_linkage_result"):
         st.text_area("深度联动分析报告", value=st.session_state.deep_linkage_result, height=400)
+
+
+def _split_link_by_ball(txt, mode, period):
+    """把「第N球: 选号 | 杀(...)」拆成 (标题, 内容) 列表"""
+    import re as _re
+    head = []
+    balls = {}
+    for line in (txt or "").splitlines():
+        m = _re.match(r"\s*第(\d)球\s*[:：]\s*(.+)", line)
+        if m:
+            balls[int(m.group(1))] = line.strip()
+        elif line.strip():
+            head.append(line.strip())
+    out = []
+    for b in sorted(balls):
+        title = f"{period} {mode} 第{b}球"
+        body = "\n".join(head + ["", balls[b]])
+        out.append((title, body))
+    return out
+
+
+def _parse_link_blocks(text):
+    """解析深度联动报告：第N球: A, B | 杀(C, D)"""
+    import re as _re
+    blocks = []
+    lines = (text or "").splitlines()
+    # 头部信息
+    period, mode = "", ""
+    for line in lines:
+        m = _re.search(r"【基准期数】\s*[:：]\s*(\d+)", line)
+        if m:
+            period = m.group(1)
+        if "联动分析" in line:
+            mode = line.strip("= ").replace("3码联动分析", "").strip()
+    for line in lines:
+        m = _re.match(r"\s*第(\d)球\s*[:：]\s*(.+)", line)
+        if not m:
+            continue
+        ball = int(m.group(1))
+        body = m.group(2)
+        mk = _re.search(r"杀[（(]([^)）]*)[)）]", body)
+        kill_raw = mk.group(1) if mk else ""
+        # 属性判断
+        attr = ("生肖" if "生肖" in mode else "尾数" if "尾数" in mode
+                else "门数" if "门" in mode else "段数" if "段" in mode
+                else "号码")
+        items = []
+        if kill_raw:
+            for it in _re.split(r"[,，、\s]+", kill_raw.strip()):
+                if not it:
+                    continue
+                if attr == "生肖":
+                    items.append(it if it.endswith("肖") else it + "肖")
+                elif attr == "尾数":
+                    items.append(it if it.endswith("尾") else it + "尾")
+                elif attr == "门数":
+                    items.append(it if it.endswith("门") else it + "门")
+                elif attr == "段数":
+                    items.append(it if it.endswith("段") else it + "段")
+                else:
+                    items.append(it)
+        if not items:
+            continue
+        blocks.append({
+            "period": period, "order": "升序" if "升序" in mode else "按序",
+            "attr": attr, "ball": str(ball), "base": "",
+            "triggers": [{"row": "-", "n": 1, "up": "", "down": "",
+                          "match": "", "self": False, "hot": False,
+                          "kill": "、".join(items)}],
+        })
+    return blocks
 
 
 def _dl_print_and_save(print_html_text, plain_text, txt_name, html_name):
