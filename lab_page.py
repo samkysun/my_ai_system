@@ -250,7 +250,10 @@ def _exp_gate3(loader):
         nper = st.slider("叠加行数（期）", 2, 7, 3, 1, key="lab_c_nper",
                          help="2 期就是叠 2 行，7 期叠 7 行")
     with r1c4:
-        period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
+        _pdata = _load_index6(loader)
+        _plist = ["最新"] + [p for p, _ in reversed(_pdata[-300:])]
+        period = st.selectbox("基准期号", _plist, index=0,
+                              key="lab_c_period")
     with r1c5:
         show_n = st.number_input("明细条数", 5, 50, 10, 5, key="lab_c_show")
 
@@ -263,11 +266,11 @@ def _exp_gate3(loader):
             st.error("数据不足")
             return
         periods = [p for p, _ in data]
-        if period.strip():
-            if period.strip() not in periods:
+        if period and period != "最新":
+            if period not in periods:
                 st.warning("期号不存在")
                 return
-            idx = periods.index(period.strip())
+            idx = periods.index(period)
         else:
             idx = len(data) - 1
 
@@ -325,6 +328,28 @@ def _exp_gate3(loader):
                           f"下一期{_unit}": pat_at(i + 1)})
         st.dataframe(pd.DataFrame(_rows), use_container_width=True,
                      hide_index=True)
+        # ---- 回测：与真实下一期对比 ----
+        st.markdown("**回测对比**")
+        _bx = idx + 1
+        if _bx >= len(data):
+            st.info(f"{data[idx][0]} 是最新一期，还没有下一期开奖，无法回测")
+        else:
+            _real_pat = pat_at(_bx)
+            _real_vals = [f"{data[_bx][1][b - 1]:02d}" for b in sorted(ps)]
+            _rank = [k for k, _v in _nxt.most_common()]
+            _pos = _rank.index(_real_pat) + 1 if _real_pat in _rank else None
+            _cnt = _nxt.get(_real_pat, 0)
+            c_a, c_b, c_c = st.columns(3)
+            c_a.metric("基准期", data[idx][0])
+            c_b.metric("真实下一期", f"{data[_bx][0]}")
+            c_c.metric(f"真实{_unit}", _real_pat)
+            st.caption(f"真实号码：{' '.join(_real_vals)}")
+            if _pos:
+                st.success(f"✅ 命中：该形态在历史里出现过 {_cnt} 次，"
+                           f"排第 {_pos} 位（共 {len(_nxt)} 种）")
+            else:
+                st.error(f"❌ 未命中：历史 {len(_ms)} 次里从未出现过 {_real_pat}")
+
         st.markdown(f"**下一期{_unit}分布**")
         st.dataframe(pd.DataFrame(
             [{f"{_unit}组合": k, "次数": v,
