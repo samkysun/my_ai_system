@@ -239,7 +239,7 @@ def _exp_gate3(loader):
 
     _en = st.radio("编码方式", ["门数（十位）", "尾数（个位）"],
                    horizontal=True, key="lab_c_enc")
-    r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     with r1c1:
         npos = st.slider("球位数量", 2, 6, 3, 1, key="lab_c_npos")
     with r1c2:
@@ -247,8 +247,11 @@ def _exp_gate3(loader):
                             default=list(range(1, int(npos) + 1)),
                             max_selections=int(npos), key="lab_c_pos")
     with r1c3:
-        period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
+        nper = st.slider("叠加行数（期）", 2, 7, 3, 1, key="lab_c_nper",
+                         help="2 期就是叠 2 行，7 期叠 7 行")
     with r1c4:
+        period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
+    with r1c5:
         show_n = st.number_input("明细条数", 5, 50, 10, 5, key="lab_c_show")
 
     if st.button("▶ 运行实验 C", key="lab_c_run"):
@@ -297,20 +300,23 @@ def _exp_gate3(loader):
             })
             _details[_nper] = (_pat, _ms, _nxt)
 
-        st.markdown(f"**{_unit}编码 · 位置 {sorted(ps)} · 严格匹配（不允许容错）**")
-        st.dataframe(pd.DataFrame(_summ), use_container_width=True,
-                     hide_index=True)
-
-        _ok = [x for x in _summ if x["历史出现"] > 0]
-        if not _ok:
-            st.warning("2~7 期都没有完全相同的历史形态 —— 说明这个形态太罕见，"
-                       "可以减少球位数量或换位置组合")
+        st.markdown(f"**{_unit}编码 · 位置 {sorted(ps)} · 叠加 {int(nper)} 期 · "
+                    f"严格匹配（不允许容错）**")
+        _cur = next((x for x in _summ if x["对比期数"] == int(nper)), None)
+        if not _cur:
+            st.warning("历史长度不足")
             return
+        if _cur["历史出现"] == 0:
+            st.warning(f"叠加 {int(nper)} 期：历史上没有完全相同的形态。"
+                       "可减少球位数量、换位置，或改变叠加行数")
+        with st.expander("参考：2~7 期各有几次样本", expanded=False):
+            st.dataframe(pd.DataFrame(_summ), use_container_width=True,
+                         hide_index=True)
 
-        _best = max(_ok, key=lambda x: x["历史出现"])
-        _nper = _best["对比期数"]
-        _pat, _ms, _nxt = _details[_nper]
-        st.markdown(f"**明细（对比 {_nper} 期，出现 {len(_ms)} 次）**")
+        _pat, _ms, _nxt = _details[int(nper)]
+        if not _ms:
+            return
+        st.markdown(f"**明细（叠加 {int(nper)} 期，形态 {_pat}，出现 {len(_ms)} 次）**")
         _rows = []
         for i in _ms[:int(show_n)]:
             _vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
