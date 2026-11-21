@@ -856,6 +856,10 @@ def _render_kill_group(label, blocks, amap, range_label=None, bounds=None):
         st.warning("本组只有单次杀号（无多次触犯），参考价值一般")
 
     keep = [f"{n:02d}" for n in keep_nums]
+    _span2 = _hi - _lo + 1 if _hi >= _lo else 0
+    _rate = (len(kill_final) / _span2 * 100) if _span2 else 0
+    st.caption(f"区间 {_lo}~{_hi}（{_span2} 个号）｜被杀 {len(kill_final)} 个"
+               f"｜保留 {len(keep)} 个｜杀号率 {_rate:.1f}%")
     if keep:
         st.success(f"✅ 本组保留号码（{len(keep)} 个）：" + " ".join(keep))
     else:
