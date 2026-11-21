@@ -232,6 +232,11 @@ except Exception:
     render_combo2 = None
 
 try:
+    from lab_page import render as render_lab
+except Exception:
+    render_lab = None
+
+try:
     from cross_view import render as render_cross_view
 except Exception:
     render_cross_view = None
@@ -5591,7 +5596,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析", "🔬 研究中心"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -5600,6 +5605,13 @@ def main_app():
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
+    elif page == "🔬 研究中心":
+        if render_lab:
+            render_lab(df_data, {"load_excel_data": load_excel_data,
+                                 "board_add": _board_add,
+                                 "supabase": get_supabase_client})
+        else:
+            st.error("lab_page.py 未找到或加载失败")
     elif page == "🤖 全自动智能分析":
         render_auto_ai_page()
     elif page == "🧠 AI推演": render_ai(df_data)
