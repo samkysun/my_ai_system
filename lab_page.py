@@ -234,28 +234,34 @@ def _exp_pool(loader):
 # =====================================================================
 def _exp_gate3(loader):
     st.markdown("#### 实验 C：数字形态组合（门数 / 尾数）")
-    st.caption("把最近 N 期的指定 3 个位置，按「门数」或「尾数」拼成数字串，"
-               "回历史查相同形态，看下一期这 3 个位置的对应属性。")
+    st.caption("把最近 N 期的指定若干位置，按「门数」或「尾数」拼成数字串，"
+               "回历史查相似形态，看下一期这些位置的对应属性。")
 
     _en = st.radio("编码方式", ["门数（十位）", "尾数（个位）"],
                     horizontal=True, key="lab_c_enc")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        ps = st.multiselect("3 个位置", list(range(1, 8)),
-                            default=[3, 4, 5], max_selections=3,
-                            key="lab_c_pos")
-    with c2:
+    r1c1, r1c2, r1c3 = st.columns(3)
+    with r1c1:
+        npos = st.slider("球位数量", 2, 6, 3, 1, key="lab_c_npos")
+    with r1c2:
+        ps = st.multiselect("选择位置", list(range(1, 8)),
+                            default=list(range(1, int(npos) + 1)),
+                            max_selections=int(npos), key="lab_c_pos")
+    with r1c3:
         nper = st.slider("对比期数", 2, 7, 3, 1, key="lab_c_nper")
-    with c3:
+    r2c1, r2c2, r2c3 = st.columns(3)
+    with r2c1:
+        _len = int(npos) * int(nper)
+        _tol = st.slider("容错位数", 0, max(1, _len - 1),
+                         min(2, max(1, _len - 1)), 1, key="lab_c_tol",
+                         help="0 = 完全一致（样本少）；越大样本越多但越宽松")
+    with r2c2:
         period = st.text_input("基准期号（空=最新）", "", key="lab_c_period")
-    with c4:
+    with r2c3:
         show_n = st.number_input("显示条数", 5, 50, 10, 5, key="lab_c_show")
-    _tol = st.slider("容错位数（允许几位不同）", 0, 6, 2, 1, key="lab_c_tol",
-                     help="0 = 完全一致（样本少）；数字越大样本越多但越宽松")
 
     if st.button("▶ 运行实验 C", key="lab_c_run"):
-        if len(ps) != 3:
-            st.warning("必须选 3 个位置")
+        if len(ps) != int(npos):
+            st.warning(f"需要选 {int(npos)} 个位置")
             return
         data = _load_index6(loader)
         if len(data) < 100:
