@@ -726,16 +726,22 @@ def kill_summary(blocks):
     return out
 
 
-_UP_RANGE = {1: (1, 44), 2: (2, 45), 3: (3, 46), 4: (4, 47),
-             5: (5, 48), 6: (6, 49), 7: (1, 49)}
+# 三种取值区间（由历史+理论分布核定）
+_UP_RANGE_HARD = {1: (1, 44), 2: (2, 45), 3: (3, 46), 4: (4, 47),
+                  5: (5, 48), 6: (6, 49), 7: (1, 49)}
+_UP_RANGE_99 = {1: (1, 28), 2: (2, 36), 3: (5, 41), 4: (9, 45),
+                5: (14, 48), 6: (22, 49), 7: (1, 49)}
+_UP_RANGE_90 = {1: (1, 19), 2: (4, 28), 3: (9, 35), 4: (15, 41),
+                5: (22, 46), 6: (31, 49), 7: (1, 49)}
+_UP_RANGE = _UP_RANGE_HARD        # 默认硬边界
 
 
-def _bounds_with_known(order, ball, known=None):
+def _bounds_with_known(order, ball, known=None, table=None):
     """升序球的可能区间；known={球位: 号码} 时按已知值收紧"""
     b = int(ball)
     if order != "升序":
         return (1, 49)
-    lo, hi = _UP_RANGE.get(b, (1, 49))
+    lo, hi = (table or _UP_RANGE).get(b, (1, 49))
     if not known:
         return (lo, hi)
     for kb, kv in known.items():
@@ -1055,6 +1061,15 @@ def _multi_ai_ui():
             return [b for b in _ev_blocks
                     if b.get("order") == order and str(b.get("ball")) == str(ball)]
 
+        _rng_mode = st.radio(
+            "取值区间", ["硬边界（数学范围）", "99% 区间（推荐）",
+                        "90% 区间（最窄）"],
+            horizontal=True, key="multi_rng",
+            help="硬边界不会漏；99% 区间剔除 1% 极端值；90% 更窄但漏得多")
+        _rng_table = ({"硬边界（数学范围）": _UP_RANGE_HARD,
+                       "99% 区间（推荐）": _UP_RANGE_99,
+                       "90% 区间（最窄）": _UP_RANGE_90}[_rng_mode])
+
         with st.expander("🔒 已知开奖号（可选，用于收紧区间）", expanded=False):
             _kc = st.columns(6)
             _known = {}
@@ -1087,7 +1102,8 @@ def _multi_ai_ui():
                     if _km:
                         _kg += _ev_for(_km.group(1), _km.group(2))
                     _km2 = re.match(r"(升序|按序)第?(\d)球", k)
-                    _bd = (_bounds_with_known(_km2.group(1), _km2.group(2), _known)
+                    _bd = (_bounds_with_known(_km2.group(1), _km2.group(2),
+                                              _known, _rng_table)
                            if _km2 else None)
                     _render_kill_group(k, _kg, _amap, bounds=_bd)
 
@@ -1107,7 +1123,8 @@ def _multi_ai_ui():
                 with st.expander("＋ 合并：" + " + ".join(_allk) +
                                  f"（区间 {_dlo}~{_dhi}）", expanded=True):
                     _dm = re.match(r"(升序|按序)第?(\d)球", _dom)
-                    _bd = (_bounds_with_known(_dm.group(1), _dm.group(2), _known)
+                    _bd = (_bounds_with_known(_dm.group(1), _dm.group(2),
+                                              _known, _rng_table)
                            if _dm else None)
                     _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
                                        range_label=_dom, bounds=_bd)
