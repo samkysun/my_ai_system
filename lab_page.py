@@ -230,6 +230,99 @@ def _exp_pool(loader):
 
 
 # =====================================================================
+# 实验 C：门数三三组合（3 期 × 3 位置）
+# =====================================================================
+def _exp_gate3(loader):
+    st.markdown("#### 实验 C：门数三三组合（3 期 × 3 位置）")
+    st.caption("把最近 3 期的指定 3 个位置，按「门数」（十位数字：0~4）"
+               "拼成 9 位数字，再回历史查相同形态，看下一期的门数。")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        ps = st.multiselect("选择 3 个位置", list(range(1, 8)),
+                            default=[3, 4, 5], max_selections=3,
+                            key="lab_c_pos")
+    with c2:
+        period = st.text_input("基准期号（留空=最新）", "", key="lab_c_period")
+    with c3:
+        show_n = st.number_input("显示前 N 个结果", 5, 50, 10, 5,
+                                 key="lab_c_show")
+
+    if st.button("▶ 运行实验 C", key="lab_c_run"):
+        if len(ps) != 3:
+            st.warning("必须选 3 个位置")
+            return
+        data = _load_index6(loader)
+        if len(data) < 100:
+            st.error("数据不足")
+            return
+        periods = [p for p, _ in data]
+        if period.strip():
+            if period.strip() not in periods:
+                st.warning("期号不存在")
+                return
+            idx = periods.index(period.strip())
+        else:
+            idx = len(data) - 1
+
+        def gate(n):
+            return str(n // 10)
+
+        def pat_at(i):
+            return "".join(gate(data[i][1][b - 1]) for b in sorted(ps))
+
+        if idx < 2:
+            st.warning("历史不足 3 期")
+            return
+        pattern = "".join(pat_at(idx - k) for k in range(0, 3))
+        st.markdown(f"**基准形态**：`{pattern}`")
+        for k in range(3):
+            _pp, _nn = data[idx - k]
+            _vals = [f"{_nn[b - 1]:02d}" for b in sorted(ps)]
+            _gs = [gate(_nn[b - 1]) for b in sorted(ps)]
+            st.caption(f"  {_pp} 期　位置{sorted(ps)}：{' '.join(_vals)}"
+                       f"　→ 门数 {''.join(_gs)}")
+
+        # 历史查找
+        matches = []
+        for i in range(2, len(data) - 1):
+            if i >= idx:
+                break
+            if "".join(pat_at(i - k) for k in range(0, 3)) == pattern:
+                matches.append(i)
+        st.metric("历史出现次数", len(matches))
+        if not matches:
+            st.info("历史上没有出现相同形态")
+            return
+
+        from collections import Counter
+        nxt = Counter()
+        rows = []
+        for i in matches:
+            npat = pat_at(i + 1)
+            nxt[npat] += 1
+            vals = [f"{data[i + 1][1][b - 1]:02d}" for b in sorted(ps)]
+            rows.append({"出现期号": data[i][0], "下一期": data[i + 1][0],
+                         "下一期号码": " ".join(vals),
+                         "下一期门数": npat})
+        st.markdown("**下一期门数分布**")
+        dist = [{"门数组合": k, "次数": v,
+                 "占比": f"{v/len(matches)*100:.1f}%"}
+                for k, v in nxt.most_common()]
+        st.dataframe(pd.DataFrame(dist), use_container_width=True,
+                     hide_index=True)
+        st.markdown("**明细**")
+        st.dataframe(pd.DataFrame(rows[:int(show_n)]), use_container_width=True,
+                     hide_index=True)
+
+        _txt = (f"门数三三组合｜位置 {sorted(ps)}｜基准 {pattern}\n"
+                f"历史出现 {len(matches)} 次\n"
+                + "\n".join(f"{k}：{v} 次（{v/len(matches)*100:.1f}%）"
+                            for k, v in nxt.most_common()))
+        _save(loader, f"实验C 门数三三 {sorted(ps)} {pattern}", _txt)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -417,12 +510,14 @@ def render(df_data, H):
     st.title("🔬 研究中心（实验沙盒）")
     st.caption("在这里试各种公式，不满意就一键清空；确认可用再迁到正式页面。")
 
-    tab1, tab2, tab4, tab3 = st.tabs(
-        ["实验A 单条件杀号", "实验B 组合池", "结论档案", "清理"])
+    tab1, tab2, tabc, tab4, tab3 = st.tabs(
+        ["实验A 单条件杀号", "实验B 组合池", "实验C 门数三三", "结论档案", "清理"])
     with tab1:
         _exp_single_kill(H)
     with tab2:
         _exp_pool(H)
+    with tabc:
+        _exp_gate3(H)
     with tab4:
         _archive()
     with tab3:
