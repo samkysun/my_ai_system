@@ -965,6 +965,12 @@ def _multi_ai_ui():
             st.markdown("**② 合并计算结果**")
             _allk = [_dom] + _merge
             _mb = [b for k in _allk for b in _groups.get(k, [])]
+            for _k in _allk:
+                _m = re.match(r"(升序|按序)第?(\d)球", _k)
+                if _m:
+                    _add = _ev_for(_m.group(1), _m.group(2))
+                    if _add:
+                        _mb = _mb + _add
             with st.expander("＋ 合并：" + " + ".join(_allk) +
                              f"（取值区间 {_dlo}~{_dhi}）", expanded=True):
                 _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
@@ -979,7 +985,11 @@ def _multi_ai_ui():
                 _klo, _khi = _range_of(k)
                 with st.expander(f"■ {k}（{len(_groups[k])} 个属性，"
                                  f"区间 {_klo}~{_khi}）", expanded=True):
-                    _render_kill_group(k, _groups[k], _amap)
+                    _kg = list(_groups[k])
+                    _km = re.match(r"(升序|按序)第?(\d)球", k)
+                    if _km:
+                        _kg += _ev_for(_km.group(1), _km.group(2))
+                    _render_kill_group(k, _kg, _amap)
 
         # 解析详情
         with st.expander("🔍 解析详情（排查用）", expanded=False):
@@ -1011,6 +1021,25 @@ def _multi_ai_ui():
         _ev_text = "\n\n".join(
             f"【{e.get('title','')}】\n{(e.get('text') or '')[:1500]}"
             for e in _ev_items)
+
+        # 佐证里的「杀」也并入筛选条件
+        _use_ev = st.checkbox("把佐证里的「杀」也并入筛选条件", value=True,
+                              key="multi_use_ev",
+                              help="例如 杀(鼠,牛,虎)、杀(1,2,4,6)、杀(1门,4门) "
+                                   "都会一起参与计算")
+        _ev_blocks = []
+        if _use_ev:
+            for _e in _ev_items:
+                try:
+                    _ev_blocks += _parse_multi_blocks(_e.get("text") or "")
+                except Exception:
+                    pass
+            if _ev_blocks:
+                st.caption(f"佐证杀号条件：{len(_ev_blocks)} 条（已并入计算）")
+
+        def _ev_for(order, ball):
+            return [b for b in _ev_blocks
+                    if b.get("order") == order and str(b.get("ball")) == str(ball)]
 
         # AI 解读
         st.markdown("**④ AI 解读（可选）**")
