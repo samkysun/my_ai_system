@@ -956,56 +956,8 @@ def _multi_ai_ui():
                    "　（未选辅助 → 各球位单独计算）")
                 + (f"\n→ 合并后只在 **{_dlo}~{_dhi}** 里取号" if _merge else ""))
 
-        _amap = _load_attr_map()
-        if not _amap:
-            st.error("缺少 _attr_map.csv，无法把杀号翻译成号码")
-
-        # 合并结果先显示
-        if _merge and _amap:
-            st.markdown("**② 合并计算结果**")
-            _allk = [_dom] + _merge
-            _mb = [b for k in _allk for b in _groups.get(k, [])]
-            for _k in _allk:
-                _m = re.match(r"(升序|按序)第?(\d)球", _k)
-                if _m:
-                    _add = _ev_for(_m.group(1), _m.group(2))
-                    if _add:
-                        _mb = _mb + _add
-            with st.expander("＋ 合并：" + " + ".join(_allk) +
-                             f"（取值区间 {_dlo}~{_dhi}）", expanded=True):
-                _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
-                                   range_label=_dom)
-
-        # 单独结果
-        _单独 = [k for k in _labels
-                 if k not in _merge and not (_merge and k == _dom)]
-        if _单独:
-            st.markdown("**② 单独计算结果**")
-            for k in _单独:
-                _klo, _khi = _range_of(k)
-                with st.expander(f"■ {k}（{len(_groups[k])} 个属性，"
-                                 f"区间 {_klo}~{_khi}）", expanded=True):
-                    _kg = list(_groups[k])
-                    _km = re.match(r"(升序|按序)第?(\d)球", k)
-                    if _km:
-                        _kg += _ev_for(_km.group(1), _km.group(2))
-                    _render_kill_group(k, _kg, _amap)
-
-        # 解析详情
-        with st.expander("🔍 解析详情（排查用）", expanded=False):
-            _dbgrows = []
-            for b in _blocks:
-                _ups = "、".join(_clean_kill(tg.get("up", ""))
-                                 for tg in b["triggers"]) or "—"
-                _kls = "、".join(tg.get("kill", "") for tg in b["triggers"]) or "—"
-                _dbgrows.append({"属性": b["attr"], "球位": b["ball"],
-                                 "触发行": len(b["triggers"]),
-                                 "上值": _ups, "杀括号": _kls})
-            st.dataframe(pd.DataFrame(_dbgrows), use_container_width=True,
-                         hide_index=True)
-
-        # ③ 佐证资料（可多选）
-        st.markdown("**③ 佐证资料（可多选，喂给 AI 做旁证）**")
+        # ② 佐证资料（可多选，参与计算）
+        st.markdown("**② 佐证资料（可多选，参与计算）**")
         _ev_items = []
         if _items:
             _ev_opts = [f"{i+1}. {e.get('source','')}｜{e.get('title','')}"
@@ -1040,6 +992,54 @@ def _multi_ai_ui():
         def _ev_for(order, ball):
             return [b for b in _ev_blocks
                     if b.get("order") == order and str(b.get("ball")) == str(ball)]
+
+        _amap = _load_attr_map()
+        if not _amap:
+            st.error("缺少 _attr_map.csv，无法把杀号翻译成号码")
+
+        # 合并结果先显示
+        if _merge and _amap:
+            st.markdown("**③ 合并计算结果**")
+            _allk = [_dom] + _merge
+            _mb = [b for k in _allk for b in _groups.get(k, [])]
+            for _k in _allk:
+                _m = re.match(r"(升序|按序)第?(\d)球", _k)
+                if _m:
+                    _add = _ev_for(_m.group(1), _m.group(2))
+                    if _add:
+                        _mb = _mb + _add
+            with st.expander("＋ 合并：" + " + ".join(_allk) +
+                             f"（取值区间 {_dlo}~{_dhi}）", expanded=True):
+                _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
+                                   range_label=_dom)
+
+        # 单独结果
+        _单独 = [k for k in _labels
+                 if k not in _merge and not (_merge and k == _dom)]
+        if _单独:
+            st.markdown("**③ 单独计算结果**")
+            for k in _单独:
+                _klo, _khi = _range_of(k)
+                with st.expander(f"■ {k}（{len(_groups[k])} 个属性，"
+                                 f"区间 {_klo}~{_khi}）", expanded=True):
+                    _kg = list(_groups[k])
+                    _km = re.match(r"(升序|按序)第?(\d)球", k)
+                    if _km:
+                        _kg += _ev_for(_km.group(1), _km.group(2))
+                    _render_kill_group(k, _kg, _amap)
+
+        # 解析详情
+        with st.expander("🔍 解析详情（排查用）", expanded=False):
+            _dbgrows = []
+            for b in _blocks:
+                _ups = "、".join(_clean_kill(tg.get("up", ""))
+                                 for tg in b["triggers"]) or "—"
+                _kls = "、".join(tg.get("kill", "") for tg in b["triggers"]) or "—"
+                _dbgrows.append({"属性": b["attr"], "球位": b["ball"],
+                                 "触发行": len(b["triggers"]),
+                                 "上值": _ups, "杀括号": _kls})
+            st.dataframe(pd.DataFrame(_dbgrows), use_container_width=True,
+                         hide_index=True)
 
         # AI 解读
         st.markdown("**④ AI 解读（可选）**")
