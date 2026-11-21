@@ -726,8 +726,28 @@ def kill_summary(blocks):
     return out
 
 
-_UP_RANGE = {1: (1, 20), 2: (2, 25), 3: (3, 30), 4: (4, 40),
-             5: (15, 48), 6: (25, 49), 7: (1, 49)}
+_UP_RANGE = {1: (1, 44), 2: (2, 45), 3: (3, 46), 4: (4, 47),
+             5: (5, 48), 6: (6, 49), 7: (1, 49)}
+
+
+def _bounds_with_known(order, ball, known=None):
+    """升序球的可能区间；known={球位: 号码} 时按已知值收紧"""
+    b = int(ball)
+    if order != "升序":
+        return (1, 49)
+    lo, hi = _UP_RANGE.get(b, (1, 49))
+    if not known:
+        return (lo, hi)
+    for kb, kv in known.items():
+        if not kv:
+            continue
+        if kb < b:
+            lo = max(lo, int(kv) + 1)
+        elif kb > b:
+            hi = min(hi, int(kv) - 1)
+    if lo > hi:
+        return (0, -1)
+    return (lo, hi)
 
 
 def _range_of(label):
@@ -742,12 +762,12 @@ def _range_of(label):
     return (1, 49)
 
 
-def _render_kill_group(label, blocks, amap, range_label=None):
+def _render_kill_group(label, blocks, amap, range_label=None, bounds=None):
     """渲染一个球位（或合并后）的杀号清单（含矛盾判定）"""
     ks = kill_summary(blocks)
     _rl = range_label or label
     if not ks:
-        _lo0, _hi0 = _range_of(_rl)
+        _lo0, _hi0 = bounds if bounds else _range_of(_rl)
         st.warning("没有解析到任何杀号（触发行可能没抓到上/杀值）")
         st.success(f"本球位区间 {_lo0}~{_hi0} 全部保留（{_hi0-_lo0+1} 个号码）")
         _dbg = [f"{b['attr']}：{len(b['triggers'])} 条触发行" for b in blocks]
@@ -787,7 +807,7 @@ def _render_kill_group(label, blocks, amap, range_label=None):
             st.caption("未能翻译的条件：" + "、".join(unmapped))
         return
 
-    _lo, _hi = _range_of(_rl)
+    _lo, _hi = bounds if bounds else _range_of(_rl)
     num_kill = _CK({n: c for n, c in num_kill.items() if _lo <= n <= _hi})
     if not num_kill:
         st.caption(f"本组杀号在本球位区间 {_lo}~{_hi} 内没有命中号码")
@@ -1035,6 +1055,19 @@ def _multi_ai_ui():
             return [b for b in _ev_blocks
                     if b.get("order") == order and str(b.get("ball")) == str(ball)]
 
+        with st.expander("🔒 已知开奖号（可选，用于收紧区间）", expanded=False):
+            _kc = st.columns(6)
+            _known = {}
+            for _b in range(1, 7):
+                with _kc[_b - 1]:
+                    _v = st.number_input(f"第{_b}球", 0, 49, 0, 1,
+                                         key=f"known_{_b}")
+                if _v:
+                    _known[_b] = int(_v)
+            if _known:
+                st.caption("已填：" + "　".join(f"第{k}球={v:02d}"
+                                                for k, v in _known.items()))
+
         _amap = _load_attr_map()
         if not _amap:
             st.error("缺少 _attr_map.csv")
@@ -1053,7 +1086,10 @@ def _multi_ai_ui():
                     _km = re.match(r"(升序|按序)第?(\d)球", k)
                     if _km:
                         _kg += _ev_for(_km.group(1), _km.group(2))
-                    _render_kill_group(k, _kg, _amap)
+                    _km2 = re.match(r"(升序|按序)第?(\d)球", k)
+                    _bd = (_bounds_with_known(_km2.group(1), _km2.group(2), _known)
+                           if _km2 else None)
+                    _render_kill_group(k, _kg, _amap, bounds=_bd)
 
         with _t2:
             if not _merge:
@@ -1070,8 +1106,11 @@ def _multi_ai_ui():
                         _mb += _ev_for(_m.group(1), _m.group(2))
                 with st.expander("＋ 合并：" + " + ".join(_allk) +
                                  f"（区间 {_dlo}~{_dhi}）", expanded=True):
+                    _dm = re.match(r"(升序|按序)第?(\d)球", _dom)
+                    _bd = (_bounds_with_known(_dm.group(1), _dm.group(2), _known)
+                           if _dm else None)
                     _render_kill_group("合并_" + "_".join(_allk), _mb, _amap,
-                                       range_label=_dom)
+                                       range_label=_dom, bounds=_bd)
 
         with _t3:
             st.caption("把结果交给 AI 做文字解读（可选）")
