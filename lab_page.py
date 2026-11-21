@@ -17,6 +17,8 @@ import pandas as pd
 import streamlit as st
 
 SRC_TAG = "研究中心"
+BAK_TAG = "研究中心·备份"
+ENABLED = True          # 改成 False 即可停用本页（菜单自动隐藏）
 
 
 # =====================================================================
@@ -239,37 +241,146 @@ def _save(loader, title, text):
             st.warning(f"保存失败：{e}")
 
 
+def _board_rows(loader):
+    """直接读看板里本页的条目"""
+    try:
+        client = loader["supabase"]()
+        if not client:
+            return []
+        res = (client.table("ai_board")
+               .select("source,title,content,updated_at")
+               .eq("source", SRC_TAG).execute())
+        return res.data or []
+    except Exception:
+        return []
+
+
+def _backup_rows(loader):
+    try:
+        client = loader["supabase"]()
+        if not client:
+            return []
+        res = (client.table("ai_board")
+               .select("source,title,content,updated_at")
+               .eq("source", BAK_TAG).execute())
+        return res.data or []
+    except Exception:
+        return []
+
+
 def _cleanup(loader):
-    st.markdown("#### 🧹 清空研究中心数据")
-    st.caption("只删除看板里来源为「研究中心」的条目，不影响其它页面的数据。")
+    st.markdown("#### 🧹 无痕清理")
+    st.caption("清理前会自动备份；清空后可从备份一键恢复。")
+
+    rows = _board_rows(loader)
+    baks = _backup_rows(loader)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("待清理条目", len(rows))
+    c2.metric("已有备份", len(baks))
+    c3.metric("代码文件", "lab_page.py")
+
     if not st.session_state.get("username") == st.secrets.get("ADMIN_USERNAME", "admin"):
-        st.info("仅管理员可清空")
+        st.info("仅管理员可清理")
         return
-    if st.button("🗑 清空研究中心全部数据", type="secondary", key="lab_clear"):
-        ok = 0
+
+    st.divider()
+    st.markdown("**第一步：确认要删除什么**")
+    _scope = st.multiselect(
+        "选择清理范围", ["实验数据（看板条目）", "代码文件（lab_page.py）"],
+        default=["实验数据（看板条目）"], key="lab_scope")
+    st.caption("代码文件不会被程序直接删除（避免破坏运行中的服务），"
+               "会生成一条删除指引，你照做即可。")
+
+    if rows:
+        with st.expander(f"查看将被删除的 {len(rows)} 条数据", expanded=False):
+            st.dataframe(pd.DataFrame(
+                [{"标题": r.get("title", ""),
+                  "时间": str(r.get("updated_at", ""))[:19]} for r in rows]),
+                use_container_width=True, hide_index=True)
+
+    st.markdown("**第二步：三道确认**")
+    k1 = st.checkbox("我确认这些数据可以删除", key="lab_k1")
+    k2 = st.checkbox("我确认已了解清理后需要从备份恢复", key="lab_k2")
+    _word = st.text_input('请输入「确认清理」四个字', key="lab_kw")
+    k3 = (_word.strip() == "确认清理")
+
+    _ready = k1 and k2 and k3 and ("实验数据（看板条目）" in _scope)
+    if not _ready:
+        st.warning("三道确认全部通过后，按钮才会亮起")
+    if st.button("🗑 执行清理", type="primary", disabled=not _ready,
+                 key="lab_do_clear"):
+        # ① 先备份
+        ok_bak = 0
         try:
             client = loader["supabase"]()
-            if client:
-                res = (client.table("ai_board").delete()
-                       .eq("source", SRC_TAG).execute())
-                ok = len(res.data or [])
+            if client and rows:
+                payload = [{"source": BAK_TAG, "title": r.get("title", ""),
+                            "content": r.get("content", "")} for r in rows]
+                client.table("ai_board").insert(payload).execute()
+                ok_bak = len(payload)
         except Exception as e:
-            st.warning(f"清空失败：{e}")
+            st.error(f"备份失败，已中止清理：{e}")
+            st.stop()
+        # ② 再删除
+        try:
+            client = loader["supabase"]()
+            client.table("ai_board").delete().eq("source", SRC_TAG).execute()
+        except Exception as e:
+            st.error(f"删除失败：{e}")
+            st.stop()
+
         st.session_state.pop("ai_board", None)
-        st.success(f"已清理 {ok} 条（看板数据已重新载入）")
-        time.sleep(0.6)
+        st.success(f"已备份 {ok_bak} 条，并清理 {len(rows)} 条数据")
+
+        if "代码文件（lab_page.py）" in _scope:
+            st.warning("代码文件请手动删除：")
+            st.code("1. 删除仓库里的 lab_page.py\n"
+                    "2. 删掉 app.py 菜单中的 \"🔬 研究中心\" 和对应分支\n"
+                    "3. 或把 lab_page.py 里的 ENABLED 改成 False 立刻停用")
+        time.sleep(0.8)
         st.rerun()
 
     st.divider()
-    st.markdown("**想要彻底移除这个页面？**")
-    st.code("1. 删除 lab_page.py\n2. 删掉 app.py 菜单里的 \"🧪 研究所\" 与分支\n"
-            "3. 清空上面数据", language=None)
+    st.markdown("**♻️ 从备份恢复**")
+    if not baks:
+        st.caption("暂无备份")
+    else:
+        st.caption(f"共 {len(baks)} 条备份记录")
+        if st.button(f"♻️ 恢复最近一次备份", key="lab_restore"):
+            try:
+                client = loader["supabase"]()
+                payload = [{"source": SRC_TAG, "title": r.get("title", ""),
+                            "content": r.get("content", "")} for r in baks]
+                client.table("ai_board").insert(payload).execute()
+                st.session_state.pop("ai_board", None)
+                st.success(f"已恢复 {len(payload)} 条")
+                time.sleep(0.8)
+                st.rerun()
+            except Exception as e:
+                st.warning(f"恢复失败：{e}")
+        if st.button("🧹 清空备份记录", key="lab_bak_clear"):
+            try:
+                client = loader["supabase"]()
+                client.table("ai_board").delete().eq("source", BAK_TAG).execute()
+                st.success("备份已清空")
+                time.sleep(0.6)
+                st.rerun()
+            except Exception as e:
+                st.warning(f"失败：{e}")
+
+    st.divider()
+    st.markdown("**⏸ 临时停用（不删任何东西）**")
+    st.code("把 lab_page.py 里的 ENABLED 改成 False\n菜单会自动隐藏，"
+            "数据保留；改回 True 即恢复", language=None)
 
 
 # =====================================================================
 # 页面入口
 # =====================================================================
 def render(df_data, H):
+    if not ENABLED:
+        st.warning("研究中心已停用（ENABLED = False），数据仍保留。")
+        return
     st.title("🔬 研究中心（实验沙盒）")
     st.caption("在这里试各种公式，不满意就一键清空；确认可用再迁到正式页面。")
 
