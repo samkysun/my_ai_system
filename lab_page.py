@@ -24,39 +24,42 @@ ENABLED = True          # 改成 False 即可停用本页（菜单自动隐藏�
 # =====================================================================
 # 通用：载入号码数据
 # =====================================================================
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_index6(_loader):
-    """期号 + 6 个平码（升序）"""
-    rows = _loader("_index6.csv", None)
+def _load_index6(loader):
+    """期号 + 6 个平码（升序），用 session_state 缓存"""
+    if "_lab_i6" in st.session_state:
+        return st.session_state["_lab_i6"]
+    rows = loader["load_excel_data"]("_index6.csv", None)
     out = []
-    if not rows:
-        return out
-    for r in rows[1:]:
-        if len(r) < 7:
-            continue
-        p = str(r[0]).strip()
-        try:
-            nums = tuple(int(float(r[1 + k] or 0)) for k in range(6))
-        except Exception:
-            continue
-        if p and all(nums):
-            out.append((p, nums))
+    if rows:
+        for r in rows[1:]:
+            if len(r) < 7:
+                continue
+            p = str(r[0]).strip()
+            try:
+                nums = tuple(int(float(r[1 + k] or 0)) for k in range(6))
+            except Exception:
+                continue
+            if p and all(nums):
+                out.append((p, nums))
     out.sort(key=lambda x: x[0])
+    st.session_state["_lab_i6"] = out
     return out
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_attr(_loader):
-    rows = _loader("_attr_map.csv", None)
+def _load_attr(loader):
+    """号码 -> 属性 对照表"""
+    if "_lab_attr" in st.session_state:
+        return st.session_state["_lab_attr"]
+    rows = loader["load_excel_data"]("_attr_map.csv", None)
     out = {}
-    if not rows:
-        return out
-    hdr = [str(x).strip() for x in rows[0]]
-    for r in rows[1:]:
-        if not r or not str(r[0]).strip().isdigit():
-            continue
-        out[int(float(r[0]))] = {hdr[i]: str(r[i]).strip()
-                                 for i in range(1, min(len(hdr), len(r)))}
+    if rows:
+        hdr = [str(x).strip() for x in rows[0]]
+        for r in rows[1:]:
+            if not r or not str(r[0]).strip().isdigit():
+                continue
+            out[int(float(r[0]))] = {hdr[i]: str(r[i]).strip()
+                                     for i in range(1, min(len(hdr), len(r)))}
+    st.session_state["_lab_attr"] = out
     return out
 
 
