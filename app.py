@@ -442,8 +442,8 @@ _MULTI_RULES = """【硬规则·违反即视为错误】
 
 6. 不存在「矛盾」判定：因为「下」不参与，所以不要写"上杀下留"这类分析。
 
-7. 禁止把 49 个号全部杀光。若全杀，只保留杀次数 ≤ 2 的号码，
-   并把杀次数高的列为「下期必杀号码」。
+7. 禁止把区间内号码全部杀光。若全杀，只杀「出现 2 次及以上」的条件，
+   出现 1 次的视为保留；杀次数高的列为「下期必杀号码」。
 
 8. 禁止编造，只能使用给出的数据。
 
@@ -453,7 +453,18 @@ _MULTI_RULES = """【硬规则·违反即视为错误】
    按序（落球顺序）各球没有固定范围，都是 1~49。
    涉及具体号码时必须落在对应区间内，不得给出区间外的号码。
 
-10. 输出格式：
+10. 合并计算时（主导 + 辅助）：
+    · 主导球位决定号码取值范围
+    · 辅助球位的杀号条件并入主导一起计算
+    · 合并不会扩大取值范围，仍按主导区间
+
+11. 佐证资料（深度联动等）里的「杀」也会并入计算，
+   但它只作旁证；与主报告冲突时以主报告为准。
+
+12. 若某个条件无法翻译成号码，必须在输出里明确列出
+   「无法翻译的条件」，不得静默忽略。
+
+13. 输出格式：
    ① 按期号 + 球位分组
    ② 每组列出：属性 → 要杀的值 → 出现次数
    ③ 每组给出「必杀号码」和「保留号码」
@@ -619,7 +630,9 @@ def kill_to_numbers(item, amap):
         return [n for n, a in amap.items() if a.get("尾数") == d]
     # 合数：06合
     if it.endswith("合"):
-        return [n for n, a in amap.items() if a.get("数字合") == it]
+        _d = it[:-1]
+        _v = f"{int(_d):02d}合" if _d.isdigit() else it
+        return [n for n, a in amap.items() if a.get("数字合") == _v]
     # 段数 / 门数
     if it.endswith("段"):
         return [n for n, a in amap.items() if a.get("段数") == it]
@@ -639,9 +652,12 @@ def kill_to_numbers(item, amap):
         return [n for n, a in amap.items() if a.get("福禄寿") == it]
     # 颜色肖：红肖
     if it.endswith("肖") and it[:-1] in "红蓝绿":
+        _v = it[:-1] + "色"
+        return [n for n, a in amap.items() if a.get("颜色肖") == _v]
+    if it in ("红色", "绿色", "蓝色"):
         return [n for n, a in amap.items() if a.get("颜色肖") == it]
     # 大小肖
-    if it.endswith("肖") and it[:-1] in ("大", "小"):
+    if it.endswith("肖") and it[:-1] in ("大", "小", "中"):
         return [n for n, a in amap.items() if a.get("大小肖") == it]
     # 尾五行：木尾 / 火尾 / 金尾
     if it.endswith("尾") and it[:-1] in _WX_CHARS:
@@ -665,6 +681,8 @@ def kill_to_numbers(item, amap):
         if it in _vals:
             return [n for n, a in amap.items() if a.get(_col) == it]
     # 波色单双
+    if it in ("红波", "绿波", "蓝波"):
+        return [n for n, a in amap.items() if a.get("波色") == it]
     if "波" in it:
         return [n for n, a in amap.items() if a.get("波单双") == it]
     # 方位
