@@ -1170,17 +1170,30 @@ def _board_render():
                      or _k in str(e.get("source", ""))
                      or _k in str(e.get("text", ""))[:200]]
 
-        # ---- 批量勾选删除 ----
-        _opts = [f"{e.get('source','')}｜{e.get('title','')}" for e in board]
-        _picked = st.multiselect("勾选要删除的条目（可多选）", _opts,
-                                 default=[], key="board_bulk")
-        _bc1, _bc2 = st.columns([1, 3])
-        with _bc1:
-            if st.button(f"🗑 删除选中（{len(_picked)}）", disabled=not _picked,
+        # ---- 表格化管理：全部可见 ----
+        _rows = [{"删除": False,
+                  "来源": e.get("source", ""),
+                  "标题": e.get("title", ""),
+                  "时间": str(e.get("ts", ""))[:16]} for e in board]
+        _df = pd.DataFrame(_rows)
+        _edited = st.data_editor(
+            _df, use_container_width=True, hide_index=True, height=min(420, 40 + 35 * max(1, len(_df))),
+            key="board_editor",
+            column_config={
+                "删除": st.column_config.CheckboxColumn("删除", width="small"),
+                "来源": st.column_config.TextColumn(width="small"),
+                "标题": st.column_config.TextColumn(width="large"),
+                "时间": st.column_config.TextColumn(width="small"),
+            })
+        _sel_idx = [i for i, v in enumerate(_edited["删除"].tolist()) if v]
+
+        _cc1, _cc2 = st.columns([1, 2])
+        with _cc1:
+            if st.button(f"🗑 删除选中（{len(_sel_idx)}）", disabled=not _sel_idx,
                          key="board_bulk_del", use_container_width=True):
                 _n = 0
-                for _lab in _picked:
-                    _e = board[_opts.index(_lab)]
+                for _i in _sel_idx:
+                    _e = board[_i]
                     try:
                         _board_cloud_delete(_e.get("source", ""),
                                             _e.get("title", ""))
@@ -1195,26 +1208,17 @@ def _board_render():
                             break
                 st.session_state["_board_flash"] = f"已删除 {_n} 条"
                 st.rerun()
-        with _bc2:
-            st.caption(f"共 {len(board)} 条可选；删除会同时清理云端")
+        with _cc2:
+            st.caption(f"共 {len(board)} 条；勾选左侧「删除」列可批量删除")
 
-        _show = board[:20]
-        if len(board) > 20:
-            st.caption(f"仅显示前 20 条（共 {len(board)} 条），用搜索缩小范围")
-        for i, e in enumerate(_show):
-            _orig = e.get("_orig_idx")
-            with st.expander(f"{e['source']} · {e['title']}　({e['ts']})", expanded=False):
-                st.text_area("内容", value=e["text"], height=340,
-                             key=f"board_txt_{i}_{e['ts']}", label_visibility="collapsed")
-                if st.button("移除此条", key=f"board_del_{i}_{e['ts']}"):
-                    _lst = st.session_state.get("ai_board") or []
-                    for _j, _it in enumerate(_lst):
-                        if (_it.get("source") == e.get("source")
-                                and _it.get("title") == e.get("title")):
-                            _lst.pop(_j)
-                            break
-                    _board_cloud_delete(e.get("source", ""), e.get("title", ""))
-                    st.rerun()
+        # ---- 查看内容 ----
+        if board:
+            _view_opts = [f"{e.get('source','')}｜{e.get('title','')}｜{e.get('ts','')}"
+                          for e in board]
+            _v = st.selectbox("查看内容", _view_opts, key="board_view")
+            _ve = board[_view_opts.index(_v)]
+            with st.expander(f"📄 {_ve.get('title','')}", expanded=True):
+                st.code(_ve.get("text", ""), language=None)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
