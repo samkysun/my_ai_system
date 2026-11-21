@@ -872,8 +872,8 @@ def _multi_struct_text(blocks):
     return "\n".join(lines)
 
 
-def _multi_ai_analyze(question, raw_text=None):
-    """解析报告并交给 AI"""
+def _multi_ai_analyze(question, raw_text=None, evidence=""):
+    """解析报告并交给 AI（可附旁证资料）"""
     text = raw_text or ""
     if not text.strip():
         # 从看板里凑
@@ -884,9 +884,14 @@ def _multi_ai_analyze(question, raw_text=None):
     if not blocks:
         return None, "没有解析到报告内容（需要包含【基准行排列】和触发行）"
     summary = _multi_struct_text(blocks)
-    prompt = (f"下面是 {len(blocks)} 条多维分析报告的结构化结果：\n\n{summary}\n\n"
+    _ev = (evidence or "").strip()
+    _ev_part = (f"\n\n【旁证资料（供印证，不得替代主规则）】\n{_ev[:6000]}\n"
+                if _ev else "")
+    prompt = (f"下面是 {len(blocks)} 条多维分析报告的结构化结果：\n\n{summary}"
+              f"{_ev_part}\n\n"
               f"【我的问题】\n{question}\n\n"
-              f"请按以下要求作答：\n"
+              f"请按以下要求作答（旁证只用于印证主报告的杀号，\n"
+              f"若旁证与主报告冲突，以主报告（触发行/杀括号）为准并说明冲突）：\n"
               f"1) 按属性逐个说明：该属性历史上匹配到几段、上期/下期分别是什么值\n"
               f"2) 汇总所有属性中「下期值」出现最多的取值（若同一属性多个触发行，分别列出）\n"
               f"3) 指出哪些属性的结论一致、哪些互相矛盾\n"
@@ -989,8 +994,26 @@ def _multi_ai_ui():
             st.dataframe(pd.DataFrame(_dbgrows), use_container_width=True,
                          hide_index=True)
 
+        # ③ 佐证资料（可多选）
+        st.markdown("**③ 佐证资料（可多选，喂给 AI 做旁证）**")
+        _ev_items = []
+        if _items:
+            _ev_opts = [f"{i+1}. {e.get('source','')}｜{e.get('title','')}"
+                        for i, e in enumerate(_items)]
+            _ev_sel = st.multiselect(
+                "从看板里选佐证（例如深度联动的各球位结果，可多套）",
+                _ev_opts, default=[], key="multi_ev")
+            _ev_items = [_items[int(x.split(".")[0]) - 1] for x in _ev_sel]
+            if _ev_items:
+                st.caption("已选佐证：" + "；".join(
+                    f"{e.get('title','')}" for e in _ev_items[:8])
+                    + ("…" if len(_ev_items) > 8 else ""))
+        _ev_text = "\n\n".join(
+            f"【{e.get('title','')}】\n{(e.get('text') or '')[:1500]}"
+            for e in _ev_items)
+
         # AI 解读
-        st.markdown("**③ AI 解读（可选）**")
+        st.markdown("**④ AI 解读（可选）**")
         _q = st.text_area(
             "你想问什么",
             value="按球位分别汇总：每个属性要杀什么、每个球位的必杀号码与保留号码。",
@@ -998,7 +1021,7 @@ def _multi_ai_ui():
         if st.button("▶ 让 AI 解读", type="primary", key="multi_go"):
             with st.spinner("AI 分析中（约 10~30 秒）…"):
                 try:
-                    _ans, _err = _multi_ai_analyze(_q, _txt)
+                    _ans, _err = _multi_ai_analyze(_q, _txt, _ev_text)
                 except Exception as _e:
                     _ans, _err = None, f"{type(_e).__name__}: {_e}"
             if _err:
