@@ -955,8 +955,28 @@ def _multi_ai_ui():
         for b in _blocks:
             key = f"{b['order']}第{b['ball']}球"
             _groups.setdefault(key, []).append(b)
-        _labels = list(_groups.keys())
-        st.caption(f"已解析 {len(_blocks)} 条属性报告，分布在 {len(_labels)} 个球位")
+
+        # ---- 资料库索引：扫全部看板条目，保证选项不会因当前选择而消失 ----
+        _sig = (len(_items), sum(len(e.get("text", "") or "") for e in _items))
+        if st.session_state.get("_multi_lib_sig") != _sig:
+            _lib = {}
+            for _e in _items:
+                _etxt = _e.get("text", "") or ""
+                if "基准行排列" not in _etxt and "第1球" not in _etxt:
+                    continue
+                try:
+                    for _b in _parse_multi_blocks(_etxt):
+                        _k = f"{_b['order']}第{_b['ball']}球"
+                        _lib.setdefault(_k, []).append(_b)
+                except Exception:
+                    pass
+            st.session_state["_multi_lib"] = _lib
+            st.session_state["_multi_lib_sig"] = _sig
+        _lib = st.session_state.get("_multi_lib") or {}
+
+        _labels = sorted(set(_groups.keys()) | set(_lib.keys()),
+                         key=lambda x: (x[:2] != "升序", x))
+        st.caption(f"已解析 {len(_blocks)} 条属性报告；资料库共 {len(_labels)} 个球位可选")
 
         # ---- 设置区（常显、紧凑） ----
         _s1, _s2 = st.columns([1, 3])
@@ -1008,9 +1028,10 @@ def _multi_ai_ui():
             st.caption(f"{len(_labels)} 个球位，点标题展开查看")
             for k in _labels:
                 _klo, _khi = _range_of(k)
-                with st.expander(f"■ {k}（{len(_groups[k])} 个属性，"
+                _srcblk = _groups.get(k) or _lib.get(k) or []
+                with st.expander(f"■ {k}（{len(_srcblk)} 个属性，"
                                  f"区间 {_klo}~{_khi}）", expanded=False):
-                    _kg = list(_groups[k])
+                    _kg = list(_srcblk)
                     _km = re.match(r"(升序|按序)第?(\d)球", k)
                     if _km:
                         _kg += _ev_for(_km.group(1), _km.group(2))
@@ -1023,7 +1044,8 @@ def _multi_ai_ui():
                 st.info("缺少属性对照表")
             else:
                 _allk = [_dom] + _merge
-                _mb = [b for k in _allk for b in _groups.get(k, [])]
+                _mb = [b for k in _allk
+                       for b in (_groups.get(k) or _lib.get(k) or [])]
                 for _k in _allk:
                     _m = re.match(r"(升序|按序)第?(\d)球", _k)
                     if _m:
