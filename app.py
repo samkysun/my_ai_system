@@ -1143,17 +1143,15 @@ def _board_render():
     if _flash:
         st.success(_flash)
     board = list(reversed(board))          # 最新在前
-    _kw = st.text_input("🔍 在看板里搜索（期号 / 来源 / 标题）",
-                        key="board_search", placeholder="例如 2026124 或 杀号结果")
-    if _kw.strip():
-        _k = _kw.strip()
-        board = [e for e in board
-                 if _k in str(e.get("title", "")) or _k in str(e.get("source", ""))
-                 or _k in str(e.get("text", ""))[:200]]
-    with st.expander(f"📋 汇总看板（显示 {len(board)} 条，来自其它页面）", expanded=True):
-        c1, c2 = st.columns([1, 3])
+    _total = len(board)
+    with st.expander(f"📋 汇总看板（共 {_total} 条，点此展开）",
+                     expanded=False):
+        c0, c1, c2 = st.columns([2, 1, 1])
+        with c0:
+            _kw = st.text_input("🔍 搜索（期号 / 来源 / 标题）", key="board_search",
+                                placeholder="例如 2026124 或 杀号结果")
         with c1:
-            if st.button("🗑 清空看板", use_container_width=True, key="board_clear"):
+            if st.button("🗑 清空全部", use_container_width=True, key="board_clear"):
                 st.session_state.ai_board = []
                 _board_cloud_clear()
                 st.rerun()
@@ -1161,12 +1159,49 @@ def _board_render():
             _all = "\n\n".join(
                 f"===== {e['source']} | {e['title']} | {e['ts']} =====\n{e['text']}"
                 for e in board)
-            st.download_button("📥 导出全部", _all.encode("utf-8-sig"),
+            st.download_button("📥 导出", _all.encode("utf-8-sig"),
                                file_name=f"汇总看板_{datetime.now():%Y%m%d_%H%M%S}.txt",
                                mime="text/plain", use_container_width=True,
                                key="board_export")
+        if _kw.strip():
+            _k = _kw.strip()
+            board = [e for e in board
+                     if _k in str(e.get("title", ""))
+                     or _k in str(e.get("source", ""))
+                     or _k in str(e.get("text", ""))[:200]]
 
-        for i, e in enumerate(board):
+        # ---- 批量勾选删除 ----
+        _opts = [f"{e.get('source','')}｜{e.get('title','')}" for e in board]
+        _picked = st.multiselect("勾选要删除的条目（可多选）", _opts,
+                                 default=[], key="board_bulk")
+        _bc1, _bc2 = st.columns([1, 3])
+        with _bc1:
+            if st.button(f"🗑 删除选中（{len(_picked)}）", disabled=not _picked,
+                         key="board_bulk_del", use_container_width=True):
+                _n = 0
+                for _lab in _picked:
+                    _e = board[_opts.index(_lab)]
+                    try:
+                        _board_cloud_delete(_e.get("source", ""),
+                                            _e.get("title", ""))
+                        _n += 1
+                    except Exception:
+                        pass
+                    _lst = st.session_state.get("ai_board") or []
+                    for _j, _it in enumerate(_lst):
+                        if (_it.get("source") == _e.get("source")
+                                and _it.get("title") == _e.get("title")):
+                            _lst.pop(_j)
+                            break
+                st.session_state["_board_flash"] = f"已删除 {_n} 条"
+                st.rerun()
+        with _bc2:
+            st.caption(f"共 {len(board)} 条可选；删除会同时清理云端")
+
+        _show = board[:20]
+        if len(board) > 20:
+            st.caption(f"仅显示前 20 条（共 {len(board)} 条），用搜索缩小范围")
+        for i, e in enumerate(_show):
             _orig = e.get("_orig_idx")
             with st.expander(f"{e['source']} · {e['title']}　({e['ts']})", expanded=False):
                 st.text_area("内容", value=e["text"], height=340,
