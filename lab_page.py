@@ -734,8 +734,8 @@ def _exp_target_multi(loader):
 # =====================================================================
 def _exp_combo_prev(loader):
     st.markdown("#### 实验 F：三三组合 → 上一期球位号码")
-    st.caption("取基准期 7 个号码的全部三三组合，找历史中出现过这些组合的期，"
-               "统计它们「上一期」指定球位的号码，按次数排序。")
+    st.caption("计算目标期的球位：用「目标期的上一期」7 个号码做三三组合，"
+               "到目标期之前的历史里找触发，统计触发期的「上一期」指定球位号码。")
 
     data = _load_index6(loader)
     if not data:
@@ -745,7 +745,8 @@ def _exp_combo_prev(loader):
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
+        base = st.selectbox("目标期（要预测的那期）",
+                            ["最新"] + list(reversed(periods[-300:])),
                             index=0, key="lab_f_base")
     with c2:
         ball = st.selectbox("取第几球（升序）", list(range(1, 8)), index=0,
@@ -762,19 +763,24 @@ def _exp_combo_prev(loader):
     from collections import Counter
 
     idx = len(data) - 1 if base == "最新" else periods.index(base)
-    nums = data[idx][1]
+    if idx < 2:
+        st.warning("历史不足")
+        return
+    src = idx - 1                      # 用上一期的号码做组合
+    nums = data[src][1]
     combos = list(itertools.combinations(sorted(nums), 3))
-    st.markdown(f"**基准期 {periods[idx]}**：{nums}")
-    st.caption(f"三三组合共 {len(combos)} 组")
+    st.markdown(f"**目标期 {periods[idx]}**（待算第{ball}球）　"
+                f"**组合来源 {periods[src]}**：{nums}")
+    st.caption(f"三三组合共 {len(combos)} 组；触发范围：{periods[src]} 之前")
 
     limits = {"全部": 0, "最近 2000 期": 2000, "最近 1000 期": 1000,
               "最近 500 期": 500}
-    lo = max(1, idx - limits[span]) if limits[span] else 1
+    lo = max(1, src - limits[span]) if limits[span] else 1
 
     combo_set = [frozenset(c) for c in combos]
     cnt = Counter()
     matched = []
-    for j in range(lo, idx):
+    for j in range(lo, src):
         s = set(data[j][1])
         if any(c.issubset(s) for c in combo_set):
             prev = data[j - 1][1][ball - 1]
