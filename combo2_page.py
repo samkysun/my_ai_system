@@ -326,3 +326,99 @@ def render(df_data, H):
             st.warning(f"本期没有全中{int(k)}码的组合")
     else:
         st.info(f"{pick} 是最新一期，还没有下一期开奖数据")
+
+    # ---------- 六、盈亏回测（页面最下面） ----------
+    st.divider()
+    st.markdown("### 六、盈亏回测（按上面所选参数）")
+    st.caption(f"规则：用前一期 6 平码拆 {k} 码组合 → 对碰历史 → "
+               f"取触发期的下一期再拆 → 保留出现 ≥{int(_minc)} 次的组合 → "
+               f"下一期全买这些组合。")
+
+    _b1, _b2, _b3 = st.columns(3)
+    with _b1:
+        _bt_n = st.number_input("回测期数（往前）", 20, 1000, 100, 20,
+                                key="c2_bt_n")
+    with _b2:
+        _odds = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
+                                key="c2_bt_odds")
+    with _b3:
+        _unit = st.number_input("每注金额（元）", 1, 10000, 1, 1,
+                                key="c2_bt_unit")
+
+    if st.button("📉 运行盈亏回测", key="c2_bt_run"):
+        st.session_state["c2_bt_go2"] = True
+
+    if st.session_state.get("c2_bt_go2"):
+        with st.spinner("回测中…"):
+            _idx = {p2: i for i, (p2, _) in enumerate(data)}
+            _end = _idx.get(pick, len(data) - 1)
+            _start = max(2, _end - int(_bt_n))
+            _rows, _spent, _back, _wins = [], 0, 0, 0
+            for i in range(_start, _end):
+                _seed = combos_of([v for v in data[i - 1][1][:6] if v], k)
+                if not _seed:
+                    continue
+                _ss = [set(c) for c in _seed]
+                _cnt = Counter()
+                for j in range(i - 1):
+                    _ns = {v for v in data[j][1][:6] if v}
+                    if any(s.issubset(_ns) for s in _ss) and j + 1 < i - 1:
+                        for c in combos_of(
+                                [v for v in data[j + 1][1][:6] if v], k):
+                            _cnt[c] += 1
+                _pool = [c for c, n in _cnt.items() if n >= int(_minc)]
+                if not _pool:
+                    continue
+                _draw = {v for v in data[i][1][:6] if v}
+                _hit = [c for c in _pool if set(c).issubset(_draw)]
+                _cost = len(_pool) * _unit
+                _gain = len(_hit) * _odds * _unit
+                _spent += _cost
+                _back += _gain
+                if _hit:
+                    _wins += 1
+                _rows.append({
+                    "期号": data[i][0],
+                    "买入注数": len(_pool),
+                    "投入": _cost,
+                    "命中注数": len(_hit),
+                    "回收": _gain,
+                    "盈亏": _gain - _cost,
+                    "命中组合": "、".join(",".join(f"{x:02d}" for x in c)
+                                        for c in _hit[:3]),
+                    "开奖": " ".join(f"{v:02d}" for v in sorted(_draw)),
+                })
+
+            if not _rows:
+                st.warning("没有可回测的期数")
+            else:
+                _profit = _back - _spent
+                _c1b, _c2b, _c3b, _c4b = st.columns(4)
+                _c1b.metric("总投入", f"{_spent:,.0f} 元")
+                _c2b.metric("总回收", f"{_back:,.0f} 元")
+                _c3b.metric("盈亏", f"{_profit:,.0f} 元")
+                _c4b.metric("回报率",
+                            f"{_back/max(1,_spent)*100:.1f}%")
+                st.caption(f"回测 {len(_rows)} 期｜有命中 {_wins} 期｜"
+                           f"共中 {sum(r['命中注数'] for r in _rows)} 注｜"
+                           f"平均每期 {_spent/max(1,len(_rows)):.0f} 元")
+
+                _d2 = pd.DataFrame(list(reversed(_rows)))
+
+                def _hl2(row):
+                    if row["命中注数"]:
+                        return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+                    return [""] * len(row)
+
+                try:
+                    st.dataframe(_d2.style.apply(_hl2, axis=1),
+                                 use_container_width=True, hide_index=True,
+                                 height=360)
+                except Exception:
+                    st.dataframe(_d2, use_container_width=True,
+                                 hide_index=True, height=360)
+                st.download_button(
+                    "📥 下载回测明细",
+                    _d2.to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"盈亏回测_{pick}.csv", mime="text/csv",
+                    key="c2_bt_dl2")
