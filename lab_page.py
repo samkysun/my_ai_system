@@ -504,11 +504,16 @@ def _exp_link_attr(loader):
              for k, v in cnt.most_common(int(top_n))]),
             use_container_width=True, hide_index=True)
 
-        st.markdown("**明细（最近 20 条）**")
-        st.dataframe(pd.DataFrame(
-            [{"触发期": a, "下一期": b, f"实际{attr}": c}
-             for a, b, c in hits[-20:]]),
-            use_container_width=True, hide_index=True)
+        st.markdown(f"**命中明细（全部 {len(hits)} 条）**")
+        _hit_df = pd.DataFrame(
+            [{"触发期": a, "下一期": b, f"下一期第{tgt}球{attr}": c}
+             for a, b, c in hits])
+        st.dataframe(_hit_df, use_container_width=True, hide_index=True,
+                     height=320)
+        st.download_button("📥 下载明细",
+                           _hit_df.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"属性联动_{attr}_{b1}+{b2}推{tgt}.csv",
+                           mime="text/csv", key="lab_d_dl")
 
         # 回测对比
         if idx + 1 < len(data):
