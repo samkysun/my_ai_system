@@ -255,9 +255,10 @@ def learn_rules(draws, lookback=800):
     """自动发现并验证多族规则"""
     hist = draws[-lookback:]
     n = len(hist)
-    if n < 50:
+    if n < 40:
         return []
-    min_n = max(10, min(RULE_MIN_N, n // 4))
+    min_n = max(4, min(RULE_MIN_N, n // 6))
+    _THS = ([5, 8] + list(RULE_THRESHOLDS)) if n < 150 else RULE_THRESHOLDS
     rules = []
 
     # ---------- 族1：遗漏型（属性值遗漏达阈值 → 下期开出） ----------
@@ -269,7 +270,7 @@ def learn_rules(draws, lookback=800):
                 continue
             base = total_hits / n
             last = -1
-            for T in RULE_THRESHOLDS:
+            for T in _THS:
                 events = hits = 0
                 last = -1
                 for i in range(1, n):
