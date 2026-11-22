@@ -857,6 +857,114 @@ def _exp_combo_prev(loader):
 
 
 # =====================================================================
+# 实验 G：球位热号（1~2 个）+ 可选期回测
+# =====================================================================
+def _exp_hot_pick(loader):
+    st.markdown("#### 实验 G：单球位热号（1~2 个）+ 回测")
+    st.caption("按历史出现频率取最热的 1~2 个号码，回测每 4~7 期中一次的可行性。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p for p, _ in data]
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        ball = st.selectbox("球位（升序）", list(range(1, 8)), index=0,
+                            key="lab_g_ball")
+    with c2:
+        topn = st.radio("输出个数", [1, 2], horizontal=True, index=1,
+                        key="lab_g_topn")
+    with c3:
+        hist_span = st.selectbox("取频次的历史范围",
+                                 ["全部", "最近 2000 期", "最近 1000 期",
+                                  "最近 500 期"], index=0, key="lab_g_span")
+    with c4:
+        test_n = st.number_input("回测最近多少期", 20, 2000, 300, 20,
+                                 key="lab_g_test")
+
+    if not st.button("▶ 运行实验 G", key="lab_g_run"):
+        return
+
+    from collections import Counter
+    limits = {"全部": 0, "最近 2000 期": 2000, "最近 1000 期": 1000,
+              "最近 500 期": 500}
+    span = limits[hist_span]
+    seq = [d[1][ball - 1] for d in data]
+    n = len(seq)
+
+    # ---- 当前推荐（用全部历史）----
+    hist = seq[-span:] if span else seq
+    cnt = Counter(hist)
+    top = [v for v, _ in cnt.most_common(topn)]
+    lo, hi = ball, 43 + ball
+    st.markdown(f"**当前推荐（第{ball}球，区间 {lo}~{hi}）**："
+                + "、".join(f"{v:02d}（{cnt[v]}次）" for v in top))
+
+    # ---- 回测（walk-forward）----
+    hit = tot = hits_series = 0
+    rows = []
+    start = max(topn, n - int(test_n))
+    for i in range(start, n):
+        c_hist = seq[:i]
+        if span:
+            c_hist = seq[max(0, i - span):i]
+        if not c_hist:
+            continue
+        c = Counter(c_hist)
+        pick = [v for v, _ in c.most_common(topn)]
+        actual = seq[i]
+        ok = actual in pick
+        tot += 1
+        hit += 1 if ok else 0
+        rows.append({"期号": periods[i], "推荐": " ".join(f"{v:02d}" for v in pick),
+                     "实开": f"{actual:02d}", "命中": "★" if ok else ""})
+    if not tot:
+        st.warning("样本不足")
+        return
+
+    rate = hit / tot
+    gap = (1 / rate) if rate else 0
+    st.metric("回测命中率", f"{rate*100:.1f}%",
+              f"{hit}/{tot} 期")
+    st.metric("平均多少期中一次", f"{gap:.1f} 期" if gap else "—",
+              "目标 4~7 期")
+
+    _df = pd.DataFrame(rows)
+
+    def _hl(row):
+        if row["命中"]:
+            return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+        return [""] * len(row)
+
+    st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                 hide_index=True, height=360)
+    st.download_button("📥 下载回测明细",
+                       _df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"实验G_第{ball}球_top{topn}.csv",
+                       mime="text/csv", key="lab_g_dl")
+
+    # 连续性统计
+    streaks = []
+    cur = 0
+    for r in rows:
+        if r["命中"]:
+            if cur:
+                streaks.append(cur)
+            cur = 0
+        else:
+            cur += 1
+    if cur:
+        streaks.append(cur)
+    if streaks:
+        streaks.sort()
+        mid = streaks[len(streaks) // 2]
+        st.caption(f"未中连续期数：最长 {max(streaks)} 期，中位 {mid} 期，"
+                   f"共 {len(streaks)} 段")
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -1055,10 +1163,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabc, tabd, tabe, tabf, tab4, tab3 = st.tabs(
+    tab2, tabc, tabd, tabe, tabf, tabg, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验C 形态组合",
          "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
-         "结论档案", "清理"])
+         "实验G 热号回测", "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabc:
@@ -1069,6 +1177,8 @@ def render(df_data, H):
         _exp_target_multi(H)
     with tabf:
         _exp_combo_prev(H)
+    with tabg:
+        _exp_hot_pick(H)
     with tab4:
         _archive()
     with tab3:
