@@ -1093,6 +1093,36 @@ def _exp_six_pick(loader):
                        file_name=f"实验H_6码_{periods[start]}_{periods[end-1]}.csv",
                        mime="text/csv", key="lab_h_dl")
 
+    # ---- 多种 6 码分配对比 ----
+    st.markdown("**📊 6 码不同分配方式对比（同区间）**")
+    strats = [("单押第1球 6个", {1: 6}, 1), ("单押第6球 6个", {6: 6}, 1),
+              ("单押第5球 6个", {5: 6}, 1), ("单押第2球 6个", {2: 6}, 1),
+              ("1球1+2球2+5球2+6球1", ALLOC, 3),
+              ("1球2+2球2+6球2", {1: 2, 2: 2, 6: 2}, 3),
+              ("五个球各1个", {1: 1, 2: 1, 3: 1, 4: 1, 5: 1}, 1)]
+    _rows_cmp = []
+    for _name, _alloc, _need2 in strats:
+        _ok = _tot = 0
+        _sub = list(_alloc.items())
+        for i2 in range(start, end):
+            _c2 = 0
+            for b, k in _sub:
+                cc = Counter(seqs[b][max(0, i2 - int(_win)):i2])
+                pk = [v for v, _ in cc.most_common(k)]
+                if seqs[b][i2] in pk:
+                    _c2 += 1
+            _tot += 1
+            if _c2 >= _need2:
+                _ok += 1
+        _rows_cmp.append({"分配方式": _name,
+                          "号码数": sum(v for v in _alloc.values()),
+                          "达标条件": f"中{_need2}个",
+                          "达标率": f"{_ok/_tot*100:.1f}%",
+                          "期数": f"{_ok}/{_tot}"})
+    st.dataframe(pd.DataFrame(_rows_cmp), use_container_width=True,
+                 hide_index=True)
+    st.caption("单押一个球位 6 个号，达标率明显更高；分散押 3 个球几乎不可能。")
+
     # 下一期推荐
     st.markdown(f"**下一期推荐（6 个号，窗口 {int(_win)} 期）**")
     _next = []
