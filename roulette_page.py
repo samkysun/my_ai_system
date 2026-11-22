@@ -329,7 +329,7 @@ def build_candidates(draws, rec_nums=None):
             _gaps[_v] = _g
         for _v, _g in _gaps.items():
             if _g >= TH_ZODIAC:
-                for _num in range(37):
+                for _num in range(1, 37):          # 0 号特殊：不参与属性加权
                     if attrs_of(_num)[_key] == _v:
                         add(_num, f"{_name}{_v}", 1)
     # 生肖遗漏号码不再写入候选（按要求）
@@ -354,7 +354,7 @@ def build_candidates(draws, rec_nums=None):
     _zgap = om["号码"].get(0, 0)
     if _z >= 40 and 0 not in _rec:
         ranked.append((0, 99))
-        why[0].append(f"0号已出{_z}次·遗漏{_zgap}期")
+        why[0].append(f"0号·尾0·遗漏{_zgap}期·累计{_z}次")
     _seen = {n for n, _ in ranked}
     for n, s in _strong + _weak:
         if len(ranked) >= MAX_PICK:
@@ -456,6 +456,7 @@ def render(df_data, H):
         for num, sc, lv, wh in levels:
             a = attrs_of(num)
             rows.append({"等级": lv, "号码": num, "得分": sc,
+                         "遗漏": om["号码"].get(num, 0),
                          "命中条件": "、".join(sorted(set(wh))),
                          "尾数": a["尾数"], "生肖": a["生肖"],
                          "四宝": a["四宝"], "物象": a["物象"],
