@@ -107,19 +107,26 @@ def load_history(loader):
             if raw:
                 obj = json.loads(raw)
                 data = [int(x) for x in obj.get("draws", []) if 0 <= int(x) <= 36]
+                st.session_state["_roulette_pending"] = [
+                    int(x) for x in obj.get("pending", []) if 0 <= int(x) <= 36]
         except Exception:
             data = []
     st.session_state["_roulette_hist"] = data
     return data
 
 
-def save_history(loader, draws):
+def save_history(loader, draws, pending=None):
     st.session_state["_roulette_hist"] = list(draws)
+    if pending is not None:
+        st.session_state["_roulette_pending"] = list(pending)
     fn = loader.get("gh_write")
     if not fn:
         return False
     try:
-        fn(HIST_FILE, json.dumps({"draws": draws}, ensure_ascii=False),
+        fn(HIST_FILE, json.dumps({"draws": draws,
+                                  "pending": st.session_state.get(
+                                      "_roulette_pending", [])},
+                                 ensure_ascii=False),
            "轮盘记录更新")
         return True
     except Exception:
@@ -330,12 +337,23 @@ def build_candidates(draws, rec_nums=None):
     # 轮盘相邻只提醒，不写入候选
 
     # 属性重复加权：同号码命中多个不同属性条件
+    _pend = [int(x) for x in st.session_state.get("_roulette_pending", [])
+             if 0 <= int(x) <= 36]
     _rec = [int(x) for x in (rec_nums or [])][:REC_N]
+    for _p in _pend:
+        if _p not in _rec:
+            _rec.append(_p)
+    _rec = _rec[:max(REC_N, REC_N + len(_pend))]
     _rest = sorted(((n, s) for n, s in score.items() if n not in _rec),
                    key=lambda x: (-x[1], x[0]))
     _strong = [(n, s) for n, s in _rest if s >= 2]
     _weak = [(n, s) for n, s in _rest if s < 2]
     ranked = [(n, score.get(n, 0)) for n in _rec]
+    # 0 号按出现次数权衡：超过 40 次开始推荐
+    _z = draws.count(0)
+    if _z > 40 and 0 not in _rec:
+        ranked.append((0, 99))
+        why[0].append(f"0号已出{_z}次")
     for n, s in _strong + _weak:
         if len(ranked) >= MAX_PICK:
             break
@@ -349,6 +367,8 @@ def build_candidates(draws, rec_nums=None):
             tags = set(why[num])
             if num in _rec:
                 lv = "推荐"
+            elif num == 0 and 0 in why and any("0号已出" in w for w in why[0]):
+                lv = "重点"
             elif tags & {"姐妹", "轮盘邻"}:
                 lv = "重点"
             elif sc >= top and sc >= 3:
@@ -376,7 +396,10 @@ def render(df_data, H):
     with c2:
         if st.button("➕ 添加", use_container_width=True, key="rou_add"):
             draws = draws + [int(num)]
-            ok = save_history(H, draws)
+            _pend = [x for x in st.session_state.get("_roulette_pending", [])
+                     if x != int(num)]
+            st.session_state["_roulette_pending"] = _pend
+            ok = save_history(H, draws, _pend)
             st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
             st.rerun()
     with c3:
@@ -407,6 +430,7 @@ def render(df_data, H):
     om, alerts, levels = build_candidates(draws, _rec)
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
+    st.caption(f"0 号累计出现 {draws.count(0)} 次（超过 40 次自动推荐）")
     st.markdown(f"**上期号码：{last_no}**　"
                 f"姐妹码 {sister(last_no)}（连续 {_sg} 期未出）　"
                 f"轮盘相邻 {wheel_neighbors(last_no)}（连续 {_ag} 期未出）")
