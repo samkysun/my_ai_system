@@ -595,6 +595,123 @@ def _exp_link_attr(loader):
 
 
 # =====================================================================
+# 实验 E：锁定目标球 · 多组合联动（前二）
+# =====================================================================
+def _exp_target_multi(loader):
+    st.markdown("#### 实验 E：锁定目标球 · 多组合联动（取前二）")
+    st.caption("锁定一个目标球位，用 1+2、2+3、3+4、4+5、5+6、6+7 六组分别联动，"
+               "汇总后取前 2 名作为目标球属性，回测命中高亮。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    zrows = _load_zodiac(loader)
+    zodiac = {r[0]: r[1:8] for r in zrows}
+    zattrs = _load_zodiac_attrs(loader)
+    amap = _load_attr(loader)
+    periods = [p for p, _ in data]
+    if not zodiac or not amap:
+        st.error("生肖表或属性表未加载成功，请 Reboot app")
+        return
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        tgt = st.selectbox("锁定目标球位", list(range(1, 8)), index=0,
+                           key="lab_e_tgt")
+    with c2:
+        attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_e_attr")
+    with c3:
+        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
+                            index=0, key="lab_e_base")
+    _rng = st.radio("球位区间口径",
+                    ["严格（数学边界）", "经验（历史99%）"],
+                    horizontal=True, key="lab_e_rng")
+
+    if not st.button("▶ 运行实验 E", key="lab_e_run"):
+        return
+
+    idx = len(data) - 1 if base == "最新" else periods.index(base)
+    pairs = [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
+    _EMP = {1: (1, 28), 2: (2, 36), 3: (5, 41), 4: (9, 45),
+            5: (14, 48), 6: (22, 49), 7: (1, 49)}
+    _lo, _hi = (_EMP.get(tgt, (tgt, 43 + tgt)) if _rng.startswith("经验")
+                else (tgt, 43 + tgt))
+
+    st.markdown(f"**基准期 {periods[idx]}｜锁定第{tgt}球｜属性 {attr}｜"
+                f"号码区间 {_lo}~{_hi}**")
+
+    from collections import Counter
+    total = Counter()
+    per_pair = []
+    for (a, b) in pairs:
+        v1 = _attr_of(data[idx], a, attr, zodiac, zattrs, amap)
+        v2 = _attr_of(data[idx], b, attr, zodiac, zattrs, amap)
+        if not v1 or not v2:
+            continue
+        c = Counter()
+        n = 0
+        for i in range(0, idx):
+            if _attr_of(data[i], a, attr, zodiac, zattrs, amap) != v1:
+                continue
+            if _attr_of(data[i], b, attr, zodiac, zattrs, amap) != v2:
+                continue
+            nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap)
+            if nv:
+                c[nv] += 1
+                n += 1
+        total.update(c)
+        top = c.most_common(1)[0] if c else ("—", 0)
+        per_pair.append({"组合": f"{a}+{b}", "取值": f"{v1}+{v2}",
+                         "历史期数": n,
+                         "该组首位": top[0],
+                         "首位次数": top[1]})
+
+    st.markdown("**各组合分别结果**")
+    st.dataframe(pd.DataFrame(per_pair), use_container_width=True,
+                 hide_index=True)
+
+    if not total:
+        st.warning("六组都没有历史命中")
+        return
+    st.markdown(f"**汇总排行（锁定第{tgt}球，{attr}）**")
+    allc = sum(total.values())
+    rows = []
+    for k, v in total.most_common():
+        nums = [n for n, aa in amap.items()
+                if _lo <= n <= _hi and aa.get(attr) == k]
+        rows.append({attr: k, "总次数": v, "占比": f"{v/allc*100:.1f}%",
+                     "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
+    _top2 = [r[attr] for r in rows[:2]]
+
+    _real = (_attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap)
+             if idx + 1 < len(data) else "")
+    if _real:
+        if _real in _top2:
+            st.success(f"✅ 回测命中：真实 {data[idx+1][0]} 第{tgt}球 {attr} = "
+                       f"**{_real}**（前二：{'、'.join(_top2)}）")
+        else:
+            st.error(f"❌ 未命中：真实 {data[idx+1][0]} 第{tgt}球 {attr} = "
+                     f"**{_real}**（前二：{'、'.join(_top2)}）")
+
+    _df = pd.DataFrame(rows)
+    def _hl(row):
+        if row[attr] in _top2:
+            return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+        return [""] * len(row)
+    st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                 hide_index=True)
+
+    st.download_button("📥 下载汇总",
+                       _df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"实验E_第{tgt}球_{attr}_{periods[idx]}.csv",
+                       mime="text/csv", key="lab_e_dl")
+    _save(loader, f"实验E 第{tgt}球 {attr} {periods[idx]}",
+          "前二：" + "、".join(_top2) + "\n" +
+          "\n".join(f"{k} {v}次" for k, v in total.most_common(6)))
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -793,9 +910,9 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab1, tab2, tabc, tabd, tab4, tab3 = st.tabs(
+    tab1, tab2, tabc, tabd, tabe, tab4, tab3 = st.tabs(
         ["实验A 单条件杀号", "实验B 组合池", "实验C 形态组合",
-         "实验D 属性联动", "结论档案", "清理"])
+         "实验D 属性联动", "实验E 锁定目标球", "结论档案", "清理"])
     with tab1:
         _exp_single_kill(H)
     with tab2:
@@ -804,6 +921,8 @@ def render(df_data, H):
         _exp_gate3(H)
     with tabd:
         _exp_link_attr(H)
+    with tabe:
+        _exp_target_multi(H)
     with tab4:
         _archive()
     with tab3:
