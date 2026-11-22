@@ -1123,6 +1123,54 @@ def _exp_six_pick(loader):
                  hide_index=True)
     st.caption("单押一个球位 6 个号，达标率明显更高；分散押 3 个球几乎不可能。")
 
+    # ---- 全量测算（1976 至今）----
+    st.markdown("**📜 全量测算（1976 年至今）**")
+    _po = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
+                          key="lab_h_payout")
+    _dist = Counter()
+    _groups = 0
+    _tot2 = 0
+    _win2 = int(_win) if int(_win) > 0 else 0
+    # 滑动窗口高效统计
+    _c = {b: Counter() for b in ALLOC}
+    _q = {b: [] for b in ALLOC}
+    for i in range(300, len(periods)):
+        for b in ALLOC:
+            if _win2:
+                if i - _win2 - 1 >= 0:
+                    _old = seqs[b][i - _win2 - 1]
+                    _c[b][_old] -= 1
+                    if _c[b][_old] <= 0:
+                        del _c[b][_old]
+        ok = 0
+        for b, k in ALLOC.items():
+            pick = [v for v, _ in _c[b].most_common(k)]
+            if seqs[b][i] in pick:
+                ok += 1
+        _dist[ok] += 1
+        _tot2 += 1
+        _groups += (0 if ok < 3 else (1 if ok == 3 else 4))
+        for b in ALLOC:
+            _c[b][seqs[b][i]] += 1
+
+    _rows_d = [{"命中个数": k, "期数": v, "占比": f"{v/_tot2*100:.2f}%"}
+               for k, v in sorted(_dist.items())]
+    st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
+                 hide_index=True)
+    _n3 = _dist.get(3, 0)
+    _n4 = _dist.get(4, 0)
+    _cost = _tot2 * 6
+    _back = _groups * _po
+    st.markdown(
+        f"- 样本：{periods[300]} ~ {periods[-1]}，共 **{_tot2}** 期\n"
+        f"- 中 3 个：**{_n3}** 次｜中 4 个：**{_n4}** 次\n"
+        f"- 折合 3中3 组数：**{_groups}** 组（中4按 4 组算）\n"
+        f"- 平均每 **{_tot2/max(1,_n3+_n4):.0f}** 期出现一次「中3+」\n"
+        f"- 每期投 6 注，总投入 **{_cost}** 注；"
+        f"按 {int(_po)} 倍回收 **{_back}** 注 → "
+        f"回报率 **{_back/_cost*100:.1f}%**\n"
+        f"- 回本所需赔率：**{_cost/max(1,_groups):.0f}** 倍")
+
     # 下一期推荐
     st.markdown(f"**下一期推荐（6 个号，窗口 {int(_win)} 期）**")
     _next = []
