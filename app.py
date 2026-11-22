@@ -5631,8 +5631,38 @@ def login_token_left(tok):
         return 0
 
 
+def _html_script(js, height=0):
+    """尽量在页面内执行脚本（st.html 不走 iframe）"""
+    try:
+        if hasattr(st, "html"):
+            st.html("<script>" + js + "</script>")
+            return True
+    except Exception:
+        pass
+    try:
+        import streamlit.components.v1 as _comp
+        _comp.html("<script>" + js + "</script>", height=height)
+        return True
+    except Exception:
+        return False
+
+
 def _login_persist_js(tok, need_redirect=False):
     """把令牌存入浏览器本地；缺失 URL 参数时自动跳转补齐"""
+    if tok:
+        _html_script(
+            "try{localStorage.setItem('dsh_t',%s);}catch(e){}"
+            % repr(tok))
+    if need_redirect:
+        _html_script(
+            "try{var s=localStorage.getItem('dsh_t');"
+            "if(s){var u=new URL(location.href);"
+            "if(!u.searchParams.get('t')){u.searchParams.set('t',s);"
+            "location.replace(u.toString());}}}catch(e){}")
+    return True
+
+
+def _login_persist_js_old(tok, need_redirect=False):
     import streamlit.components.v1 as _comp
     _js = """
 <script>
@@ -5657,6 +5687,13 @@ def _login_persist_js(tok, need_redirect=False):
 def _login_resume_js():
     """没有 URL 令牌时，从浏览器本地记忆恢复登录
        先尝试自动跳转；被浏览器拦截则显示一键继续按钮"""
+    _auto = ("try{var s=localStorage.getItem('dsh_t');"
+             "if(s){var u=new URL(location.href);"
+             "if(!u.searchParams.get('t')){u.searchParams.set('t',s);"
+             "location.replace(u.toString());}}}catch(e){}")
+    if _html_script(_auto):
+        st.caption("若页面未自动进入，请重新登录一次（浏览器可能禁止本地存储）")
+        return
     import streamlit.components.v1 as _comp
     _js = """
 <div style="font-family:system-ui,-apple-system,'Microsoft YaHei';padding:6px 0">
