@@ -191,6 +191,66 @@ def _attr_val(n, key):
     return attrs_of(n)[key]
 
 
+RULE_MEM_FILE = "roulette_rules_memory.json"
+
+
+def rule_key(r):
+    return f"{r['类型']}|{r['属性']}|{r.get('取值','')}"
+
+
+def load_rule_memory(loader):
+    try:
+        fn = loader.get("gh_read")
+        if not fn:
+            return {}
+        raw = fn(RULE_MEM_FILE)
+        if raw:
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+    except Exception:
+        pass
+    return {}
+
+
+def save_rule_memory(loader, mem):
+    try:
+        fn = loader.get("gh_write")
+        if fn:
+            fn(RULE_MEM_FILE, json.dumps(mem, ensure_ascii=False),
+               "轮盘规则记忆更新")
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def merge_rule_memory(mem, rules):
+    """把本轮学到的规则累计进记忆：次数累加、命中累加"""
+    for r in rules:
+        k = rule_key(r)
+        old = mem.get(k, {"n": 0, "hit": 0, "seen": 0})
+        old["n"] = int(old.get("n", 0)) + int(r["样本"])
+        old["hit"] = int(old.get("hit", 0)) + int(r["命中"])
+        old["seen"] = int(old.get("seen", 0)) + 1
+        old["lift"] = round(float(r["lift"]), 4)
+        mem[k] = old
+    return mem
+
+
+def memory_factor(mem, r):
+    """长期命中率 vs 当前 lift 的校正系数（0.5~1.5）"""
+    m = mem.get(rule_key(r))
+    if not m or int(m.get("n", 0)) < 30:
+        return 1.0
+    long_rate = int(m["hit"]) / max(1, int(m["n"]))
+    now_rate = r["命中率"]
+    if now_rate <= 0:
+        return 1.0
+    ratio = long_rate / now_rate
+    return max(0.5, min(1.5, ratio))
+
+
 def learn_rules(draws, lookback=800):
     """自动发现并验证多族规则"""
     hist = draws[-lookback:]
@@ -454,12 +514,74 @@ def learn_rules(draws, lookback=800):
                                   "命中率": rate,
                                   "基线": base_map.get(b, 0), "lift": lift})
 
+    # ---------- 族12：双属性交集（两个属性同时遗漏达标）----------
+    _k1 = "尾数"
+    _k2 = "生肖"
+    for tl in range(10):
+        _tgap = 0
+        for x in reversed(hist):
+            if x % 10 == tl:
+                break
+            _tgap += 1
+        else:
+            _tgap = n
+        if _tgap < 20:
+            continue
+        for sxv in {_attr_val(x, _k2) for x in range(37)}:
+            _sgap = 0
+            for x in reversed(hist):
+                if _attr_val(x, _k2) == sxv:
+                    break
+                _sgap += 1
+            else:
+                _sgap = n
+            if _sgap < 15:
+                continue
+            _targets = [x for x in range(37)
+                        if x % 10 == tl and _attr_val(x, _k2) == sxv]
+            if not _targets:
+                continue
+            _ev = sum(1 for i in range(1, n)
+                      if hist[i] in _targets)
+            _base = _ev / n
+            if _base <= 0:
+                continue
+            _rate = _ev / n
+            rules.append({"类型": "双属性", "属性": f"{tl}尾+{sxv}",
+                          "取值": "、".join(str(v) for v in _targets[:4]),
+                          "条件": f"尾缺{_tgap}/肖缺{_sgap}", "阈值": 20,
+                          "样本": n, "命中": _ev,
+                          "命中率": _rate, "基线": _base,
+                          "lift": 0.0})
+
+    # ---------- 族13：轮盘扇区（相邻 6 格一段）----------
+    for seg_i in range(6):
+        seg_nums = set(WHEEL[seg_i * 6:(seg_i + 1) * 6])
+        if not seg_nums:
+            continue
+        _g = 0
+        for x in reversed(hist):
+            if x in seg_nums:
+                break
+            _g += 1
+        else:
+            _g = n
+        if _g >= 12:
+            _base = sum(1 for x in hist if x in seg_nums) / n
+            rules.append({"类型": "扇区", "属性": "轮盘扇区",
+                          "取值": f"第{seg_i+1}段",
+                          "条件": f"遗漏{_g}", "阈值": 12,
+                          "样本": n, "命中": sum(1 for x in hist
+                                                 if x in seg_nums),
+                          "命中率": _base, "基线": _base,
+                          "lift": 0.0})
+
     rules.sort(key=lambda x: -x["lift"])
     return rules
 
 
-def apply_rules(draws, rules, om):
-    """按当前状态激活规则，给号码打分"""
+def apply_rules(draws, rules, om, mem=None):
+    """按当前状态激活规则，给号码打分（可用记忆校正权重）"""
     from collections import Counter
     score = Counter()
     active = []
@@ -555,6 +677,8 @@ def apply_rules(draws, rules, om):
             continue
         active.append((r, 0))
         w = max(0.5, r["lift"] * 100)
+        if mem:
+            w *= memory_factor(mem, r)
         if typ in ("遗漏", "转移"):
             for num in range(37):
                 if _attr_val(num, key) == v:
@@ -763,7 +887,8 @@ def build_candidates(draws, rec_nums=None):
     # 0 号按出现次数权衡：超过 40 次开始推荐
     # 自学习规则得分
     _rules = learn_rules(draws)
-    _rscore, _active = apply_rules(draws, _rules, om)
+    _rscore, _active = apply_rules(draws, _rules, om,
+                                   st.session_state.get("_roulette_rules_mem"))
     for _n, _s in _rscore.items():
         if _s > 0:
             add(int(_n), "规则", int(round(_s)))
@@ -809,6 +934,8 @@ def render(df_data, H):
     st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤10 个）。")
 
     draws = load_history(H)
+    if "_roulette_rules_mem" not in st.session_state:
+        st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
 
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
@@ -820,6 +947,14 @@ def render(df_data, H):
                      if x != int(num)]
             st.session_state["_roulette_pending"] = _pend
             ok = save_history(H, draws, _pend)
+            try:
+                _rules2 = learn_rules(draws)
+                _mem2 = st.session_state.get("_roulette_rules_mem") or {}
+                _mem2 = merge_rule_memory(_mem2, _rules2)
+                st.session_state["_roulette_rules_mem"] = _mem2
+                save_rule_memory(H, _mem2)
+            except Exception:
+                pass
             st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
             st.rerun()
     with c3:
