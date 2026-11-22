@@ -5945,7 +5945,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -5972,7 +5972,7 @@ def main_app():
     elif page == "🤖 全自动智能分析":
         render_auto_ai_page()
     elif page == "🧠 AI推演": render_ai(df_data)
-    elif page == "🎯 三中三组合池":
+    elif page == "🎯 三码组合池":
         if render_combo2 is None:
             st.error("缺少 combo2_page.py，请与 app.py 一起上传")
         else:
