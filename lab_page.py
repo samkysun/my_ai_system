@@ -471,11 +471,11 @@ def _exp_link_attr(loader):
                                             "最近 500 期", "最近 200 期"],
                                 index=0, key="lab_d_span")
         with ac3:
-            top_n = st.number_input("显示前 N", 3, 30, 10, 1, key="lab_d_top")
+            st.caption("排行一律全部显示")
     _wx_mode = "按号码（源数据，不变）"
     tgt = st.session_state.get("lab_d_tgt", _auto)
     span = st.session_state.get("lab_d_span", "全部")
-    top_n = st.session_state.get("lab_d_top", 10)
+    top_n = 999
 
     st.caption(f"规则：第{b1}球 + 第{b2}球 → 推第{tgt}球（可改）")
 
