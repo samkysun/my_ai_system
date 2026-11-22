@@ -520,6 +520,7 @@ def _exp_link_attr(loader):
             continue
         cnt = Counter()
         hits = 0
+        _detail = []
         for i in range(0, idx):
             a1 = _attr_of(data[i], _b1, attr, zodiac, zattrs, amap)
             a2 = _attr_of(data[i], _b2, attr, zodiac, zattrs, amap)
@@ -528,6 +529,11 @@ def _exp_link_attr(loader):
                 if nv:
                     cnt[nv] += 1
                     hits += 1
+                    _detail.append({"触发期": data[i][0],
+                                    f"第{_b1}球": a1,
+                                    f"第{_b2}球": a2,
+                                    "下一期": data[i + 1][0],
+                                    f"下一期第{_tgt}球{attr}": nv})
         _lo, _hi = _tgt, 43 + _tgt
         st.markdown(f"**第{_tgt}球**（触发：第{_b1}球 {_v1} ＋ 第{_b2}球 {_v2}"
                     f"　历史 {hits} 期　区间 {_lo}~{_hi}）")
@@ -542,6 +548,16 @@ def _exp_link_attr(loader):
                          "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
         st.dataframe(pd.DataFrame(rows), use_container_width=True,
                      hide_index=True)
+        with st.expander(f"🔍 触发行明细（全部 {len(_detail)} 条，可核对）",
+                         expanded=False):
+            _ddf = pd.DataFrame(_detail)
+            st.dataframe(_ddf, use_container_width=True, hide_index=True,
+                         height=320)
+            st.download_button(
+                f"📥 下载第{_tgt}球明细",
+                _ddf.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"实验D_第{_tgt}球_{attr}_{periods[idx]}.csv",
+                mime="text/csv", key=f"lab_d_dl_{_tgt}")
         all_txt.append(f"第{_tgt}球（{_b1}+{_b2} → {_v1}+{_v2}）历史 {hits} 期：" +
                        "；".join(f"{k} {v}次" for k, v in cnt.most_common(5)))
 
