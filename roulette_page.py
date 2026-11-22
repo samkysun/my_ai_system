@@ -350,11 +350,10 @@ def build_candidates(draws, rec_nums=None):
     _weak = [(n, s) for n, s in _rest if s < 2]
     ranked = [(n, score.get(n, 0)) for n in _rec]
     # 0 号按出现次数权衡：超过 40 次开始推荐
-    _z = draws.count(0)
     _zgap = om["号码"].get(0, 0)
-    if _z >= 40 and 0 not in _rec:
+    if _zgap >= 40 and 0 not in _rec:
         ranked.append((0, 99))
-        why[0].append(f"0号·尾0·遗漏{_zgap}期·累计{_z}次")
+        why[0].append(f"0号·尾0·遗漏{_zgap}期")
     _seen = {n for n, _ in ranked}
     for n, s in _strong + _weak:
         if len(ranked) >= MAX_PICK:
@@ -433,11 +432,10 @@ def render(df_data, H):
     om, alerts, levels = build_candidates(draws, _rec)
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
-    _zcnt = draws.count(0)
     _zgap2 = om["号码"].get(0, 0)
-    _ztip = ("已达 40 次门槛，自动推荐" if _zcnt >= 40
-             else f"未达 40 次（还差 {40 - _zcnt} 次）")
-    st.caption(f"0 号：累计 {_zcnt} 次｜当前遗漏 {_zgap2} 期｜{_ztip}")
+    _ztip = ("已达 40 期门槛，自动推荐" if _zgap2 >= 40
+             else f"未达 40 期（还差 {40 - _zgap2} 期）")
+    st.caption(f"0 号：当前遗漏 {_zgap2} 期｜{_ztip}")
     st.markdown(f"**上期号码：{last_no}**　"
                 f"姐妹码 {sister(last_no)}（连续 {_sg} 期未出）　"
                 f"轮盘相邻 {wheel_neighbors(last_no)}（连续 {_ag} 期未出）")
