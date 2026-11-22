@@ -275,12 +275,14 @@ def build_candidates(draws, rec_nums=None):
     last_no = draws[-1]
     alerts = []
 
-    hot_tails = [t for t, g in om["尾数"].items() if g >= TH_TAIL]
+    hot_tails = [(t, g) for t, g in om["尾数"].items() if g >= TH_TAIL]
+    hot_tails.sort(key=lambda x: -x[1])
     if hot_tails:
-        alerts.append(("尾数", hot_tails))
-    hot_z = [z for z, g in om["生肖"].items() if g >= TH_ZODIAC]
+        alerts.append(("尾数", [f"{t}尾({g}期)" for t, g in hot_tails]))
+    hot_z = [(z, g) for z, g in om["生肖"].items() if g >= TH_ZODIAC]
+    hot_z.sort(key=lambda x: -x[1])
     if hot_z:
-        alerts.append(("生肖", hot_z))
+        alerts.append(("生肖", [f"{z}({g}期)" for z, g in hot_z]))
 
     sis = sister(last_no)
     adj = wheel_neighbors(last_no)
