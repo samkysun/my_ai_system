@@ -153,6 +153,25 @@ def omissions(draws):
 # ============================================================
 # 生成候选
 # ============================================================
+def event_gaps(draws):
+    """姐妹码 / 轮盘相邻 的连续未出期数（事件型，出现即清零）"""
+    n = len(draws)
+    last_sis = last_adj = -1
+    sis_hits = adj_hits = 0
+    for i in range(1, n):
+        prev, cur = draws[i - 1], draws[i]
+        if cur in sister(prev):
+            last_sis = i
+            sis_hits += 1
+        if cur in wheel_neighbors(prev):
+            last_adj = i
+            adj_hits += 1
+    # 当前连续未出期数
+    gap_sis = n - 1 - last_sis if last_sis >= 0 else max(0, n - 1)
+    gap_adj = n - 1 - last_adj if last_adj >= 0 else max(0, n - 1)
+    return gap_sis, gap_adj, sis_hits, adj_hits
+
+
 def build_candidates(draws):
     om = omissions(draws)
     if not draws:
@@ -169,15 +188,14 @@ def build_candidates(draws):
         alerts.append(("生肖", hot_z))
 
     sis = sister(last_no)
-    sis_gap = min(om["号码"].get(s, 0) for s in sis)
-    if sis_gap >= TH_SISTER:
-        alerts.append(("姐妹码", [f"{s}({om['号码'].get(s,0)}期)" for s in sis]))
-
     adj = wheel_neighbors(last_no)
-    adj_gap = min(om["号码"].get(a, 0) for a in adj)
+    sis_gap, adj_gap, sis_hits, adj_hits = event_gaps(draws)
+    if sis_gap >= TH_SISTER:
+        alerts.append(("姐妹码", [str(s) for s in sis] +
+                       [f"（连续 {sis_gap} 期未出）"]))
     if adj_gap >= TH_ADJ:
-        alerts.append(("轮盘相邻", [f"{a}({om['号码'].get(a,0)}期)"
-                                    for a in adj]))
+        alerts.append(("轮盘相邻", [str(a) for a in adj] +
+                       [f"（连续 {adj_gap} 期未出）"]))
 
     # 每个号码累计"命中条件数"
     score = Counter()
@@ -265,9 +283,10 @@ def render(df_data, H):
 
     om, alerts, levels = build_candidates(draws)
     last_no = draws[-1]
+    _sg, _ag, _sh, _ah = event_gaps(draws)
     st.markdown(f"**上期号码：{last_no}**　"
-                f"姐妹码 {sister(last_no)}　"
-                f"轮盘相邻 {wheel_neighbors(last_no)}")
+                f"姐妹码 {sister(last_no)}（连续 {_sg} 期未出）　"
+                f"轮盘相邻 {wheel_neighbors(last_no)}（连续 {_ag} 期未出）")
 
     st.markdown("### 🚨 提醒下注")
     if not alerts:
