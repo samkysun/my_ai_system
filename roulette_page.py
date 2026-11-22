@@ -172,6 +172,40 @@ def event_gaps(draws):
     return gap_sis, gap_adj, sis_hits, adj_hits
 
 
+def history_top3(draws, min_sample=30):
+    """基于历史遗漏条件概率，给出最可能开出的 3 个号码"""
+    if len(draws) < 60:
+        return []
+    res = []
+    n_total = len(draws)
+    for num in range(37):
+        # 统计：处于「遗漏 >= g」状态后，下一期开出该号的频率
+        gaps, hits = [], []
+        last = -1
+        for i, x in enumerate(draws):
+            if x == num:
+                g = i - last - 1
+                if last >= 0:
+                    gaps.append(g)
+                    hits.append(1)
+                last = i
+        # 当前遗漏
+        cur_gap = n_total - 1 - last
+        if cur_gap <= 0:
+            continue
+        # 历史中遗漏 >= cur_gap 的期数与该条件下命中的次数
+        # 简化：用所有「间隔 >= cur_gap」的出现次数 / 总期数
+        hist_hits = sum(1 for g in gaps if g >= cur_gap)
+        # 分母：历史中处于该遗漏状态的期数（近似用总期数 - 出现次数）
+        denom = max(1, n_total - len(gaps))
+        p_hat = (hist_hits + 1) / (denom + 2)      # 拉普拉斯平滑
+        if hist_hits + 1 < min_sample:
+            p_hat = p_hat            # 样本不足仍给出估计
+        res.append((num, cur_gap, hist_hits, p_hat))
+    res.sort(key=lambda x: -x[3])
+    return res[:3]
+
+
 def build_candidates(draws):
     om = omissions(draws)
     if not draws:
@@ -313,6 +347,24 @@ def render(df_data, H):
                            dfc.to_csv(index=False).encode("utf-8-sig"),
                            file_name="轮盘候选.csv", mime="text/csv",
                            key="rou_dl")
+
+    st.markdown("### 🎯 系统推荐 3 码（历史概率）")
+    _top3 = history_top3(draws)
+    if not _top3:
+        st.caption("历史数据不足，暂不推荐")
+    else:
+        _rows3 = []
+        for num, gap, hh, p in _top3:
+            a = attrs_of(num)
+            _rows3.append({"号码": num, "当前遗漏": gap,
+                           "历史同条件命中": hh,
+                           "估计概率": f"{p*100:.2f}%",
+                           "尾数": a["尾数"], "生肖": a["生肖"],
+                           "阴阳天地": a["阴阳天地"],
+                           "波单双": a["波单双"]})
+        st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
+                     hide_index=True)
+        st.caption("说明：按「号码遗漏达到当前值后，下一期开出的历史频率」排序")
 
     with st.expander("📊 遗漏明细", expanded=False):
         t0, t1, t2 = st.tabs(["号码", "尾数", "生肖"])
