@@ -373,21 +373,39 @@ _LAB_ATTRS = ["生肖", "尾数", "门数", "段数", "数字合", "数字五行
               "四宝", "头数", "单双", "单双组合"]
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_zodiac(_sig):
-    import os
-    import csv as _csv
-    rows = _csv.reader(open("_zodiac_by_period.csv", encoding="utf-8-sig"))
-    head = next(rows, None)
-    return [r for r in rows if r and r[0]]
+def _load_zodiac(loader):
+    """逐期生肖表（走统一数据读取，云端本地都能取）"""
+    if "_lab_zod" in st.session_state:
+        return st.session_state["_lab_zod"]
+    out = []
+    try:
+        rows = loader["load_excel_data"]("_zodiac_by_period.csv", None)
+    except Exception:
+        rows = None
+    if rows:
+        for r in rows[1:]:
+            if r and len(r) >= 8 and str(r[0]).strip():
+                out.append([str(r[0]).strip()] + [str(x).strip() for x in r[1:8]])
+    st.session_state["_lab_zod"] = out
+    return out
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_zodiac_attrs(_sig):
-    import csv as _csv
-    rows = list(_csv.reader(open("_zodiac_attrs.csv", encoding="utf-8-sig")))
-    hdr = rows[0]
-    return {r[0]: {hdr[i]: r[i] for i in range(1, len(r))} for r in rows[1:] if r}
+def _load_zodiac_attrs(loader):
+    if "_lab_zattr" in st.session_state:
+        return st.session_state["_lab_zattr"]
+    out = {}
+    try:
+        rows = loader["load_excel_data"]("_zodiac_attrs.csv", None)
+    except Exception:
+        rows = None
+    if rows:
+        hdr = [str(x).strip() for x in rows[0]]
+        for r in rows[1:]:
+            if r and str(r[0]).strip():
+                out[str(r[0]).strip()] = {hdr[i]: str(r[i]).strip()
+                                          for i in range(1, len(r))}
+    st.session_state["_lab_zattr"] = out
+    return out
 
 
 def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
@@ -424,15 +442,13 @@ def _exp_link_attr(loader):
     if not data:
         st.error("缺少 _index6.csv")
         return
-    sig = str(len(data))
-    zrows = _load_zodiac(sig)
-    zodiac = {}
-    for r in zrows:
-        if len(r) >= 8:
-            zodiac[r[0]] = [r[i] for i in range(1, 8)]
-    zattrs = _load_zodiac_attrs(sig)
+    zrows = _load_zodiac(loader)
+    zodiac = {r[0]: r[1:8] for r in zrows}
+    zattrs = _load_zodiac_attrs(loader)
     amap = _load_attr(loader)
     periods = [p for p, _ in data]
+    st.caption(f"数据：号码 {len(data)} 期｜生肖表 {len(zodiac)} 期｜"
+               f"属性表 {len(amap)} 个号码｜生肖派生 {len(zattrs)} 条")
 
     # ---- 简易模式：只留 4 个关键项 ----
     k1, k2, k3, k4 = st.columns(4)
