@@ -1335,7 +1335,9 @@ def _exp_stake_plan(loader):
                 bank += win
                 hits += 1
                 gaps.append(gap)
-                rows.append({"期号": periods[i], "倍数": f"{mult:.2f}",
+                rows.append({"期号": periods[i],
+                             "推荐号码": " ".join(f"{v:02d}" for v in sorted(picks)),
+                             "倍数": f"{mult:.2f}",
                              "投入": f"{cost:.0f}", "命中": k2,
                              "回收": f"{win:.0f}", "资金": f"{bank:.0f}",
                              "结果": "★中奖"})
@@ -1349,7 +1351,9 @@ def _exp_stake_plan(loader):
                                float(_cap))
                     max_mult = max(max_mult, mult)
                 if gap == int(_start_at):
-                    rows.append({"期号": periods[i], "倍数": "1.00",
+                    rows.append({"期号": periods[i],
+                                 "推荐号码": " ".join(f"{v:02d}" for v in sorted(picks)),
+                                 "倍数": "1.00",
                                  "投入": "—", "命中": 0, "回收": "—",
                                  "资金": f"{bank:.0f}", "结果": "开始下注"})
             peak = max(peak, bank)
@@ -1384,6 +1388,20 @@ def _exp_stake_plan(loader):
     if gaps:
         st.caption(f"中奖间隔：{len(gaps)} 次｜最短 {min(gaps)} 期｜"
                    f"中位 {sorted(gaps)[len(gaps)//2]} 期｜最长 {max(gaps)} 期")
+
+    # 下一期推荐
+    st.markdown("**下一期推荐号码**")
+    _np = set()
+    for b, k in ALLOC.items():
+        _np.update(v for v, _ in c[b].most_common(k))
+    _np_list = sorted(_np)
+    _cur_gap = gap
+    _cur_mult = mult
+    st.success("　".join(f"{v:02d}" for v in _np_list) +
+               f"　（共 {len(_np_list)} 个号，复式 {comb(len(_np_list), 3)} 组）")
+    st.caption(f"当前连续未中：{_cur_gap} 期｜下一次下注倍数：{_cur_mult:.2f} 倍"
+               + ("（已进入下注区间）" if _cur_gap >= int(_start_at) else
+                  f"（还差 {int(_start_at) - _cur_gap} 期开始下注）"))
 
     if rows:
         _df = pd.DataFrame(list(reversed(rows)))
