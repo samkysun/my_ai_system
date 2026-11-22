@@ -864,22 +864,6 @@ def render(df_data, H):
     for kind, vals in alerts:
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
 
-    st.markdown("### 🧪 系统自学习规则（自动验证）")
-    _rules = learn_rules(draws)
-    if not _rules:
-        st.caption("历史数据不足，或暂无通过验证的规则")
-    else:
-        _rdf = pd.DataFrame(
-            [{"类型": r["类型"], "属性": r["属性"], "取值": r["取值"],
-              "条件": r["条件"],
-              "样本": r["样本"], "命中": r["命中"],
-              "命中率": f"{r['命中率']*100:.1f}%",
-              "基线": f"{r['基线']*100:.1f}%",
-              "提升": f"{r['lift']*100:+.1f}pp"} for r in _rules[:15]])
-        st.dataframe(_rdf, use_container_width=True, hide_index=True)
-        st.caption(f"共 {len(_rules)} 条规则通过验证（50 期起开始学习，"
-                   f"样本门槛随期数自动调整，提升≥{RULE_MIN_LIFT*100:.0f}pp）")
-
     st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
@@ -939,3 +923,20 @@ def render(df_data, H):
             st.dataframe(pd.DataFrame(
                 [{"生肖": k, "遗漏": v} for k, v in om["生肖"].items()]),
                 use_container_width=True, hide_index=True)
+
+    st.markdown("### 🧪 系统自学习规则（自动验证）")
+    _rules = learn_rules(draws)
+    if not _rules:
+        st.caption("历史数据不足，或暂无通过验证的规则")
+    else:
+        _rdf = pd.DataFrame(
+            [{"类型": r["类型"], "属性": r["属性"], "取值": r["取值"],
+              "条件": r["条件"],
+              "样本": r["样本"], "命中": r["命中"],
+              "命中率": f"{r['命中率']*100:.1f}%",
+              "基线": f"{r['基线']*100:.1f}%",
+              "提升": f"{r['lift']*100:+.1f}pp"} for r in _rules[:15]])
+        st.dataframe(_rdf, use_container_width=True, hide_index=True)
+        st.caption(f"共 {len(_rules)} 条规则通过验证（50 期起开始学习，"
+                   f"样本门槛随期数自动调整，提升≥{RULE_MIN_LIFT*100:.0f}pp）")
+
