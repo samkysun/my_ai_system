@@ -172,41 +172,101 @@ def event_gaps(draws):
     return gap_sis, gap_adj, sis_hits, adj_hits
 
 
-def history_top3(draws, min_sample=30):
-    """基于历史遗漏条件概率，给出最可能开出的 3 个号码"""
-    if len(draws) < 60:
-        return []
-    res = []
-    n_total = len(draws)
-    for num in range(37):
-        # 统计：处于「遗漏 >= g」状态后，下一期开出该号的频率
-        gaps, hits = [], []
-        last = -1
-        for i, x in enumerate(draws):
-            if x == num:
-                g = i - last - 1
-                if last >= 0:
-                    gaps.append(g)
-                    hits.append(1)
-                last = i
-        # 当前遗漏
-        cur_gap = n_total - 1 - last
-        if cur_gap <= 0:
-            continue
-        # 历史中遗漏 >= cur_gap 的期数与该条件下命中的次数
-        # 简化：用所有「间隔 >= cur_gap」的出现次数 / 总期数
-        hist_hits = sum(1 for g in gaps if g >= cur_gap)
-        # 分母：历史中处于该遗漏状态的期数（近似用总期数 - 出现次数）
-        denom = max(1, n_total - len(gaps))
-        p_hat = (hist_hits + 1) / (denom + 2)      # 拉普拉斯平滑
-        if hist_hits + 1 < min_sample:
-            p_hat = p_hat            # 样本不足仍给出估计
-        res.append((num, cur_gap, hist_hits, p_hat))
-    res.sort(key=lambda x: -x[3])
-    return res[:3]
+FEATS = ["遗漏", "尾遗漏", "肖遗漏", "肖五行遗漏", "物象遗漏", "尾五行遗漏",
+         "阴阳天地遗漏", "波单双遗漏", "近20频", "近50频", "姐妹", "轮盘邻"]
 
 
-def build_candidates(draws):
+def _feat_vec(draws, t, n):
+    """只用 draws[:t+1] 计算号码 n 的特征"""
+    hist = draws[:t + 1]
+    a = attrs_of(n)
+    out = []
+
+    def gap_of(pred):
+        for k in range(len(hist) - 1, -1, -1):
+            if pred(hist[k]):
+                return len(hist) - 1 - k
+        return len(hist)
+
+    out.append(gap_of(lambda x: x == n))
+    out.append(gap_of(lambda x: x % 10 == n % 10))
+    out.append(gap_of(lambda x: zodiac_of(x) == a["生肖"]))
+    out.append(gap_of(lambda x: SX_WX.get(zodiac_of(x)) == a["生肖五行"]))
+    out.append(gap_of(lambda x: SX_WX_OBJ.get(zodiac_of(x)) == a["物象"]))
+    out.append(gap_of(lambda x: TAIL_WX[x % 10] == a["五行尾"]))
+    out.append(gap_of(lambda x: SX_YYTD.get(zodiac_of(x)) == a["阴阳天地"]))
+    out.append(gap_of(lambda x: attrs_of(x)["波单双"] == a["波单双"]))
+    out.append(sum(1 for x in hist[-20:] if x == n))
+    out.append(sum(1 for x in hist[-50:] if x == n))
+    out.append(1.0 if n in sister(hist[-1]) else 0.0)
+    out.append(1.0 if n in wheel_neighbors(hist[-1]) else 0.0)
+    return out
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _learn_weights(_sig, _n):
+    return None
+
+
+def learn_weights(draws):
+    """用历史数据学习各因子权重（皮尔逊相关系数，仅取正向）"""
+    lo = max(60, len(draws) - 400)
+    rows, labels = [], []
+    for t in range(lo, len(draws) - 1):
+        nxt = draws[t + 1]
+        for n in range(37):
+            rows.append(_feat_vec(draws, t, n))
+            labels.append(1.0 if n == nxt else 0.0)
+    if len(rows) < 200:
+        return None
+    k = len(FEATS)
+    m = len(rows)
+    means = [sum(r[i] for r in rows) / m for i in range(k)]
+    sds = []
+    for i in range(k):
+        v = sum((r[i] - means[i]) ** 2 for r in rows) / m
+        sds.append(v ** 0.5 or 1.0)
+    lab_m = sum(labels) / m
+    w = []
+    for i in range(k):
+        cov = sum((rows[j][i] - means[i]) * (labels[j] - lab_m)
+                  for j in range(m)) / m
+        corr = cov / (sds[i] * (lab_m * (1 - lab_m)) ** 0.5 or 1)
+        w.append(max(0.0, corr))
+    s = sum(w) or 1
+    w = [x / s for x in w]
+    return {FEATS[i]: w[i] for i in range(k)}
+
+
+def smart_top3(draws):
+    """综合自学习权重，给出 3 码"""
+    if len(draws) < 80:
+        return None, None
+    w = learn_weights(draws)
+    if not w:
+        return None, None
+    t = len(draws) - 1
+    rows = [_feat_vec(draws, t, n) for n in range(37)]
+    k = len(FEATS)
+    means = [sum(r[i] for r in rows) / 37 for i in range(k)]
+    sds = []
+    for i in range(k):
+        v = sum((r[i] - means[i]) ** 2 for r in rows) / 37
+        sds.append(v ** 0.5 or 1.0)
+    scored = []
+    for n in range(37):
+        z = 0.0
+        for i, f in enumerate(FEATS):
+            z += w[f] * ((rows[n][i] - means[i]) / sds[i] if sds[i] else 0)
+        scored.append((n, z, rows[n]))
+    scored.sort(key=lambda x: -x[1])
+    top = scored[:3]
+    total = sum(abs(x[1]) for x in scored) or 1
+    out = [(n, z, z / total) for n, z, _ in top]
+    return out, w
+
+
+def build_candidates(draws, rec_nums=None):
     om = omissions(draws)
     if not draws:
         return om, [], []
@@ -256,13 +316,23 @@ def build_candidates(draws):
             add(a, "轮盘邻", 2)
 
     # 属性重复加权：同号码命中多个不同属性条件
-    ranked = sorted(score.items(), key=lambda x: (-x[1], x[0]))[:MAX_PICK]
+    _rec = [int(x) for x in (rec_nums or [])]
+    _all = dict(score)
+    for _n in _rec:
+        _all.setdefault(_n, 0)
+    ranked = sorted(_all.items(), key=lambda x: (-x[1], x[0]))
+    # 推荐号码强制排在最前
+    ranked = [(n, s) for n in _rec if n in _all for s in [_all[n]]] + \
+             [(n, s) for n, s in ranked if n not in _rec]
+    ranked = ranked[:MAX_PICK]
     levels = []
     if ranked:
         top = ranked[0][1]
         for num, sc in ranked:
             tags = set(why[num])
-            if tags & {"姐妹", "轮盘邻"}:
+            if num in _rec:
+                lv = "推荐"
+            elif tags & {"姐妹", "轮盘邻"}:
                 lv = "重点"
             elif sc >= top and sc >= 3:
                 lv = "重点"
@@ -315,7 +385,9 @@ def render(df_data, H):
         st.info("先输入并添加几期开奖号码")
         return
 
-    om, alerts, levels = build_candidates(draws)
+    _top3, _w = smart_top3(draws)
+    _rec = [n for n, _, _ in _top3] if _top3 else []
+    om, alerts, levels = build_candidates(draws, _rec)
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
     st.markdown(f"**上期号码：{last_no}**　"
@@ -348,23 +420,29 @@ def render(df_data, H):
                            file_name="轮盘候选.csv", mime="text/csv",
                            key="rou_dl")
 
-    st.markdown("### 🎯 系统推荐 3 码（历史概率）")
-    _top3 = history_top3(draws)
+    st.markdown("### 🧠 系统推荐 3 码（已并入上方候选）")
     if not _top3:
-        st.caption("历史数据不足，暂不推荐")
+        st.caption("历史数据不足（建议 80 期以上），暂不推荐")
     else:
         _rows3 = []
-        for num, gap, hh, p in _top3:
+        for num, sc, share in _top3:
             a = attrs_of(num)
-            _rows3.append({"号码": num, "当前遗漏": gap,
-                           "历史同条件命中": hh,
-                           "估计概率": f"{p*100:.2f}%",
+            _rows3.append({"号码": num, "综合得分": round(sc, 3),
+                           "占比": f"{share*100:.1f}%",
                            "尾数": a["尾数"], "生肖": a["生肖"],
+                           "四宝": a["四宝"], "物象": a["物象"],
+                           "五行尾": a["五行尾"],
+                           "生肖五行": a["生肖五行"],
                            "阴阳天地": a["阴阳天地"],
                            "波单双": a["波单双"]})
         st.dataframe(pd.DataFrame(_rows3), use_container_width=True,
                      hide_index=True)
-        st.caption("说明：按「号码遗漏达到当前值后，下一期开出的历史频率」排序")
+        if _w:
+            with st.expander("⚙ 系统学到的因子权重", expanded=False):
+                st.dataframe(pd.DataFrame(
+                    [{"因子": k, "权重": round(v, 4)}
+                     for k, v in sorted(_w.items(), key=lambda x: -x[1])]),
+                    use_container_width=True, hide_index=True)
 
     with st.expander("📊 遗漏明细", expanded=False):
         t0, t1, t2 = st.tabs(["号码", "尾数", "生肖"])
