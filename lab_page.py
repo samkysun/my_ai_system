@@ -1052,6 +1052,7 @@ def _exp_six_pick(loader):
     dist = Counter()
     ge = 0
     tot = 0
+    _last_hit = None
     for i in range(start, end):
         _picks = set()
         _pk_desc = []
@@ -1066,12 +1067,18 @@ def _exp_six_pick(loader):
         dist[ok_cnt] += 1
         if ok_cnt >= int(_need):
             ge += 1
+        _hit = ok_cnt >= int(_need)
+        _gap = (i - _last_hit) if _last_hit is not None else None
+        if _hit:
+            _last_hit = i
         rows.append({
             "期号": periods[i],
+            "年份": periods[i][:4],
             "推荐号码": "　".join(_pk_desc),
             "开奖平码": " ".join(f"{v:02d}" for v in sorted(_draw6)),
             "命中个数": ok_cnt,
-            "达标": "★" if ok_cnt >= int(_need) else "",
+            "距上次中奖": _gap if _gap is not None else "—",
+            "达标": "★" if _hit else "",
         })
 
     if not tot:
@@ -1101,6 +1108,28 @@ def _exp_six_pick(loader):
     st.markdown("**回测明细（最新在上，★=达标）**")
     st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
                  hide_index=True, height=380)
+    # 年度汇总
+    _hits_by_year = Counter(r["年份"] for r in rows if r["达标"])
+    _cnt_by_year = Counter(r["年份"] for r in rows)
+    if _hits_by_year:
+        st.markdown("**各年中奖次数**")
+        st.dataframe(pd.DataFrame(
+            [{"年份": y, "期数": _cnt_by_year[y], "中奖": _hits_by_year.get(y, 0)}
+             for y in sorted(_cnt_by_year, reverse=True)]),
+            use_container_width=True, hide_index=True)
+    else:
+        st.info("该区间内没有中奖记录")
+
+    # 中奖间隔
+    _gaps = [r["距上次中奖"] for r in rows
+             if r["达标"] and isinstance(r["距上次中奖"], int)]
+    if _gaps:
+        _gaps_sorted = sorted(_gaps)
+        st.caption(
+            f"中奖间隔：共 {len(_gaps)} 次｜最短 {min(_gaps)} 期｜"
+            f"中位 {_gaps_sorted[len(_gaps_sorted)//2]} 期｜"
+            f"最长 {max(_gaps)} 期")
+
     st.download_button("📥 下载明细",
                        _df.to_csv(index=False).encode("utf-8-sig"),
                        file_name=f"实验H_6码_{periods[start]}_{periods[end-1]}.csv",
