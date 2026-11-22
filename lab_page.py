@@ -1027,7 +1027,7 @@ def _exp_six_pick(loader):
         return
 
     from collections import Counter
-    seqs = {b: [d[1][b - 1] for d in data] for b in ALLOC}
+    seqs = {b: [d[1][b - 1] for d in data] for b in range(1, 8)}
     _i1 = periods.index(_start_p)
     _i2 = periods.index(_end_p)
     if _i1 > _i2:
