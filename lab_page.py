@@ -1709,8 +1709,11 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tabh, tabi, tab4, tab3 = st.tabs(
-        ["实验H 六码中三", "实验I 加注模拟", "结论档案", "清理"])
+    tab2, tabh, tabi, tab4, tab3 = st.tabs(
+        ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
+         "结论档案", "清理"])
+    with tab2:
+        _exp_pool(H)
     with tabh:
         _exp_six_pick(H)
     with tabi:
@@ -1724,12 +1727,10 @@ def render(df_data, H):
     st.caption("📁 旧实验（已收进下拉框，需要时再打开）")
     _old = st.selectbox(
         "选择旧实验",
-        ["（不打开）", "实验B 组合池", "实验C 形态组合", "实验D 属性联动",
+        ["（不打开）", "实验C 形态组合", "实验D 属性联动",
          "实验E 锁定目标球", "实验F 三三组合", "实验G 热号回测"],
         index=0, key="lab_old_pick")
-    if _old.startswith("实验B"):
-        _exp_pool(H)
-    elif _old.startswith("实验C"):
+    if _old.startswith("实验C"):
         _exp_gate3(H)
     elif _old.startswith("实验D"):
         _exp_link_attr(H)
