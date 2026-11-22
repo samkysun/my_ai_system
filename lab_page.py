@@ -434,7 +434,7 @@ def _load_zodiac_attrs(loader):
 
 def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
     """取某期某球某属性"""
-    zrow = zodiac.get(period_key)
+    zrow = zodiac.get(period_key[0] if isinstance(period_key, (tuple, list)) else period_key)
     num = period_key[1][int(ball) - 1]
     if attr == "生肖":
         return zrow[int(ball) - 1] if zrow else ""
