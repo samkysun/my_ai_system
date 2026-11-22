@@ -24,15 +24,35 @@ ENABLED = True          # 改成 False 即可停用本页（菜单自动隐藏�
 # =====================================================================
 # 通用：载入号码数据
 # =====================================================================
+def _as_rows(x):
+    """把 DataFrame / list / tuple 统一成二维列表"""
+    if x is None:
+        return []
+    if isinstance(x, list):
+        return [list(r) for r in x]
+    try:
+        cols = list(getattr(x, "columns", []) or [])
+        if cols:
+            head = [str(c) for c in cols]
+            body = x.values.tolist()
+            return [head] + [list(r) for r in body]
+        return [list(r) for r in x.values.tolist()]
+    except Exception:
+        try:
+            return [list(r) for r in x]
+        except Exception:
+            return []
+
+
 def _load_index6(loader):
     """期号 + 7 个号码（升序，第7位是特码）"""
-    if "_lab_i6" in st.session_state:
-        return st.session_state["_lab_i6"]
+    if "_lab_i7" in st.session_state:
+        return st.session_state["_lab_i7"]
     out = []
-    rows = loader["load_excel_data"]("_index.csv", None)
+    rows = _as_rows(loader["load_excel_data"]("_index.csv", None))
     ncol = 8
     if not rows:
-        rows = loader["load_excel_data"]("_index6.csv", None)
+        rows = _as_rows(loader["load_excel_data"]("_index6.csv", None))
         ncol = 7
     if rows:
         for r in rows[1:]:
@@ -46,15 +66,15 @@ def _load_index6(loader):
             if period and all(nums):
                 out.append((period, nums))
     out.sort(key=lambda x: x[0])
-    st.session_state["_lab_i6"] = out
+    st.session_state["_lab_i7"] = out
     return out
 
 
 def _load_attr(loader):
     """号码 -> 属性 对照表"""
-    if "_lab_attr" in st.session_state:
-        return st.session_state["_lab_attr"]
-    rows = loader["load_excel_data"]("_attr_map.csv", None)
+    if "_lab_attr2" in st.session_state:
+        return st.session_state["_lab_attr2"]
+    rows = _as_rows(loader["load_excel_data"]("_attr_map.csv", None))
     out = {}
     if rows:
         hdr = [str(x).strip() for x in rows[0]]
@@ -63,7 +83,7 @@ def _load_attr(loader):
                 continue
             out[int(float(r[0]))] = {hdr[i]: str(r[i]).strip()
                                      for i in range(1, min(len(hdr), len(r)))}
-    st.session_state["_lab_attr"] = out
+    st.session_state["_lab_attr2"] = out
     return out
 
 
@@ -379,27 +399,27 @@ _LAB_ATTRS = ["生肖", "尾数", "门数", "段数", "数字合", "数字五行
 
 def _load_zodiac(loader):
     """逐期生肖表（走统一数据读取，云端本地都能取）"""
-    if "_lab_zod" in st.session_state:
-        return st.session_state["_lab_zod"]
+    if "_lab_zod2" in st.session_state:
+        return st.session_state["_lab_zod2"]
     out = []
     try:
-        rows = loader["load_excel_data"]("_zodiac_by_period.csv", None)
+        rows = _as_rows(loader["load_excel_data"]("_zodiac_by_period.csv", None))
     except Exception:
         rows = None
     if rows:
         for r in rows[1:]:
             if r and len(r) >= 8 and str(r[0]).strip():
                 out.append([str(r[0]).strip()] + [str(x).strip() for x in r[1:8]])
-    st.session_state["_lab_zod"] = out
+    st.session_state["_lab_zod2"] = out
     return out
 
 
 def _load_zodiac_attrs(loader):
-    if "_lab_zattr" in st.session_state:
-        return st.session_state["_lab_zattr"]
+    if "_lab_zattr2" in st.session_state:
+        return st.session_state["_lab_zattr2"]
     out = {}
     try:
-        rows = loader["load_excel_data"]("_zodiac_attrs.csv", None)
+        rows = _as_rows(loader["load_excel_data"]("_zodiac_attrs.csv", None))
     except Exception:
         rows = None
     if rows:
@@ -408,7 +428,7 @@ def _load_zodiac_attrs(loader):
             if r and str(r[0]).strip():
                 out[str(r[0]).strip()] = {hdr[i]: str(r[i]).strip()
                                           for i in range(1, len(r))}
-    st.session_state["_lab_zattr"] = out
+    st.session_state["_lab_zattr2"] = out
     return out
 
 
