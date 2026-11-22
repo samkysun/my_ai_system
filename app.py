@@ -5654,6 +5654,40 @@ def _login_persist_js(tok, need_redirect=False):
     _comp.html(_js, height=0)
 
 
+def _login_resume_js():
+    """没有 URL 令牌时，从浏览器本地记忆恢复登录
+       先尝试自动跳转；被浏览器拦截则显示一键继续按钮"""
+    import streamlit.components.v1 as _comp
+    _js = """
+<div style="font-family:system-ui,-apple-system,'Microsoft YaHei';padding:6px 0">
+  <a id="resumeBtn" target="_top" href="#"
+     style="display:none;padding:10px 18px;background:#1f6feb;color:#fff;
+            border-radius:8px;text-decoration:none;font-size:15px">
+    已记住登录，点击继续
+  </a>
+  <div id="tip" style="color:#888;font-size:13px;margin-top:6px"></div>
+</div>
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('dsh_t');
+    if (!saved) { document.getElementById('tip').textContent = ''; return; }
+    var href = new URL(window.parent.location.href);
+    href.searchParams.set('t', saved);
+    var full = href.toString();
+    var btn = document.getElementById('resumeBtn');
+    btn.href = full;
+    btn.style.display = 'inline-block';
+    document.getElementById('tip').textContent = '正在尝试自动登录…';
+    try { window.top.location.replace(full); } catch (e) {}
+    try { window.parent.location.href = full; } catch (e) {}
+  } catch (e) {}
+})();
+</script>
+"""
+    _comp.html(_js, height=70)
+
+
 def _qp_set(key, val):
     try:
         st.query_params[key] = val
@@ -5901,6 +5935,8 @@ def main_app():
 if not st.session_state.get("logged_in"):
     _tok0 = _qp_get("t")
     _u0 = check_login_token(_tok0) if _tok0 else ""
+    if not _tok0:
+        _login_resume_js()
     if _u0:
         _left = login_token_left(_tok0)
         if _left < _LOGIN_RENEW_SEC:
