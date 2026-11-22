@@ -180,6 +180,81 @@ def event_gaps(draws):
     return gap_sis, gap_adj, sis_hits, adj_hits
 
 
+RULE_ATTRS = ["尾数", "生肖", "四宝", "物象", "五行尾", "生肖五行",
+              "阴阳天地", "波单双"]
+RULE_THRESHOLDS = [10, 15, 20, 25, 30]
+RULE_MIN_N = 25          # 最少样本
+RULE_MIN_LIFT = 0.01     # 最少提升 1 个百分点
+
+
+def _attr_val(n, key):
+    return attrs_of(n)[key]
+
+
+def learn_rules(draws, lookback=800):
+    """自动发现并验证规则：属性值遗漏达到阈值后，下一期是否容易开出该属性"""
+    hist = draws[-lookback:]
+    n = len(hist)
+    if n < 60:
+        return []
+    rules = []
+    for key in RULE_ATTRS:
+        vals = sorted({_attr_val(x, key) for x in hist})
+        for v in vals:
+            # 该属性值在历史中的出现位置
+            pos = [i for i, x in enumerate(hist) if _attr_val(x, key) == v]
+            total_hits = len(pos)
+            if total_hits < 5:
+                continue
+            base = total_hits / n
+            for T in RULE_THRESHOLDS:
+                events = hits = 0
+                last = -1
+                for i in range(1, n):
+                    gap = i - last - 1
+                    if gap >= T and last >= 0:
+                        events += 1
+                        if _attr_val(hist[i], key) == v:
+                            hits += 1
+                    if _attr_val(hist[i], key) == v:
+                        last = i
+                if events < RULE_MIN_N:
+                    continue
+                rate = hits / events
+                lift = rate - base
+                if lift >= RULE_MIN_LIFT:
+                    rules.append({"属性": key, "取值": v, "阈值": T,
+                                  "样本": events, "命中": hits,
+                                  "命中率": rate, "基线": base,
+                                  "lift": lift})
+    rules.sort(key=lambda x: -x["lift"])
+    return rules
+
+
+def apply_rules(draws, rules, om):
+    """用当前遗漏状态激活规则，给号码打分"""
+    from collections import Counter
+    score = Counter()
+    active = []
+    for r in rules:
+        key, v, T = r["属性"], r["取值"], r["阈值"]
+        # 当前该属性值的遗漏
+        g = 0
+        for x in reversed(draws):
+            if _attr_val(x, key) == v:
+                break
+            g += 1
+        else:
+            g = len(draws)
+        if g >= T:
+            active.append((r, g))
+            w = max(0.5, r["lift"] * 100)
+            for num in range(37):
+                if _attr_val(num, key) == v:
+                    score[num] += w
+    return score, active
+
+
 FEATS = ["遗漏", "尾遗漏", "肖遗漏", "肖五行遗漏", "物象遗漏", "尾五行遗漏",
          "阴阳天地遗漏", "波单双遗漏", "近20频", "近50频", "姐妹", "轮盘邻"]
 
@@ -351,6 +426,13 @@ def build_candidates(draws, rec_nums=None):
     _weak = [(n, s) for n, s in _rest if s < 2]
     ranked = [(n, score.get(n, 0)) for n in _rec]
     # 0 号按出现次数权衡：超过 40 次开始推荐
+    # 自学习规则得分
+    _rules = learn_rules(draws)
+    _rscore, _active = apply_rules(draws, _rules, om)
+    for _n, _s in _rscore.items():
+        if _s > 0:
+            add(int(_n), "规则", int(round(_s)))
+
     _zgap = om["号码"].get(0, 0)
     if _zgap >= 40 and 0 not in _rec:
         ranked.append((0, 99))
@@ -446,6 +528,21 @@ def render(df_data, H):
         st.caption("暂无达到阈值的项目")
     for kind, vals in alerts:
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
+
+    st.markdown("### 🧪 系统自学习规则（自动验证）")
+    _rules = learn_rules(draws)
+    if not _rules:
+        st.caption("历史数据不足，或暂无通过验证的规则")
+    else:
+        _rdf = pd.DataFrame(
+            [{"属性": r["属性"], "取值": r["取值"], "触发阈值": r["阈值"],
+              "样本": r["样本"], "命中": r["命中"],
+              "命中率": f"{r['命中率']*100:.1f}%",
+              "基线": f"{r['基线']*100:.1f}%",
+              "提升": f"{r['lift']*100:+.1f}pp"} for r in _rules[:15]])
+        st.dataframe(_rdf, use_container_width=True, hide_index=True)
+        st.caption(f"共 {len(_rules)} 条规则通过验证"
+                   f"（样本≥{RULE_MIN_N}、提升≥{RULE_MIN_LIFT*100:.0f}pp）")
 
     st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
