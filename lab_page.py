@@ -1289,11 +1289,12 @@ def _exp_stake_plan(loader):
         _bank0 = st.number_input("本金（元）", 1000, 100000000, 100000, 1000,
                                  key="lab_i_bank")
     with r4c2:
-        _era = st.selectbox("统计起点", ["2005", "2015", "1976"], index=0,
+        _era = st.selectbox("统计起点", ["1976", "2005", "2015"], index=0,
                             key="lab_i_era")
 
     # ---- 第五行：滚动窗口 + 执行 ----
-    st.caption("热号计算窗口")
+    st.caption("热号计算方式")
+    _allw = st.checkbox("用全部历史（不滚动）", value=False, key="lab_i_allw")
     _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
     _go = st.button("▶ 运行加注模拟", type="primary", key="lab_i_run")
 
@@ -1317,7 +1318,8 @@ def _exp_stake_plan(loader):
     gaps = []
     rows = []
 
-    for i in range(int(_win), n):
+    _w = 0 if _allw else int(_win)
+    for i in range(max(1, int(_win)), n):
         if periods[i][:4] >= _era:
             picks = set()
             for b, k in ALLOC.items():
@@ -1356,6 +1358,11 @@ def _exp_stake_plan(loader):
                 ruin_at = periods[i]
         for b in ALLOC:
             c[b][seqs[b][i]] += 1
+            if _w and i - _w >= 0:
+                _oldv = seqs[b][i - _w]
+                c[b][_oldv] -= 1
+                if c[b][_oldv] <= 0:
+                    del c[b][_oldv]
 
     roi = (back / spent * 100) if spent else 0
     st.markdown("**模拟结果**")
