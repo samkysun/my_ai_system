@@ -435,57 +435,73 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
 
 
 def _exp_link_attr(loader):
-    st.markdown("#### 实验 D：属性联动（选属性，分球位出结果）")
-    st.caption("规则：2,3球组合→推1球；3,4→2；4,5→3；5,6→4；6,7→5；1,2→6。")
+    st.markdown("#### 实验 D：属性联动（两球推一球）")
+    st.caption("选两个触发球位 + 一个目标球位；也可勾选「全部球位」一次算 6 组。")
 
     data = _load_index6(loader)
     if not data:
-        st.error("缺少 _index6.csv")
+        st.error("缺少 _index.csv")
         return
     zrows = _load_zodiac(loader)
     zodiac = {r[0]: r[1:8] for r in zrows}
     zattrs = _load_zodiac_attrs(loader)
     amap = _load_attr(loader)
     periods = [p for p, _ in data]
-    st.caption(f"数据：号码 {len(data)} 期｜生肖表 {len(zodiac)} 期｜"
-               f"属性表 {len(amap)} 个号码")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_d_attr")
     with c2:
+        b1 = st.selectbox("触发球位①", list(range(1, 8)), index=1,
+                          key="lab_d_b1")
+    with c3:
+        b2 = st.selectbox("触发球位②", list(range(1, 8)), index=2,
+                          key="lab_d_b2")
+    _auto = (min(b1, b2) - 1) or 6
+    with c4:
+        tgt = st.selectbox("目标球位", list(range(1, 8)), index=_auto - 1,
+                           key="lab_d_tgt",
+                           help=f"规则建议 {_auto}：触发最小值-1（1,2 则推 6）")
+    with c5:
         _plist0 = ["最新"] + list(reversed(periods[-300:]))
         base = st.selectbox("基准期", _plist0, index=0, key="lab_d_base")
+
+    _all6 = st.checkbox("一次计算全部球位（2+3→1、3+4→2 … 1+2→6）",
+                        value=False, key="lab_d_all")
 
     if not st.button("▶ 运行实验 D", key="lab_d_run"):
         return
 
     idx = len(data) - 1 if base == "最新" else periods.index(base)
-    st.markdown(f"**基准期 {periods[idx]}**｜属性 **{attr}**")
+    st.markdown(f"**基准期 {periods[idx]}｜属性 {attr}**")
 
     from collections import Counter
     _pairs = {1: (2, 3), 2: (3, 4), 3: (4, 5), 4: (5, 6), 5: (6, 7), 6: (1, 2)}
+    jobs = list(_pairs.items()) if _all6 else [(tgt, (b1, b2))]
+    if b1 == b2 and not _all6:
+        st.warning("两个触发球位不能相同")
+        return
+
     all_txt = []
-    for tgt, (b1, b2) in _pairs.items():
-        _v1 = _attr_of(data[idx], b1, attr, zodiac, zattrs, amap)
-        _v2 = _attr_of(data[idx], b2, attr, zodiac, zattrs, amap)
+    for _tgt, (_b1, _b2) in jobs:
+        _v1 = _attr_of(data[idx], _b1, attr, zodiac, zattrs, amap)
+        _v2 = _attr_of(data[idx], _b2, attr, zodiac, zattrs, amap)
         if not _v1 or not _v2:
+            st.caption(f"第{_tgt}球：属性取值为空")
             continue
         cnt = Counter()
         hits = 0
         for i in range(0, idx):
-            if i + 1 > idx:
-                break
-            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap)
-            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap)
+            a1 = _attr_of(data[i], _b1, attr, zodiac, zattrs, amap)
+            a2 = _attr_of(data[i], _b2, attr, zodiac, zattrs, amap)
             if a1 == _v1 and a2 == _v2:
-                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap)
+                nv = _attr_of(data[i + 1], _tgt, attr, zodiac, zattrs, amap)
                 if nv:
                     cnt[nv] += 1
                     hits += 1
-        _lo, _hi = tgt, 43 + tgt
-        st.markdown(f"**第{tgt}球**（触发：第{b1}球 {_v1} + 第{b2}球 {_v2}　"
-                    f"历史 {hits} 期　区间 {_lo}~{_hi}）")
+        _lo, _hi = _tgt, 43 + _tgt
+        st.markdown(f"**第{_tgt}球**（触发：第{_b1}球 {_v1} ＋ 第{_b2}球 {_v2}"
+                    f"　历史 {hits} 期　区间 {_lo}~{_hi}）")
         if not cnt:
             st.caption("历史无相同组合")
             continue
@@ -493,12 +509,11 @@ def _exp_link_attr(loader):
         for k, v in cnt.most_common():
             nums = [n for n, a in amap.items()
                     if _lo <= n <= _hi and a.get(attr) == k]
-            rows.append({attr: k, "次数": v,
-                         "占比": f"{v/hits*100:.1f}%",
+            rows.append({attr: k, "次数": v, "占比": f"{v/hits*100:.1f}%",
                          "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
         st.dataframe(pd.DataFrame(rows), use_container_width=True,
                      hide_index=True)
-        all_txt.append(f"第{tgt}球（{b1}+{b2} → {_v1}+{_v2}）历史 {hits} 期：" +
+        all_txt.append(f"第{_tgt}球（{_b1}+{_b2} → {_v1}+{_v2}）历史 {hits} 期：" +
                        "；".join(f"{k} {v}次" for k, v in cnt.most_common(5)))
 
     if all_txt:
