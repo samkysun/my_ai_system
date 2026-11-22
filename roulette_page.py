@@ -303,10 +303,7 @@ def build_candidates(draws, rec_nums=None):
             score[num] += w
             why[num].append(tag)
 
-    for t in hot_tails:
-        for num in range(37):
-            if str(num % 10) == t:
-                add(num, f"尾{t}")
+    # 尾数只提醒，不写入候选
 
     # 其它属性遗漏加权（生肖不入候选，姐妹/相邻只提醒）
     _extra = [("四宝", "四宝"), ("物象", "物象"), ("五行尾", "五行尾"),
