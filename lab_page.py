@@ -70,6 +70,30 @@ def _load_index6(loader):
     return out
 
 
+def _load_order(loader, order="升序"):
+    """按排序载入 7 个号码：升序用 1~7 列，按序用 8~14 列"""
+    key = "_lab_" + ("asc" if order == "升序" else "draw")
+    if key in st.session_state:
+        return st.session_state[key]
+    rows = _as_rows(loader["load_excel_data"]("_index.csv", None))
+    out = []
+    if rows:
+        base = 1 if order == "升序" else 8
+        for r in rows[1:]:
+            if len(r) < base + 7:
+                continue
+            period = str(r[0]).strip()
+            try:
+                nums = tuple(int(float(r[base + k] or 0)) for k in range(7))
+            except Exception:
+                continue
+            if period and all(nums):
+                out.append((period, nums))
+    out.sort(key=lambda x: x[0])
+    st.session_state[key] = out
+    return out
+
+
 def _load_attr(loader):
     """号码 -> 属性 对照表"""
     if "_lab_attr2" in st.session_state:
@@ -737,9 +761,11 @@ def _exp_combo_prev(loader):
     st.caption("计算目标期的球位：用「目标期的上一期」7 个号码做三三组合，"
                "到目标期之前的历史里找触发，统计触发期的「上一期」指定球位号码。")
 
-    data = _load_index6(loader)
+    _ord = st.radio("排序方式", ["升序", "按序"], horizontal=True,
+                    key="lab_f_ord")
+    data = _load_order(loader, _ord)
     if not data:
-        st.error("缺少 _index.csv")
+        st.error("该排序没有数据（按序数据可能从 2000 年才有）")
         return
     periods = [p for p, _ in data]
 
@@ -751,7 +777,7 @@ def _exp_combo_prev(loader):
             + list(reversed(periods[-300:])),
             index=0, key="lab_f_base")
     with c2:
-        ball = st.selectbox("取第几球（升序）", list(range(1, 8)), index=0,
+        ball = st.selectbox("取第几球", list(range(1, 8)), index=0,
                             key="lab_f_ball")
     with c3:
         span = st.selectbox("历史范围", ["全部", "最近 2000 期",
@@ -779,7 +805,7 @@ def _exp_combo_prev(loader):
         return
     nums = data[src][1]
     combos = list(itertools.combinations(sorted(nums), 3))
-    st.markdown(f"**目标 {_tname}**（待算第{ball}球）　"
+    st.markdown(f"**{_ord}｜目标 {_tname}**（待算第{ball}球）　"
                 f"**组合来源 {periods[src]}**：{nums}")
     _hint = (f"触发范围：全部历史" if _virtual
              else f"触发范围：{periods[src]} 之前")
