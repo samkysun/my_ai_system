@@ -146,76 +146,6 @@ def _range_of(order, ball):
 # =====================================================================
 # 实验 A：单条件杀号回测
 # =====================================================================
-def _exp_single_kill(loader):
-    st.markdown("#### 实验 A：单条件杀号回测")
-    st.caption("输入一个杀号条件，统计历史上下期该球位是否真的避开了这些号。")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        cond = st.text_input("杀号条件", "木肖", key="lab_a_cond",
-                             placeholder="木肖 / 5尾 / 06合 / 3段")
-    with c2:
-        order = st.selectbox("排序", ["升序", "按序"], key="lab_a_order")
-    with c3:
-        ball = st.number_input("球位", 1, 6, 1, 1, key="lab_a_ball")
-
-    c4, c5 = st.columns(2)
-    with c4:
-        year_from = st.text_input("起始年份", "2023", key="lab_a_year")
-    with c5:
-        mode = st.selectbox("判定口径",
-                            ["被杀号的号码一个都没出", "被杀号的号码全没出(严格)",
-                             "只看第一个被杀号"], key="lab_a_mode")
-
-    if not st.button("▶ 运行实验 A", key="lab_a_run"):
-        return
-
-    data = _load_index6(loader)
-    amap = _load_attr(loader)
-    if not data or not amap:
-        st.error("缺少 _index6.csv 或 _attr_map.csv")
-        return
-
-    nums = [n for n in _num_of(cond, amap)
-            if _range_of(order, ball)[0] <= n <= _range_of(order, ball)[1]]
-    if not nums:
-        st.warning("这个条件在所选球位的区间里没有对应号码")
-        return
-
-    trial = hit = 0
-    detail = []
-    for period, balls in data:
-        if period[:4] < year_from:
-            continue
-        draw = set(balls)
-        if not (draw & set(nums)):
-            continue
-        trial += 1
-        appeared = draw & set(nums)
-        ok = (len(appeared) == 0) if mode.startswith("被杀号的号码一个都没出") else True
-        if mode == "只看第一个被杀号":
-            ok = nums[0] not in draw
-        if ok:
-            hit += 1
-        detail.append((period, sorted(appeared)))
-
-    if not trial:
-        st.warning("样本为 0")
-        return
-
-    rate = hit / trial
-    st.metric("杀中率", f"{rate*100:.2f}%", f"{trial} 期样本")
-    st.caption(f"被杀号码：{' '.join(f'{n:02d}' for n in nums)}")
-    st.dataframe(pd.DataFrame(
-        [{"期号": p, "实际开出": " ".join(f"{x:02d}" for x in a)}
-         for p, a in detail[-30:]]), use_container_width=True, hide_index=True)
-
-    _save(loader, f"实验A {cond} {order}{ball}球 {year_from}+",
-          f"条件 {cond}｜{order}第{ball}球｜{year_from} 年起\n"
-          f"被杀号码 {' '.join(f'{n:02d}' for n in nums)}\n"
-          f"样本 {trial} 期，杀中 {hit} 期，杀中率 {rate*100:.2f}%")
-
-
 # =====================================================================
 # 实验 B：组合池命中率
 # =====================================================================
@@ -871,8 +801,19 @@ def _exp_combo_prev(loader):
         st.info("历史上没有包含这些组合的期")
         return
 
+    if not cnt:
+        st.warning("该区间内没有历史数据")
+        return
     ranked = cnt.most_common()
     order = [k for k, _ in ranked]
+    # 球位区间锁定（升序才有边界）
+    if _ord == 升序:
+        _lo, _hi = int(ball), 43 + int(ball)
+    else:
+        _lo, _hi = 1, 49
+    cnt = Counter({k: v for k, v in cnt.items() if _lo <= k <= _hi})
+    st.caption(f"球位区间：第{ball}球 {_lo}~{_hi}（只统计此区间内的号码）")
+
     actual = None if _virtual else data[idx][1][ball - 1]
     pos = (order.index(actual) + 1) if (actual in order) else None
     if _virtual:
@@ -1108,12 +1049,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab1, tab2, tabc, tabd, tabe, tabf, tab4, tab3 = st.tabs(
-        ["实验A 单条件杀号", "实验B 组合池", "实验C 形态组合",
+    tab2, tabc, tabd, tabe, tabf, tab4, tab3 = st.tabs(
+        ["实验B 组合池", "实验C 形态组合",
          "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
          "结论档案", "清理"])
-    with tab1:
-        _exp_single_kill(H)
     with tab2:
         _exp_pool(H)
     with tabc:
