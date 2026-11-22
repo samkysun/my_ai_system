@@ -4,7 +4,7 @@
 ------------------------------------------------------------------
 · 输入每次开奖号码，自动累计、自动核算
 · 统计：尾数遗漏、生肖遗漏、姐妹码遗漏、轮盘相邻遗漏
-· 触发阈值：尾数 20 期、生肖 15 期、姐妹码 20 期、相邻 20 期
+· 触发阈值：尾数 20 期、生肖 15 期、姐妹码 15 期、相邻 15 期（达标进重点）
 · 输出：最多 12 个候选号码，分重点 / 次重点 / 次要
 · 记录存 GitHub 文件 roulette_history.json
 ------------------------------------------------------------------
@@ -38,7 +38,7 @@ SIBAO = ["画"] + ["书", "琴", "书", "琴", "书", "棋", "棋", "画", "棋"
                   "棋", "琴", "画", "画", "书", "琴", "书", "琴", "书", "棋",
                   "棋", "画", "棋", "琴", "画", "画", "书"]  # 0~36
 
-TH_TAIL, TH_ZODIAC, TH_SISTER, TH_ADJ = 20, 15, 20, 20
+TH_TAIL, TH_ZODIAC, TH_SISTER, TH_ADJ = 20, 15, 15, 15
 MAX_PICK = 12
 
 HIST_FILE = "roulette_history.json"
@@ -189,9 +189,9 @@ def build_candidates(draws):
     score = Counter()
     why = defaultdict(list)
 
-    def add(num, tag):
+    def add(num, tag, w=1):
         if 0 <= num <= 36:
-            score[num] += 1
+            score[num] += w
             why[num].append(tag)
 
     for t in hot_tails:
@@ -204,10 +204,10 @@ def build_candidates(draws):
                 add(num, f"肖{z}")
     if sis_gap >= TH_SISTER:
         for s in sis:
-            add(s, "姐妹")
+            add(s, "姐妹", 2)
     if adj_gap >= TH_ADJ:
         for a in adj:
-            add(a, "轮盘邻")
+            add(a, "轮盘邻", 2)
 
     # 属性重复加权：同号码命中多个不同属性条件
     ranked = sorted(score.items(), key=lambda x: (-x[1], x[0]))[:MAX_PICK]
@@ -215,7 +215,10 @@ def build_candidates(draws):
     if ranked:
         top = ranked[0][1]
         for num, sc in ranked:
-            if sc >= top and sc >= 3:
+            tags = set(why[num])
+            if tags & {"姐妹", "轮盘邻"}:
+                lv = "重点"
+            elif sc >= top and sc >= 3:
                 lv = "重点"
             elif sc >= max(2, top - 1):
                 lv = "次重点"
