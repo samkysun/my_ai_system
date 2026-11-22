@@ -25,22 +25,26 @@ ENABLED = True          # 改成 False 即可停用本页（菜单自动隐藏�
 # 通用：载入号码数据
 # =====================================================================
 def _load_index6(loader):
-    """期号 + 6 个平码（升序），用 session_state 缓存"""
+    """期号 + 7 个号码（升序，第7位是特码）"""
     if "_lab_i6" in st.session_state:
         return st.session_state["_lab_i6"]
-    rows = loader["load_excel_data"]("_index6.csv", None)
     out = []
+    rows = loader["load_excel_data"]("_index.csv", None)
+    ncol = 8
+    if not rows:
+        rows = loader["load_excel_data"]("_index6.csv", None)
+        ncol = 7
     if rows:
         for r in rows[1:]:
-            if len(r) < 7:
+            if len(r) < ncol:
                 continue
-            p = str(r[0]).strip()
+            period = str(r[0]).strip()
             try:
-                nums = tuple(int(float(r[1 + k] or 0)) for k in range(6))
+                nums = tuple(int(float(r[1 + k] or 0)) for k in range(ncol - 1))
             except Exception:
                 continue
-            if p and all(nums):
-                out.append((p, nums))
+            if period and all(nums):
+                out.append((period, nums))
     out.sort(key=lambda x: x[0])
     st.session_state["_lab_i6"] = out
     return out
