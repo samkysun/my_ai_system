@@ -1171,7 +1171,7 @@ def _exp_six_pick(loader):
         _po = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
                               key="lab_h_payout")
     with _c2h:
-        _era = st.selectbox("统计起点", ["1976", "2005", "2015"], index=1,
+        _era = st.selectbox("统计起点", ["1976", "2005", "2015"], index=0,
                             key="lab_h_era")
     st.caption("判定口径：只比 6 个平码，特码不计入")
 
