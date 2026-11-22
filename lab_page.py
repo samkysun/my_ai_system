@@ -990,6 +990,120 @@ def _exp_hot_pick(loader):
 
 
 # =====================================================================
+# 实验 H：6 码分配（1球1个、2球2个、5球2个、6球1个）+ 中3回测
+# =====================================================================
+def _exp_six_pick(loader):
+    st.markdown("#### 实验 H：6 码分配 + 中 3 回测")
+    st.caption("按位置优势分配号码数：第1球 1 个、第2球 2 个、第5球 2 个、"
+               "第6球 1 个，合计 6 个；回测统计每期中几个、能否中 3 个。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p for p, _ in data]
+    n = len(data)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _win = st.selectbox("滚动窗口（热号）", [50, 100, 200, 500],
+                            index=1, key="lab_h_win")
+    with c2:
+        _start_p = st.selectbox("回测起始期", list(reversed(periods)),
+                                index=min(299, len(periods) - 1),
+                                key="lab_h_start")
+    with c3:
+        _end_p = st.selectbox("回测结束期", list(reversed(periods)), index=0,
+                              key="lab_h_end")
+    with c4:
+        _need = st.number_input("目标命中个数", 1, 4, 3, 1, key="lab_h_need")
+
+    ALLOC = {1: 1, 2: 2, 5: 2, 6: 1}       # 系统分配：共 6 个
+    st.caption("号码分配：" + "　".join(f"第{k}球 {v} 个"
+                                       for k, v in ALLOC.items())
+               + "　（合计 6 个）")
+
+    if not st.button("▶ 运行实验 H", key="lab_h_run"):
+        return
+
+    from collections import Counter
+    seqs = {b: [d[1][b - 1] for d in data] for b in ALLOC}
+    _i1 = periods.index(_start_p)
+    _i2 = periods.index(_end_p)
+    if _i1 > _i2:
+        _i1, _i2 = _i2, _i1
+    start = max(int(_win), _i1)
+    end = min(n, _i2 + 1)
+
+    rows = []
+    dist = Counter()
+    ge = 0
+    tot = 0
+    for i in range(start, end):
+        picks = {}
+        ok_cnt = 0
+        for b, k in ALLOC.items():
+            c = Counter(seqs[b][max(0, i - int(_win)):i])
+            pick = [v for v, _ in c.most_common(k)]
+            picks[b] = pick
+            if seqs[b][i] in pick:
+                ok_cnt += 1
+        tot += 1
+        dist[ok_cnt] += 1
+        if ok_cnt >= int(_need):
+            ge += 1
+        rows.append({
+            "期号": periods[i],
+            **{f"第{b}球推荐": " ".join(f"{v:02d}" for v in picks[b])
+               for b in ALLOC},
+            **{f"第{b}球实开": f"{seqs[b][i]:02d}" for b in ALLOC},
+            "命中个数": ok_cnt,
+            "达标": "★" if ok_cnt >= int(_need) else "",
+        })
+
+    if not tot:
+        st.warning("样本不足")
+        return
+
+    st.metric(f"中 {int(_need)} 个及以上的概率", f"{ge/tot*100:.1f}%",
+              f"{ge}/{tot} 期")
+    st.metric("平均每期中几个",
+              f"{sum(k*v for k, v in dist.items())/tot:.2f} 个",
+              f"目标 {int(_need)} 个")
+
+    st.markdown("**命中个数分布**")
+    st.dataframe(pd.DataFrame(
+        [{"命中个数": k, "期数": v, "占比": f"{v/tot*100:.1f}%"}
+         for k, v in sorted(dist.items())]),
+        use_container_width=True, hide_index=True)
+
+    rows = list(reversed(rows))
+    _df = pd.DataFrame(rows)
+
+    def _hl(row):
+        if row["达标"]:
+            return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+        return [""] * len(row)
+
+    st.markdown("**回测明细（最新在上，★=达标）**")
+    st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                 hide_index=True, height=380)
+    st.download_button("📥 下载明细",
+                       _df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"实验H_6码_{periods[start]}_{periods[end-1]}.csv",
+                       mime="text/csv", key="lab_h_dl")
+
+    # 下一期推荐
+    st.markdown(f"**下一期推荐（6 个号，窗口 {int(_win)} 期）**")
+    _next = []
+    for b, k in ALLOC.items():
+        c = Counter(seqs[b][-int(_win):])
+        pick = [v for v, _ in c.most_common(k)]
+        _next.append(f"第{b}球：" + "、".join(f"{v:02d}" for v in pick))
+    st.success("　".join(_next))
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -1188,10 +1302,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabc, tabd, tabe, tabf, tabg, tab4, tab3 = st.tabs(
+    tab2, tabc, tabd, tabe, tabf, tabg, tabh, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验C 形态组合",
          "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
-         "实验G 热号回测", "结论档案", "清理"])
+         "实验G 热号回测", "实验H 六码中三", "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabc:
@@ -1204,6 +1318,8 @@ def render(df_data, H):
         _exp_combo_prev(H)
     with tabg:
         _exp_hot_pick(H)
+    with tabh:
+        _exp_six_pick(H)
     with tab4:
         _archive()
     with tab3:
