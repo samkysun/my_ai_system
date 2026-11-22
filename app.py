@@ -4037,12 +4037,8 @@ def _pred_render_archive(df_data, default_period):
             continue
         chips = []
         for n in _v[0]:
-            if actual and n in actual:
-                chips.append(
-                    f"🔴**{n:02d}**")
-            else:
-                chips.append(
-                    f"⚪**{n:02d}**")
+            _hit = bool(actual and n in actual)
+            chips.append(f"{ball_dot(n)}**{n:02d}**" + ("✅" if _hit else ""))
         st.markdown(f"**第{i}球**　" + "".join(chips))
 
     # 恢复上一版（记录级历史）
