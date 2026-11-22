@@ -232,6 +232,11 @@ except Exception:
     render_combo2 = None
 
 try:
+    from roulette_page import render as render_roulette
+except Exception:
+    render_roulette = None
+
+try:
     from lab_page import render as render_lab
 except Exception:
     render_lab = None
@@ -3335,6 +3340,46 @@ def _pred_gh_headers():
                          "Content-Type": "application/json"}
 
 
+def _gh_read_text(name):
+    """读取仓库里的文本文件，失败返回 None"""
+    import base64 as _b64
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return None
+    try:
+        r = requests.get(f"https://api.github.com/repos/{repo}/contents/{name}",
+                         headers=hdrs, timeout=20)
+        if r.status_code == 200:
+            return _b64.b64decode(r.json()["content"]).decode("utf-8")
+    except Exception:
+        pass
+    return None
+
+
+def _gh_write_text(name, text, msg="更新"):
+    """写入仓库文本文件，失败返回 False"""
+    import base64 as _b64
+    token, repo, hdrs = _pred_gh_headers()
+    if not token:
+        return False
+    try:
+        sha = None
+        r = requests.get(f"https://api.github.com/repos/{repo}/contents/{name}",
+                         headers=hdrs, timeout=20)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
+        body = {"message": msg,
+                "content": _b64.b64encode(text.encode("utf-8")).decode(),
+                "branch": "main"}
+        if sha:
+            body["sha"] = sha
+        r2 = requests.put(f"https://api.github.com/repos/{repo}/contents/{name}",
+                          headers=hdrs, json=body, timeout=30)
+        return r2.status_code in (200, 201)
+    except Exception:
+        return False
+
+
 def _pred_gh_read():
     """从仓库读存档 JSON -> (dict, sha)；失败返回 (None, None)"""
     token, repo, hdrs = _pred_gh_headers()
@@ -5737,7 +5782,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析", "🔬 研究中心"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三中三组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -5746,6 +5791,12 @@ def main_app():
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
+    elif page == "🎡 轮盘系统":
+        if render_roulette:
+            render_roulette(df_data, {"gh_read": _gh_read_text,
+                                       "gh_write": _gh_write_text})
+        else:
+            st.error("roulette_page.py 未找到")
     elif page == "🔬 研究中心":
         if render_lab:
             render_lab(df_data, {"load_excel_data": load_excel_data,
