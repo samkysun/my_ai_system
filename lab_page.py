@@ -665,7 +665,9 @@ def _exp_target_multi(loader):
         per_pair.append({"组合": f"{a}+{b}", "取值": f"{v1}+{v2}",
                          "历史期数": n,
                          "该组首位": top[0],
-                         "首位次数": top[1]})
+                         "首位次数": top[1],
+                         "该组分布": "、".join(f"{k}{v}"
+                                              for k, v in c.most_common(8))})
 
     st.markdown("**各组合分别结果**")
     st.dataframe(pd.DataFrame(per_pair), use_container_width=True,
@@ -676,13 +678,21 @@ def _exp_target_multi(loader):
         return
     st.markdown(f"**汇总前二（锁定第{tgt}球，{attr}，共 {allc} 次）**")
     allc = sum(total.values())
+    _rank = total.most_common()
+    _top1 = _rank[0][1] if _rank else 0
+    _second = next((v for _, v in _rank if v < _top1), None)
+    _thr = _second if _second is not None else _top1
+    _top_set = [k for k, v in _rank if v >= _thr] if _rank else []
+    _show = [r for r in _rank if r[0] in _top_set]
+    if len(_show) > 2:
+        st.info(f"第 2 名存在并列：{'、'.join(_top_set)}（共 {len(_show)} 个），已一并计入")
     rows = []
-    for k, v in total.most_common(2):
+    for k, v in _show:
         nums = [n for n, aa in amap.items()
                 if _lo <= n <= _hi and aa.get(attr) == k]
         rows.append({attr: k, "总次数": v, "占比": f"{v/allc*100:.1f}%",
                      "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
-    _top2 = [r[attr] for r in rows]
+    _top2 = list(_top_set)
 
     _real = (_attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap)
              if idx + 1 < len(data) else "")
