@@ -585,6 +585,7 @@ def apply_rules(draws, rules, om, mem=None):
     """按当前状态激活规则，给号码打分（可用记忆校正权重）"""
     from collections import Counter
     score = Counter()
+    hitcnt = Counter()
     active = []
     last_draw = draws[-1] if draws else None
     for r in rules:
@@ -684,14 +685,18 @@ def apply_rules(draws, rules, om, mem=None):
             for num in range(37):
                 if _attr_val(num, key) == v:
                     score[num] += w
+                    hitcnt[num] += 1
         elif typ == "重号" and last_draw is not None:
             score[int(v)] += w
+            hitcnt[int(v)] += 1
         elif typ == "尾连" and last_draw is not None:
             for num in range(37):
                 if str(num % 10) == v:
                     score[num] += w
+                    hitcnt[num] += 1
         elif typ == "号遗漏":
             score[int(v)] += w
+            hitcnt[int(v)] += 1
         elif typ == "号码段":
             lo2, hi2 = [int(z) for z in r["取值"].split("-")]
             for num in range(lo2, hi2 + 1):
@@ -709,10 +714,11 @@ def apply_rules(draws, rules, om, mem=None):
             for num in range(37):
                 if _attr_val(num, key) == v:
                     score[num] += w
+                    hitcnt[num] += 1
         elif typ == "姐妹" and last_draw is not None:
             for num in sister(last_draw):
                 score[num] += w
-    return score, active
+    return score, active, hitcnt
 
 
 FEATS = ["遗漏", "尾遗漏", "肖遗漏", "肖五行遗漏", "物象遗漏", "尾五行遗漏",
@@ -888,8 +894,9 @@ def build_candidates(draws, rec_nums=None):
     # 0 号按出现次数权衡：超过 40 次开始推荐
     # 自学习规则得分
     _rules = learn_rules(draws)
-    _rscore, _active = apply_rules(draws, _rules, om,
-                                   st.session_state.get("_roulette_rules_mem"))
+    _rscore, _active, _rhit = apply_rules(
+        draws, _rules, om,
+        st.session_state.get("_roulette_rules_mem"))
     for _n, _s in _rscore.items():
         if _s > 0:
             add(int(_n), "规则", int(round(_s)))
@@ -1007,13 +1014,31 @@ def render(df_data, H):
         rows = []
         for num, sc, lv, wh in levels:
             a = attrs_of(num)
-            rows.append({"等级": lv, "号码": num, "得分": sc,
+            _rc = int(_rhit.get(num, 0))
+            if _rc >= 3:
+                _judge = "🔥 极可能开"
+            elif _rc == 2:
+                _judge = "⭐ 较可能"
+            elif _rc == 1:
+                _judge = "○ 留意"
+            else:
+                _judge = ""
+            rows.append({"等级": lv, "号码": num, "判断": _judge, "得分": sc,
                          "遗漏": om["号码"].get(num, 0),
                          "命中条件": "、".join(sorted(set(wh))),
                          "尾数": a["尾数"], "生肖": a["生肖"],
                          "四宝": a["四宝"], "物象": a["物象"],
                          "五行尾": a["五行尾"], "生肖五行": a["生肖五行"],
                          "阴阳天地": a["阴阳天地"], "波单双": a["波单双"]})
+        _hot = [r2["号码"] for r2 in rows if "极可能" in str(r2["判断"])]
+        _mid = [r2["号码"] for r2 in rows if "较可能" in str(r2["判断"])]
+        if _hot:
+            st.success("🔥 极可能开出：" + "、".join(f"{v:02d}" for v in _hot)
+                       + "（" + str(len(_hot)) + " 个号码同时命中多条规则）")
+        elif _mid:
+            st.info("⭐ 较可能：" + "、".join(f"{v:02d}" for v in _mid))
+        else:
+            st.caption("本期没有规则共振的号码（无高置信提示）")
         dfc = pd.DataFrame(rows)
         st.dataframe(dfc, use_container_width=True, hide_index=True)
         st.download_button("📥 下载候选",
