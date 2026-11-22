@@ -192,23 +192,23 @@ def _attr_val(n, key):
 
 
 def learn_rules(draws, lookback=800):
-    """自动发现并验证规则：属性值遗漏达到阈值后，下一期是否容易开出该属性"""
+    """自动发现并验证多族规则"""
     hist = draws[-lookback:]
     n = len(hist)
     if n < 50:
         return []
-    # 样本越少，门槛越低（最少 10 次）
     min_n = max(10, min(RULE_MIN_N, n // 4))
     rules = []
+
+    # ---------- 族1：遗漏型（属性值遗漏达阈值 → 下期开出） ----------
     for key in RULE_ATTRS:
         vals = sorted({_attr_val(x, key) for x in hist})
         for v in vals:
-            # 该属性值在历史中的出现位置
-            pos = [i for i, x in enumerate(hist) if _attr_val(x, key) == v]
-            total_hits = len(pos)
+            total_hits = sum(1 for x in hist if _attr_val(x, key) == v)
             if total_hits < 5:
                 continue
             base = total_hits / n
+            last = -1
             for T in RULE_THRESHOLDS:
                 events = hits = 0
                 last = -1
@@ -225,35 +225,130 @@ def learn_rules(draws, lookback=800):
                 rate = hits / events
                 lift = rate - base
                 if lift >= RULE_MIN_LIFT:
-                    rules.append({"属性": key, "取值": v, "阈值": T,
+                    rules.append({"类型": "遗漏", "属性": key, "取值": v,
+                                  "条件": f"遗漏≥{T}", "阈值": T,
                                   "样本": events, "命中": hits,
-                                  "命中率": rate, "基线": base,
+                                  "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族2：转移型（上期属性=a → 下期=b） ----------
+    for key in RULE_ATTRS:
+        vals = sorted({_attr_val(x, key) for x in hist})
+        base_map = {v: sum(1 for x in hist if _attr_val(x, key) == v) / n
+                    for v in vals}
+        trans = {}
+        for i in range(1, n):
+            a, b = _attr_val(hist[i - 1], key), _attr_val(hist[i], key)
+            trans.setdefault(a, {}).setdefault(b, 0)
+            trans[a][b] += 1
+        for a, m in trans.items():
+            tot = sum(m.values())
+            if tot < min_n:
+                continue
+            for b, c in m.items():
+                rate = c / tot
+                lift = rate - base_map.get(b, 0)
+                if lift >= RULE_MIN_LIFT * 1.5:
+                    rules.append({"类型": "转移", "属性": key, "取值": b,
+                                  "条件": f"上期{a}", "阈值": 0,
+                                  "样本": tot, "命中": c,
+                                  "命中率": rate, "基线": base_map.get(b, 0),
                                   "lift": lift})
+
+    # ---------- 族3：热频型（近20期出现≥k次 → 下期再出） ----------
+    for k in (2, 3, 4):
+        events = hits = 0
+        for i in range(20, n):
+            recent = hist[i - 20:i]
+            hot = {x for x in recent if recent.count(x) >= k}
+            if not hot:
+                continue
+            events += len(hot)
+            hits += len(hot & {hist[i]})
+        if events >= min_n * 2:
+            base = 1 / 37
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "热频", "属性": "号码", "取值": f"≥{k}次",
+                              "条件": "近20期", "阈值": k,
+                              "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族4：姐妹事件型（连续未出≥T → 下期出现姐妹） ----------
+    for T in (10, 15, 20, 25):
+        events = hits = 0
+        gap = 0
+        for i in range(1, n):
+            prev = hist[i - 1]
+            if gap >= T:
+                events += 1
+                if hist[i] in sister(prev):
+                    hits += 1
+            if hist[i] in sister(prev):
+                gap = 0
+            else:
+                gap += 1
+        if events >= min_n:
+            base = 2 / 37
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "姐妹", "属性": "姐妹码",
+                              "取值": "相邻号码", "条件": f"连续未出≥{T}",
+                              "阈值": T, "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
     rules.sort(key=lambda x: -x["lift"])
     return rules
 
 
 def apply_rules(draws, rules, om):
-    """用当前遗漏状态激活规则，给号码打分"""
+    """按当前状态激活规则，给号码打分"""
     from collections import Counter
     score = Counter()
     active = []
+    last_draw = draws[-1] if draws else None
     for r in rules:
-        key, v, T = r["属性"], r["取值"], r["阈值"]
-        # 当前该属性值的遗漏
-        g = 0
-        for x in reversed(draws):
-            if _attr_val(x, key) == v:
-                break
-            g += 1
-        else:
-            g = len(draws)
-        if g >= T:
-            active.append((r, g))
-            w = max(0.5, r["lift"] * 100)
+        key, v, typ = r["属性"], r["取值"], r["类型"]
+        hit = False
+        if typ == "遗漏":
+            g = 0
+            for x in reversed(draws):
+                if _attr_val(x, key) == v:
+                    break
+                g += 1
+            else:
+                g = len(draws)
+            hit = g >= r["阈值"]
+        elif typ == "转移":
+            if last_draw is not None and _attr_val(last_draw, key) == \
+                    r["条件"].replace("上期", ""):
+                hit = True
+        elif typ == "热频":
+            recent = draws[-20:]
+            k = r["阈值"]
+            for num in range(37):
+                if recent.count(num) >= k:
+                    score[num] += max(0.5, r["lift"] * 100)
+            hit = False
+        elif typ == "姐妹":
+            gap = 0
+            for i in range(len(draws) - 1, 0, -1):
+                if draws[i] in sister(draws[i - 1]):
+                    break
+                gap += 1
+            hit = gap >= r["阈值"]
+        if not hit:
+            continue
+        active.append((r, 0))
+        w = max(0.5, r["lift"] * 100)
+        if typ in ("遗漏", "转移"):
             for num in range(37):
                 if _attr_val(num, key) == v:
                     score[num] += w
+        elif typ == "姐妹" and last_draw is not None:
+            for num in sister(last_draw):
+                score[num] += w
     return score, active
 
 
@@ -537,7 +632,8 @@ def render(df_data, H):
         st.caption("历史数据不足，或暂无通过验证的规则")
     else:
         _rdf = pd.DataFrame(
-            [{"属性": r["属性"], "取值": r["取值"], "触发阈值": r["阈值"],
+            [{"类型": r["类型"], "属性": r["属性"], "取值": r["取值"],
+              "条件": r["条件"],
               "样本": r["样本"], "命中": r["命中"],
               "命中率": f"{r['命中率']*100:.1f}%",
               "基线": f"{r['基线']*100:.1f}%",
