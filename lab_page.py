@@ -388,7 +388,7 @@ def _load_zodiac_attrs(_sig):
     return {r[0]: {hdr[i]: r[i] for i in range(1, len(r))} for r in rows[1:] if r}
 
 
-def _attr_of(period_key, ball, attr, zodiac, zattrs, amap):
+def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
     """取某期某球某属性"""
     zrow = zodiac.get(period_key)
     num = period_key[1][int(ball) - 1]
@@ -403,6 +403,9 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap):
         return str(num % 10)
     if attr == "数字合":
         return a.get("数字合", "")      # 严格取源数据值（含 22=05合）
+    if attr == "数字五行" and wx_mode == "按生肖":
+        z = zrow[int(ball) - 1] if zrow else ""
+        return zattrs.get(z, {}).get("生肖五行", "")
     if attr == "门数":
         return a.get("门数", "")
     if attr == "段数":
@@ -444,6 +447,9 @@ def _exp_link_attr(loader):
                            help=f"规则：目标 = 触发最小值 - 1（1,2 则推 6）；"
                                 f"当前建议 {_auto}")
 
+    _wx_mode = st.radio("数字五行口径",
+                        ["按号码（源数据，不变）", "按生肖（随年份变化）"],
+                        horizontal=True, key="lab_d_wx")
     c5, c6, c7 = st.columns(3)
     with c5:
         base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
@@ -461,8 +467,8 @@ def _exp_link_attr(loader):
             return
         idx = len(data) - 1 if base == "最新" else periods.index(base)
         pkey = data[idx]
-        _v1 = _attr_of(pkey, b1, attr, zodiac, zattrs, amap)
-        _v2 = _attr_of(pkey, b2, attr, zodiac, zattrs, amap)
+        _v1 = _attr_of(pkey, b1, attr, zodiac, zattrs, amap, _wx_mode)
+        _v2 = _attr_of(pkey, b2, attr, zodiac, zattrs, amap, _wx_mode)
         if not _v1 or not _v2:
             st.warning("属性取值为空，换个属性或球位试试")
             return
@@ -479,10 +485,10 @@ def _exp_link_attr(loader):
         for i in range(lo, idx):
             if i + 1 >= idx:
                 break
-            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap)
-            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap)
+            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap, _wx_mode)
+            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap, _wx_mode)
             if a1 == _v1 and a2 == _v2:
-                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap)
+                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap, _wx_mode)
                 if nv:
                     cnt[nv] += 1
                     hits.append((periods[i], periods[i + 1], nv))
@@ -506,7 +512,7 @@ def _exp_link_attr(loader):
 
         # 回测对比
         if idx + 1 < len(data):
-            real = _attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap)
+            real = _attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap, _wx_mode)
             rank = [k for k, _ in cnt.most_common()]
             pos = rank.index(real) + 1 if real in rank else None
             st.markdown("**回测对比**")
