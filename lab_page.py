@@ -1123,53 +1123,66 @@ def _exp_six_pick(loader):
                  hide_index=True)
     st.caption("单押一个球位 6 个号，达标率明显更高；分散押 3 个球几乎不可能。")
 
-    # ---- 全量测算（1976 至今）----
-    st.markdown("**📜 全量测算（1976 年至今）**")
-    _po = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
-                          key="lab_h_payout")
+    # ---- 全量测算（复式口径）----
+    st.markdown("**📜 全量测算（6 码复式 = 20 组/期）**")
+    _c1h, _c2h = st.columns(2)
+    with _c1h:
+        _po = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
+                              key="lab_h_payout")
+    with _c2h:
+        _era = st.selectbox("统计起点", ["1976", "2005", "2015"], index=1,
+                            key="lab_h_era")
+    _sp = st.checkbox("把特码也算进开奖号", value=False, key="lab_h_sp")
+
     _dist = Counter()
     _groups = 0
     _tot2 = 0
+    _cost = 0
     _win2 = int(_win) if int(_win) > 0 else 0
-    # 滑动窗口高效统计
     _c = {b: Counter() for b in ALLOC}
-    _q = {b: [] for b in ALLOC}
     for i in range(300, len(periods)):
-        for b in ALLOC:
-            if _win2:
+        if _win2:
+            for b in ALLOC:
                 if i - _win2 - 1 >= 0:
                     _old = seqs[b][i - _win2 - 1]
                     _c[b][_old] -= 1
                     if _c[b][_old] <= 0:
                         del _c[b][_old]
-        ok = 0
-        for b, k in ALLOC.items():
-            pick = [v for v, _ in _c[b].most_common(k)]
-            if seqs[b][i] in pick:
-                ok += 1
-        _dist[ok] += 1
-        _tot2 += 1
-        _groups += (0 if ok < 3 else (1 if ok == 3 else 4))
+        if periods[i][:4] >= _era:
+            _picks = set()
+            for b, k in ALLOC.items():
+                _picks.update(v for v, _ in _c[b].most_common(k))
+            _draws = set(data[i][1][:6])
+            if _sp:
+                _draws.add(data[i][1][6])
+            _k = len(_picks & _draws)
+            _dist[_k] += 1
+            _tot2 += 1
+            _cost += comb(len(_picks), 3) if len(_picks) >= 3 else 0
+            if _k >= 3:
+                _groups += comb(_k, 3)
         for b in ALLOC:
             _c[b][seqs[b][i]] += 1
 
-    _rows_d = [{"命中个数": k, "期数": v, "占比": f"{v/_tot2*100:.2f}%"}
-               for k, v in sorted(_dist.items())]
-    st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
-                 hide_index=True)
+    from math import comb as _comb
+    st.dataframe(pd.DataFrame(
+        [{"命中个数": k, "期数": v, "占比": f"{v/_tot2*100:.2f}%"}
+         for k, v in sorted(_dist.items())]),
+        use_container_width=True, hide_index=True)
+
     _n3 = _dist.get(3, 0)
     _n4 = _dist.get(4, 0)
-    _cost = _tot2 * 6
-    _back = _groups * _po
+    _n5 = _dist.get(5, 0)
+    _back = _groups * int(_po)
     st.markdown(
-        f"- 样本：{periods[300]} ~ {periods[-1]}，共 **{_tot2}** 期\n"
-        f"- 中 3 个：**{_n3}** 次｜中 4 个：**{_n4}** 次\n"
-        f"- 折合 3中3 组数：**{_groups}** 组（中4按 4 组算）\n"
-        f"- 平均每 **{_tot2/max(1,_n3+_n4):.0f}** 期出现一次「中3+」\n"
-        f"- 每期投 6 注，总投入 **{_cost}** 注；"
-        f"按 {int(_po)} 倍回收 **{_back}** 注 → "
-        f"回报率 **{_back/_cost*100:.1f}%**\n"
-        f"- 回本所需赔率：**{_cost/max(1,_groups):.0f}** 倍")
+        f"- 统计：{_era} 年起，共 **{_tot2}** 期｜每期 20 组（6 码复式）\n"
+        f"- 中 3 个：**{_n3}** 期｜中 4 个：**{_n4}** 期｜"
+        f"中 5 个：**{_n5}** 期\n"
+        f"- 折合中奖组数：**{_groups}** 组"
+        f"（中4=4组、中5=10组）\n"
+        f"- 总投入 **{_cost}** 组｜按 {int(_po)} 倍回收 **{_back}** 组\n"
+        f"- **回报率 {_back/max(1,_cost)*100:.1f}%**｜"
+        f"回本需 **{_cost/max(1,_groups):.0f}** 倍")
 
     # 下一期推荐
     st.markdown(f"**下一期推荐（6 个号，窗口 {int(_win)} 期）**")
