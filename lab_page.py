@@ -431,9 +431,8 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
 
 
 def _exp_link_attr(loader):
-    st.markdown("#### 实验 D：属性联动（两球推一球）")
-    st.caption("升序专用：两个球位属性组合 → 历史查同组合 → 下一期目标球位属性排行，"
-               "并列出该球位区间内的具体号码。")
+    st.markdown("#### 实验 D：属性联动（选属性，分球位出结果）")
+    st.caption("规则：2,3球组合→推1球；3,4→2；4,5→3；5,6→4；6,7→5；1,2→6。")
 
     data = _load_index6(loader)
     if not data:
@@ -445,129 +444,61 @@ def _exp_link_attr(loader):
     amap = _load_attr(loader)
     periods = [p for p, _ in data]
     st.caption(f"数据：号码 {len(data)} 期｜生肖表 {len(zodiac)} 期｜"
-               f"属性表 {len(amap)} 个号码｜生肖派生 {len(zattrs)} 条")
+               f"属性表 {len(amap)} 个号码")
 
-    # ---- 简易模式：只留 4 个关键项 ----
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
+    c1, c2 = st.columns(2)
+    with c1:
         attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_d_attr")
-    with k2:
-        b1 = st.selectbox("球位①", list(range(1, 8)), index=1, key="lab_d_b1")
-    with k3:
-        b2 = st.selectbox("球位②", list(range(1, 8)), index=2, key="lab_d_b2")
-    _auto = (min(b1, b2) - 1) or 6
-    with k4:
+    with c2:
         _plist0 = ["最新"] + list(reversed(periods[-300:]))
         base = st.selectbox("基准期", _plist0, index=0, key="lab_d_base")
 
-    with st.expander("⚙ 高级选项", expanded=False):
-        ac1, ac2, ac3 = st.columns(3)
-        with ac1:
-            tgt = st.selectbox("目标球位", list(range(1, 8)),
-                               index=_auto - 1, key="lab_d_tgt",
-                               help=f"规则：触发最小值-1（1,2 则推 6），建议 {_auto}")
-        with ac2:
-            span = st.selectbox("历史范围", ["全部", "最近 1000 期",
-                                            "最近 500 期", "最近 200 期"],
-                                index=0, key="lab_d_span")
-        with ac3:
-            st.caption("排行一律全部显示")
-    _wx_mode = "按号码（源数据，不变）"
-    tgt = st.session_state.get("lab_d_tgt", _auto)
-    span = st.session_state.get("lab_d_span", "全部")
-    top_n = 999
+    if not st.button("▶ 运行实验 D", key="lab_d_run"):
+        return
 
-    st.caption(f"规则：第{b1}球 + 第{b2}球 → 推第{tgt}球（可改）")
+    idx = len(data) - 1 if base == "最新" else periods.index(base)
+    st.markdown(f"**基准期 {periods[idx]}**｜属性 **{attr}**")
 
-    if st.button("▶ 运行实验 D", key="lab_d_run"):
-        if b1 == b2:
-            st.warning("两个触发球位不能相同")
-            return
-        idx = len(data) - 1 if base == "最新" else periods.index(base)
-        pkey = data[idx]
-        _v1 = _attr_of(pkey, b1, attr, zodiac, zattrs, amap, _wx_mode)
-        _v2 = _attr_of(pkey, b2, attr, zodiac, zattrs, amap, _wx_mode)
+    from collections import Counter
+    _pairs = {1: (2, 3), 2: (3, 4), 3: (4, 5), 4: (5, 6), 5: (6, 7), 6: (1, 2)}
+    all_txt = []
+    for tgt, (b1, b2) in _pairs.items():
+        _v1 = _attr_of(data[idx], b1, attr, zodiac, zattrs, amap)
+        _v2 = _attr_of(data[idx], b2, attr, zodiac, zattrs, amap)
         if not _v1 or not _v2:
-            st.warning("属性取值为空，换个属性或球位试试")
-            return
-        st.markdown(f"**基准组合**：{periods[idx]} 期　第{b1}球 {_v1}　"
-                    f"第{b2}球 {_v2}")
-
-        limits = {"全部": 0, "最近 1000 期": 1000, "最近 500 期": 500,
-                  "最近 200 期": 200}
-        lo = max(0, idx - limits[span]) if limits[span] else 0
-
-        from collections import Counter
+            continue
         cnt = Counter()
-        hits = []
-        for i in range(lo, idx):
-            if i + 1 >= idx:
+        hits = 0
+        for i in range(0, idx):
+            if i + 1 > idx:
                 break
-            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap, _wx_mode)
-            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap, _wx_mode)
+            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap)
+            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap)
             if a1 == _v1 and a2 == _v2:
-                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap, _wx_mode)
+                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap)
                 if nv:
                     cnt[nv] += 1
-                    hits.append((periods[i], periods[i + 1], nv))
-        total = sum(cnt.values())
-        st.metric("历史命中次数", total)
-        if not total:
-            st.info("历史里没有相同的属性组合")
-            return
-
-        _lo, _hi = (int(tgt), 43 + int(tgt))
-        st.markdown(f"**下一期第{tgt}球 {attr} 分布**（号码区间 {_lo}~{_hi}）")
-        def _nums_of(val):
-            """把任意属性值翻译成该球位区间内的号码"""
-            out = []
-            for n, a in amap.items():
-                if _lo <= n <= _hi and a.get(attr) == val:
-                    out.append(n)
-            return sorted(out)
-
-        _rows_d = []
-        for k, v in cnt.most_common(int(top_n)):
-            _nums = _nums_of(k)
-            _rows_d.append({attr: k, "次数": v,
-                            "占比": f"{v/total*100:.1f}%",
-                            "对应号码": " ".join(f"{n:02d}" for n in _nums)})
-        st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
+                    hits += 1
+        _lo, _hi = tgt, 43 + tgt
+        st.markdown(f"**第{tgt}球**（触发：第{b1}球 {_v1} + 第{b2}球 {_v2}　"
+                    f"历史 {hits} 期　区间 {_lo}~{_hi}）")
+        if not cnt:
+            st.caption("历史无相同组合")
+            continue
+        rows = []
+        for k, v in cnt.most_common():
+            nums = [n for n, a in amap.items()
+                    if _lo <= n <= _hi and a.get(attr) == k]
+            rows.append({attr: k, "次数": v,
+                         "占比": f"{v/hits*100:.1f}%",
+                         "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True,
                      hide_index=True)
+        all_txt.append(f"第{tgt}球（{b1}+{b2} → {_v1}+{_v2}）历史 {hits} 期：" +
+                       "；".join(f"{k} {v}次" for k, v in cnt.most_common(5)))
 
-        st.markdown(f"**命中明细（全部 {len(hits)} 条）**")
-        _hit_df = pd.DataFrame(
-            [{"触发期": a, "下一期": b, f"下一期第{tgt}球{attr}": c}
-             for a, b, c in hits])
-        st.dataframe(_hit_df, use_container_width=True, hide_index=True,
-                     height=320)
-        st.download_button("📥 下载明细",
-                           _hit_df.to_csv(index=False).encode("utf-8-sig"),
-                           file_name=f"属性联动_{attr}_{b1}+{b2}推{tgt}.csv",
-                           mime="text/csv", key="lab_d_dl")
-
-        # 回测对比
-        if idx + 1 < len(data):
-            real = _attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap, _wx_mode)
-            rank = [k for k, _ in cnt.most_common()]
-            pos = rank.index(real) + 1 if real in rank else None
-            st.markdown("**回测对比**")
-            ca, cb = st.columns(2)
-            ca.metric("真实下一期", periods[idx + 1])
-            cb.metric(f"真实{attr}", real)
-            if pos:
-                st.success(f"✅ 命中：历史出现 {cnt[real]} 次，排第 {pos} 位")
-            else:
-                st.error(f"❌ 未命中：历史从未出现 {real}")
-        else:
-            st.info("最新一期还没有下一期开奖")
-
-        _txt = (f"实验D｜{attr}｜触发 第{b1}+第{b2}球｜目标 第{tgt}球\n"
-                f"基准 {periods[idx]}：{_v1} + {_v2}\n"
-                f"历史命中 {total} 次\n"
-                + "\n".join(f"{k}：{v} 次（{v/total*100:.1f}%）"
-                            for k, v in cnt.most_common(int(top_n))))
-        _save(loader, f"实验D {attr} {b1}+{b2}->{tgt}", _txt)
+    if all_txt:
+        _save(loader, f"实验D {attr} {periods[idx]}", "\n".join(all_txt))
 
 
 # =====================================================================
