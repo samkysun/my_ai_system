@@ -745,9 +745,11 @@ def _exp_combo_prev(loader):
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        base = st.selectbox("目标期（要预测的那期）",
-                            ["最新"] + list(reversed(periods[-300:])),
-                            index=0, key="lab_f_base")
+        base = st.selectbox(
+            "目标期",
+            ["下一期（预测，未开）", "最新已开期"]
+            + list(reversed(periods[-300:])),
+            index=0, key="lab_f_base")
     with c2:
         ball = st.selectbox("取第几球（升序）", list(range(1, 8)), index=0,
                             key="lab_f_ball")
@@ -762,16 +764,26 @@ def _exp_combo_prev(loader):
     import itertools
     from collections import Counter
 
-    idx = len(data) - 1 if base == "最新" else periods.index(base)
-    if idx < 2:
+    _virtual = base.startswith("下一期")
+    if _virtual:
+        src = len(data) - 1              # 最新一期做组合
+        idx = len(data)                  # 不存在（未开）
+        _tname = "下一期（未开）"
+    else:
+        idx = (len(data) - 1 if base == "最新已开期"
+               else periods.index(base))
+        src = idx - 1
+        _tname = periods[idx]
+    if src < 2:
         st.warning("历史不足")
         return
-    src = idx - 1                      # 用上一期的号码做组合
     nums = data[src][1]
     combos = list(itertools.combinations(sorted(nums), 3))
-    st.markdown(f"**目标期 {periods[idx]}**（待算第{ball}球）　"
+    st.markdown(f"**目标 {_tname}**（待算第{ball}球）　"
                 f"**组合来源 {periods[src]}**：{nums}")
-    st.caption(f"三三组合共 {len(combos)} 组；触发范围：{periods[src]} 之前")
+    _hint = (f"触发范围：全部历史" if _virtual
+             else f"触发范围：{periods[src]} 之前")
+    st.caption(f"三三组合共 {len(combos)} 组；{_hint}")
 
     limits = {"全部": 0, "最近 2000 期": 2000, "最近 1000 期": 1000,
               "最近 500 期": 500}
@@ -792,14 +804,17 @@ def _exp_combo_prev(loader):
         st.info("历史上没有包含这些组合的期")
         return
 
-    actual = data[idx][1][ball - 1]
     ranked = cnt.most_common()
     order = [k for k, _ in ranked]
-    pos = order.index(actual) + 1 if actual in order else None
-    if pos:
-        st.success(f"✅ 本期第{ball}球实开 {actual:02d}，排第 {pos} 位")
+    actual = None if _virtual else data[idx][1][ball - 1]
+    pos = (order.index(actual) + 1) if (actual in order) else None
+    if _virtual:
+        st.info(f"预测结果：第{ball}球最可能开出前 5 名 → " +
+                "、".join(f"{k:02d}" for k, _ in ranked[:5]))
+    elif pos:
+        st.success(f"✅ {_tname} 第{ball}球实开 {actual:02d}，排第 {pos} 位")
     else:
-        st.error(f"❌ 本期第{ball}球实开 {actual:02d}，未进榜")
+        st.error(f"❌ {_tname} 第{ball}球实开 {actual:02d}，未进榜")
 
     total = sum(cnt.values())
     rows = [{"名次": i + 1, "号码": f"{k:02d}", "次数": v,
