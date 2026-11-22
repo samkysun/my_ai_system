@@ -813,7 +813,7 @@ def _exp_combo_prev(loader):
     ranked = cnt.most_common()
     order = [k for k, _ in ranked]
     # 球位区间锁定（升序才有边界）
-    if _ord == 升序:
+    if _ord == "升序":
         _lo, _hi = int(ball), 43 + int(ball)
     else:
         _lo, _hi = 1, 49
