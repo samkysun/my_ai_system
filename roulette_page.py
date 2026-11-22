@@ -5,7 +5,7 @@
 · 输入每次开奖号码，自动累计、自动核算
 · 统计：尾数遗漏、生肖遗漏、姐妹码遗漏、轮盘相邻遗漏
 · 触发阈值：尾数 20 期、生肖 15 期、姐妹码 15 期、相邻 15 期（达标进重点）
-· 输出：最多 12 个候选号码，分重点 / 次重点 / 次要
+· 输出：最多 15 个候选号码，分重点 / 次重点 / 次要
 · 记录存 GitHub 文件 roulette_history.json
 ------------------------------------------------------------------
 """
@@ -39,7 +39,7 @@ SIBAO = ["画"] + ["书", "琴", "书", "琴", "书", "棋", "棋", "画", "棋"
                   "棋", "画", "棋", "琴", "画", "画", "书"]  # 0~36
 
 TH_TAIL, TH_ZODIAC, TH_SISTER, TH_ADJ = 20, 15, 15, 15
-MAX_PICK = 12
+MAX_PICK = 15
 
 HIST_FILE = "roulette_history.json"
 
@@ -245,7 +245,7 @@ def build_candidates(draws):
 # ============================================================
 def render(df_data, H):
     st.title("🎡 轮盘预测系统（欧式 0~36）")
-    st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤12 个）。")
+    st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤15 个）。")
 
     draws = load_history(H)
 
@@ -294,7 +294,7 @@ def render(df_data, H):
     for kind, vals in alerts:
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
 
-    st.markdown("### 🎯 候选号码（最多 12 个）")
+    st.markdown("### 🎯 候选号码（最多 15 个）")
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
     else:
