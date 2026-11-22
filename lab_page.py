@@ -881,8 +881,12 @@ def _exp_hot_pick(loader):
                                  ["全部", "最近 2000 期", "最近 1000 期",
                                   "最近 500 期"], index=0, key="lab_g_span")
     with c4:
-        test_n = st.number_input("回测最近多少期", 20, 2000, 300, 20,
-                                 key="lab_g_test")
+        _start_p = st.selectbox("回测起始期", list(reversed(periods)),
+                                index=min(299, len(periods) - 1),
+                                key="lab_g_start")
+    with st.columns([1, 3])[0]:
+        _end_p = st.selectbox("回测结束期", list(reversed(periods)), index=0,
+                              key="lab_g_end")
 
     if not st.button("▶ 运行实验 G", key="lab_g_run"):
         return
@@ -915,8 +919,13 @@ def _exp_hot_pick(loader):
     # ---- 回测（walk-forward）----
     hit = tot = hits_series = 0
     rows = []
-    start = max(topn, n - int(test_n))
-    for i in range(start, n):
+    _i1 = periods.index(_start_p)
+    _i2 = periods.index(_end_p)
+    if _i1 > _i2:
+        _i1, _i2 = _i2, _i1
+    start = max(topn, _i1)
+    end = min(n, _i2 + 1)
+    for i in range(start, end):
         c_hist = seq[:i]
         if span:
             c_hist = seq[max(0, i - span):i]
@@ -936,11 +945,14 @@ def _exp_hot_pick(loader):
 
     rate = hit / tot
     gap = (1 / rate) if rate else 0
+    st.caption(f"回测区间：{periods[start]} ~ {periods[end-1]}"
+               f"（{tot} 期）")
     st.metric("回测命中率", f"{rate*100:.1f}%",
               f"{hit}/{tot} 期")
     st.metric("平均多少期中一次", f"{gap:.1f} 期" if gap else "—",
               "目标 4~7 期")
 
+    rows = list(reversed(rows))
     _df = pd.DataFrame(rows)
 
     def _hl(row):
