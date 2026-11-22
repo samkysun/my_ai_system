@@ -5725,6 +5725,40 @@ def _login_resume_js():
     _comp.html(_js, height=70)
 
 
+def _cred_encode(user, pwd):
+    import base64 as _b64
+    raw = f"{user}\u0001{pwd}".encode("utf-8")
+    return _b64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _cred_decode(txt):
+    import base64 as _b64
+    try:
+        raw = _b64.urlsafe_b64decode(txt + "=" * (-len(txt) % 4)).decode("utf-8")
+        user, pwd = raw.split("\u0001", 1)
+        return user, pwd
+    except Exception:
+        return "", ""
+
+
+def _cred_save(user, pwd):
+    _qp_set("u", _cred_encode(user, pwd))
+    _qp_set("e", str(int(_time_sec.time()) + 3600))
+
+
+def _cred_try():
+    u = _qp_get("u")
+    e = _qp_get("e")
+    if not u or not e:
+        return "", ""
+    try:
+        if int(e) < int(_time_sec.time()):
+            return "", ""
+    except Exception:
+        return "", ""
+    return _cred_decode(u)
+
+
 def _qp_set(key, val):
     try:
         st.query_params[key] = val
@@ -5774,6 +5808,10 @@ def login_page():
                         st.session_state.username = u
                         st.session_state["_login_fails"] = 0
                         _qp_set("t", make_login_token(u))
+                        try:
+                            _cred_save(u, login_pass)
+                        except Exception:
+                            pass
                         st.success("👑 管理员登录成功！")
                         time.sleep(0.15)
                         st.rerun()
@@ -5788,6 +5826,10 @@ def login_page():
                         st.session_state.username = u
                         st.session_state["_login_fails"] = 0
                         _qp_set("t", make_login_token(u))
+                        try:
+                            _cred_save(u, login_pass)
+                        except Exception:
+                            pass
                         st.success("登录成功，正在进入系统…")
                         time.sleep(0.15)
                         st.rerun()
@@ -5972,6 +6014,18 @@ def main_app():
 if not st.session_state.get("logged_in"):
     _tok0 = _qp_get("t")
     _u0 = check_login_token(_tok0) if _tok0 else ""
+    if not _u0:
+        _cu, _cp = _cred_try()
+        if _cu and _cp:
+            try:
+                if check_credentials(_cu, _cp):
+                    st.session_state.logged_in = True
+                    st.session_state.username = _cu
+                    st.session_state["_login_js_done"] = True
+                    _qp_set("t", make_login_token(_cu))
+                    st.rerun()
+            except Exception:
+                pass
     if not _tok0:
         _login_resume_js()
     if _u0:
