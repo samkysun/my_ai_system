@@ -467,6 +467,15 @@ def _exp_link_attr(loader):
     zattrs = _load_zodiac_attrs(loader)
     amap = _load_attr(loader)
     periods = [p for p, _ in data]
+    st.caption(f"数据：号码 {len(data)} 期｜生肖表 {len(zodiac)} 期｜"
+               f"属性表 {len(amap)} 个号码")
+    if not zodiac:
+        st.error("生肖表没加载成功（_zodiac_by_period.csv）→ 先 Reboot app；"
+                 "若仍为空说明文件没推到云端。")
+        return
+    if not amap:
+        st.error("属性表没加载成功（_attr_map.csv），无法翻译号码。")
+        return
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
