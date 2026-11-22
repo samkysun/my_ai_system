@@ -497,6 +497,11 @@ def _exp_link_attr(loader):
 
     _all6 = st.checkbox("一次计算全部球位（2+3→1、3+4→2 … 1+2→6）",
                         value=False, key="lab_d_all")
+    _rng = st.radio("球位区间口径",
+                    ["严格（数学边界 k~43+k）", "经验（历史 99% 区间）"],
+                    horizontal=True, key="lab_d_rng",
+                    help="严格：只要数学上可能出现就纳入；"
+                         "经验：只保留历史上 99% 情况的范围")
 
     if not st.button("▶ 运行实验 D", key="lab_d_run"):
         return
@@ -534,7 +539,12 @@ def _exp_link_attr(loader):
                                     f"第{_b2}球": a2,
                                     "下一期": data[i + 1][0],
                                     f"下一期第{_tgt}球{attr}": nv})
-        _lo, _hi = _tgt, 43 + _tgt
+        _EMP = {1: (1, 28), 2: (2, 36), 3: (5, 41), 4: (9, 45),
+                5: (14, 48), 6: (22, 49), 7: (1, 49)}
+        if _rng.startswith("经验"):
+            _lo, _hi = _EMP.get(_tgt, (_tgt, 43 + _tgt))
+        else:
+            _lo, _hi = _tgt, 43 + _tgt
         st.markdown(f"**第{_tgt}球**（触发：第{_b1}球 {_v1} ＋ 第{_b2}球 {_v2}"
                     f"　历史 {hits} 期　区间 {_lo}~{_hi}）")
         if not cnt:
