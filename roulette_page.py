@@ -225,7 +225,7 @@ def learn_weights(draws):
         for n in range(37):
             rows.append(_feat_vec(draws, t, n))
             labels.append(1.0 if n == nxt else 0.0)
-    if len(rows) < 200:
+    if len(rows) < 120:
         return None
     k = len(FEATS)
     m = len(rows)
@@ -248,11 +248,12 @@ def learn_weights(draws):
 
 def smart_top3(draws):
     """综合自学习权重，给出 3 码"""
-    if len(draws) < 80:
+    if len(draws) < 40:
         return None, None
     w = learn_weights(draws)
     if not w:
-        return None, None
+        w = dict()
+        w["遗漏"] = 1.0
     t = len(draws) - 1
     rows = [_feat_vec(draws, t, n) for n in range(37)]
     k = len(FEATS)
@@ -265,7 +266,7 @@ def smart_top3(draws):
     for n in range(37):
         z = 0.0
         for i, f in enumerate(FEATS):
-            z += w[f] * ((rows[n][i] - means[i]) / sds[i] if sds[i] else 0)
+            z += w.get(f, 0.0) * ((rows[n][i] - means[i]) / sds[i] if sds[i] else 0)
         scored.append((n, z, rows[n]))
     scored.sort(key=lambda x: -x[1])
     top = scored[:REC_N]
@@ -469,7 +470,7 @@ def render(df_data, H):
 
     st.markdown("### 🧠 系统推荐 4 码（已并入上方候选）")
     if not _top3:
-        st.caption("历史数据不足（建议 80 期以上），暂不推荐")
+        st.caption(f"历史仅 {len(draws)} 期，需 40 期以上才能学习权重")
     else:
         _rows3 = []
         for num, sc, share in _top3:
