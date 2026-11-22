@@ -676,8 +676,8 @@ def _exp_target_multi(loader):
     if not total:
         st.warning("六组都没有历史命中")
         return
-    st.markdown(f"**汇总前二（锁定第{tgt}球，{attr}，共 {allc} 次）**")
     allc = sum(total.values())
+    st.markdown(f"**汇总前二（锁定第{tgt}球，{attr}，共 {allc} 次）**")
     _rank = total.most_common()
     _top1 = _rank[0][1] if _rank else 0
     _second = next((v for _, v in _rank if v < _top1), None)
