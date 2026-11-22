@@ -434,35 +434,40 @@ def _exp_link_attr(loader):
     amap = _load_attr(loader)
     periods = [p for p, _ in data]
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
+    # ---- 简易模式：只留 4 个关键项 ----
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
         attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_d_attr")
-    with c2:
-        b1 = st.selectbox("触发球位 1", list(range(1, 8)), index=1,
-                          key="lab_d_b1")
-    with c3:
-        b2 = st.selectbox("触发球位 2", list(range(1, 8)), index=2,
-                          key="lab_d_b2")
+    with k2:
+        b1 = st.selectbox("球位①", list(range(1, 8)), index=1, key="lab_d_b1")
+    with k3:
+        b2 = st.selectbox("球位②", list(range(1, 8)), index=2, key="lab_d_b2")
     _auto = (min(b1, b2) - 1) or 6
-    with c4:
-        tgt = st.selectbox("目标球位", list(range(1, 8)),
-                           index=_auto - 1, key="lab_d_tgt",
-                           help=f"规则：目标 = 触发最小值 - 1（1,2 则推 6）；"
-                                f"当前建议 {_auto}")
+    with k4:
+        _plist0 = ["最新"] + list(reversed(periods[-300:]))
+        base = st.selectbox("基准期", _plist0, index=0, key="lab_d_base")
 
-    _wx_mode = st.radio("数字五行口径",
-                        ["按号码（源数据，不变）", "按生肖（随年份变化）"],
-                        horizontal=True, key="lab_d_wx")
-    c5, c6, c7 = st.columns(3)
-    with c5:
-        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
-                            index=0, key="lab_d_base")
-    with c6:
-        span = st.selectbox("历史范围", ["全部", "最近 1000 期",
-                                        "最近 500 期", "最近 200 期"],
-                            index=0, key="lab_d_span")
-    with c7:
-        top_n = st.number_input("显示前 N", 3, 30, 10, 1, key="lab_d_top")
+    with st.expander("⚙ 高级选项", expanded=False):
+        ac1, ac2, ac3 = st.columns(3)
+        with ac1:
+            tgt = st.selectbox("目标球位", list(range(1, 8)),
+                               index=_auto - 1, key="lab_d_tgt",
+                               help=f"规则：触发最小值-1（1,2 则推 6），建议 {_auto}")
+        with ac2:
+            span = st.selectbox("历史范围", ["全部", "最近 1000 期",
+                                            "最近 500 期", "最近 200 期"],
+                                index=0, key="lab_d_span")
+        with ac3:
+            top_n = st.number_input("显示前 N", 3, 30, 10, 1, key="lab_d_top")
+        _wx_mode = st.radio("数字五行口径",
+                            ["按号码（源数据，不变）", "按生肖（随年份变化）"],
+                            horizontal=True, key="lab_d_wx")
+    _wx_mode = st.session_state.get("lab_d_wx", "按号码（源数据，不变）")
+    tgt = st.session_state.get("lab_d_tgt", _auto)
+    span = st.session_state.get("lab_d_span", "全部")
+    top_n = st.session_state.get("lab_d_top", 10)
+
+    st.caption(f"规则：第{b1}球 + 第{b2}球 → 推第{tgt}球（可改）")
 
     if st.button("▶ 运行实验 D", key="lab_d_run"):
         if b1 == b2:
@@ -750,6 +755,17 @@ def render(df_data, H):
         return
     st.title("🔬 研究中心（实验沙盒）")
     st.caption("在这里试各种公式，不满意就一键清空；确认可用再迁到正式页面。")
+    with st.expander("📖 怎么用（30 秒看懂）", expanded=False):
+        st.markdown(
+            "**实验D 属性联动（你最常用的）**\n"
+            "1. 选属性（生肖/尾数/物象…）\n"
+            "2. 选球位①、球位②（比如 2 和 3）\n"
+            "3. 选基准期（默认最新）\n"
+            "4. 点「▶ 运行实验 D」\n\n"
+            "结果 = 历史上同样组合出现过的期数 + 它们下一期目标球的属性排行"
+            " + 每个属性对应的具体号码。\n\n"
+            "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
+            "都是独立实验，互不影响。")
 
     tab1, tab2, tabc, tabd, tab4, tab3 = st.tabs(
         ["实验A 单条件杀号", "实验B 组合池", "实验C 形态组合",
