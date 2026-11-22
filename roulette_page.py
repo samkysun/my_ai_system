@@ -195,8 +195,10 @@ def learn_rules(draws, lookback=800):
     """自动发现并验证规则：属性值遗漏达到阈值后，下一期是否容易开出该属性"""
     hist = draws[-lookback:]
     n = len(hist)
-    if n < 60:
+    if n < 50:
         return []
+    # 样本越少，门槛越低（最少 10 次）
+    min_n = max(10, min(RULE_MIN_N, n // 4))
     rules = []
     for key in RULE_ATTRS:
         vals = sorted({_attr_val(x, key) for x in hist})
@@ -218,7 +220,7 @@ def learn_rules(draws, lookback=800):
                             hits += 1
                     if _attr_val(hist[i], key) == v:
                         last = i
-                if events < RULE_MIN_N:
+                if events < min_n:
                     continue
                 rate = hits / events
                 lift = rate - base
@@ -541,8 +543,8 @@ def render(df_data, H):
               "基线": f"{r['基线']*100:.1f}%",
               "提升": f"{r['lift']*100:+.1f}pp"} for r in _rules[:15]])
         st.dataframe(_rdf, use_container_width=True, hide_index=True)
-        st.caption(f"共 {len(_rules)} 条规则通过验证"
-                   f"（样本≥{RULE_MIN_N}、提升≥{RULE_MIN_LIFT*100:.0f}pp）")
+        st.caption(f"共 {len(_rules)} 条规则通过验证（50 期起开始学习，"
+                   f"样本门槛随期数自动调整，提升≥{RULE_MIN_LIFT*100:.0f}pp）")
 
     st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
