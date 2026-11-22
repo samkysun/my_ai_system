@@ -402,7 +402,7 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap):
     if attr == "尾数":
         return str(num % 10)
     if attr == "数字合":
-        return f"{sum(int(c) for c in str(num)):02d}合"
+        return a.get("数字合", "")      # 严格取源数据值（含 22=05合）
     if attr == "门数":
         return a.get("门数", "")
     if attr == "段数":
