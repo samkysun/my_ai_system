@@ -415,7 +415,8 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
 
 def _exp_link_attr(loader):
     st.markdown("#### 实验 D：属性联动（两球推一球）")
-    st.caption("取两个球位的属性组合，去历史找相同组合，统计下一期目标球位的属性分布。")
+    st.caption("升序专用：两个球位属性组合 → 历史查同组合 → 下一期目标球位属性排行，"
+               "并列出该球位区间内的具体号码。")
 
     data = _load_index6(loader)
     if not data:
@@ -498,11 +499,19 @@ def _exp_link_attr(loader):
             st.info("历史里没有相同的属性组合")
             return
 
-        st.markdown(f"**下一期第{tgt}球 {attr} 分布**")
-        st.dataframe(pd.DataFrame(
-            [{attr: k, "次数": v, "占比": f"{v/total*100:.1f}%"}
-             for k, v in cnt.most_common(int(top_n))]),
-            use_container_width=True, hide_index=True)
+        _lo, _hi = (int(tgt), 43 + int(tgt))
+        st.markdown(f"**下一期第{tgt}球 {attr} 分布**（号码区间 {_lo}~{_hi}）")
+        _rows_d = []
+        for k, v in cnt.most_common(int(top_n)):
+            _nums = []
+            if attr == "生肖":
+                _nums = [n for n, a in amap.items()
+                         if a.get("生肖") == k and _lo <= n <= _hi]
+            _rows_d.append({attr: k, "次数": v,
+                            "占比": f"{v/total*100:.1f}%",
+                            "对应号码": " ".join(f"{n:02d}" for n in sorted(_nums))})
+        st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
+                     hide_index=True)
 
         st.markdown(f"**命中明细（全部 {len(hits)} 条）**")
         _hit_df = pd.DataFrame(
