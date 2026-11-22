@@ -129,21 +129,15 @@ def save_history(loader, draws):
 # 遗漏计算
 # ============================================================
 def omissions(draws):
-    """返回各维度的遗漏期数"""
+    """各维度遗漏期数（都按「上一次出现到现在」计算）"""
     n = len(draws)
     last = {}
 
-    def upd(key, i):
-        last[key] = i
-
     for i, x in enumerate(draws):
         a = attrs_of(x)
-        upd(("尾", a["尾数"]), i)
-        upd(("肖", a["生肖"]), i)
-        for s in sister(x):
-            upd(("姐", s), i)
-        for w in wheel_neighbors(x):
-            upd(("邻", w), i)
+        last[("尾", a["尾数"])] = i
+        last[("肖", a["生肖"])] = i
+        last[("号", x)] = i
 
     def gap(key):
         return n - (last.get(key, -1) + 1) if key in last else n
@@ -151,8 +145,7 @@ def omissions(draws):
     out = {
         "尾数": {str(t): gap(("尾", str(t))) for t in range(10)},
         "生肖": {z: gap(("肖", z)) for z in ZODIAC},
-        "姐妹码": {str(x): gap(("姐", x)) for x in range(37)},
-        "相邻码": {str(x): gap(("邻", x)) for x in range(37)},
+        "号码": {x: gap(("号", x)) for x in range(37)},
     }
     return out
 
@@ -176,14 +169,15 @@ def build_candidates(draws):
         alerts.append(("生肖", hot_z))
 
     sis = sister(last_no)
-    sis_gap = min(om["姐妹码"].get(str(s), 0) for s in sis)
+    sis_gap = min(om["号码"].get(s, 0) for s in sis)
     if sis_gap >= TH_SISTER:
-        alerts.append(("姐妹码", [str(s) for s in sis]))
+        alerts.append(("姐妹码", [f"{s}({om['号码'].get(s,0)}期)" for s in sis]))
 
     adj = wheel_neighbors(last_no)
-    adj_gap = min(om["相邻码"].get(str(a), 0) for a in adj)
+    adj_gap = min(om["号码"].get(a, 0) for a in adj)
     if adj_gap >= TH_ADJ:
-        alerts.append(("轮盘相邻", [str(a) for a in adj]))
+        alerts.append(("轮盘相邻", [f"{a}({om['号码'].get(a,0)}期)"
+                                    for a in adj]))
 
     # 每个号码累计"命中条件数"
     score = Counter()
@@ -302,7 +296,11 @@ def render(df_data, H):
                            key="rou_dl")
 
     with st.expander("📊 遗漏明细", expanded=False):
-        t1, t2 = st.tabs(["尾数", "生肖"])
+        t0, t1, t2 = st.tabs(["号码", "尾数", "生肖"])
+        with t0:
+            st.dataframe(pd.DataFrame(
+                [{"号码": k, "遗漏": v} for k, v in om["号码"].items()]),
+                use_container_width=True, hide_index=True)
         with t1:
             st.dataframe(pd.DataFrame(
                 [{"尾数": k, "遗漏": v} for k, v in om["尾数"].items()]),
