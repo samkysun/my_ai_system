@@ -874,7 +874,7 @@ def _exp_hot_pick(loader):
         ball = st.selectbox("球位（升序）", list(range(1, 8)), index=0,
                             key="lab_g_ball")
     with c2:
-        topn = st.radio("输出个数", [1, 2], horizontal=True, index=1,
+        topn = st.radio("输出个数", [1, 2, 3], horizontal=True, index=1,
                         key="lab_g_topn")
     with c3:
         hist_span = st.selectbox("取频次的历史范围",
