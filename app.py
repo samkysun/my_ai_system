@@ -223,6 +223,11 @@ def ball_dot(num):
     return {"red": "🔴", "blue": "🔵", "green": "🟢"}.get(c, "⚪")
 
 
+def dots_str(nums):
+    """把号码列表渲染成 彩色圆点+号码"""
+    return "　".join(f"{ball_dot(n)}{n:02d}" for n in nums)
+
+
 def ball_word(num):
     """波色文字：红波 / 蓝波 / 绿波"""
     c = get_ball_color(num).replace("ball-", "")
@@ -3957,7 +3962,7 @@ def _pred_render_archive(df_data, default_period):
                     _r[f"第{i}球"] = " ".join(
                         (f"{n:02d}✓" if n == _a[i - 1] else f"{n:02d}") for n in _v[0])
                 else:
-                    _r[f"第{i}球"] = " ".join(f"{n:02d}" for n in _v[0])
+                    _r[f"第{i}球"] = dots_str(_v[0])
             _r["命中球位"] = _hit if _a else "-"
             _rows_all2.append(_r)
 
@@ -4019,7 +4024,7 @@ def _pred_render_archive(df_data, default_period):
             _row[f"第{i}球"] = " ".join(
                 (f"{n:02d}✓" if n == _hn else f"{n:02d}") for n in _nums)
         else:
-            _row[f"第{i}球"] = " ".join(f"{n:02d}" for n in _nums)
+            _row[f"第{i}球"] = dots_str(_nums)
 
     st.dataframe(pd.DataFrame([_row]), use_container_width=True, hide_index=True)
 
