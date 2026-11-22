@@ -217,6 +217,18 @@ def get_ball_color(num):
     return "ball-red" if num in red else ("ball-blue" if num in blue else "ball-green")
 
 
+def ball_dot(num):
+    """号码对应的波色圆点：红 🔴 / 蓝 🔵 / 绿 🟢"""
+    c = get_ball_color(num).replace("ball-", "")
+    return {"red": "🔴", "blue": "🔵", "green": "🟢"}.get(c, "⚪")
+
+
+def ball_word(num):
+    """波色文字：红波 / 蓝波 / 绿波"""
+    c = get_ball_color(num).replace("ball-", "")
+    return {"red": "红波", "blue": "蓝波", "green": "绿波"}.get(c, "")
+
+
 def clean_period(val):
     if pd.isna(val): return ""
     s = str(val).strip()
@@ -4324,8 +4336,8 @@ def render_ai(df_data):
                            "可能与正文结论有出入，请对照下方完整结果核对。")
             _parts = []
             for num in st.session_state.ai_ball_result:
-                _dot = {"red": "🔴", "blue": "🔵",
-                        "green": "🟢"}.get(get_ball_color(num), "⚪")
+                _dot = ball_dot(num)
+
                 _parts.append(f"{_dot}**{num:02d}**")
             st.markdown("\u3000".join(_parts))
 
@@ -4681,13 +4693,10 @@ def render_console(df_data):
         st.subheader(f"{next_period_str} 期开奖结果")
         _parts4 = []
         for num in next_flat_nums:
-            _dot4 = {"red": "🔴", "blue": "🔵",
-                     "green": "🟢"}.get(get_ball_color(num), "⚪")
-            _parts4.append(f"{_dot4}**{num:02d}**")
+            _parts4.append(f"{ball_dot(num)}**{num:02d}**")
         if next_special_num > 0:
-            _dot4 = {"red": "🔴", "blue": "🔵",
-                     "green": "🟢"}.get(get_ball_color(next_special_num), "⚪")
-            _parts4.append("➕" + f"{_dot4}**{next_special_num:02d}**")
+            _parts4.append("➕" + f"{ball_dot(next_special_num)}"
+                                   f"**{next_special_num:02d}**")
         st.markdown("\u3000".join(_parts4))
     else:
         try: next_period_str = str(int(float(selected_period)) + 1)
