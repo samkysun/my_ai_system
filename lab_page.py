@@ -763,6 +763,9 @@ def _exp_combo_prev(loader):
 
     _ord = st.radio("排序方式", ["升序", "按序"], horizontal=True,
                     key="lab_f_ord")
+    if _ord == "按序":
+        st.warning("按序各球位没有取值边界（都是 1~49），"
+                   "同样条件下命中率会明显低于升序；建议以升序为主。")
     data = _load_order(loader, _ord)
     if not data:
         st.error("该排序没有数据（按序数据可能从 2000 年才有）")
@@ -783,6 +786,44 @@ def _exp_combo_prev(loader):
         span = st.selectbox("历史范围", ["全部", "最近 2000 期",
                                         "最近 1000 期", "最近 500 期"],
                             index=0, key="lab_f_span")
+
+    if st.button("📊 对比升序/按序命中率（近 100 期）", key="lab_f_cmp"):
+        _cmp = {}
+        for _o in ("升序", "按序"):
+            _d = _load_order(loader, _o)
+            if len(_d) < 120:
+                continue
+            _ps = [x[0] for x in _d]
+            _hit = _tot = 0
+            for _i in range(len(_d) - 100, len(_d)):
+                if _i < 3:
+                    continue
+                _src = _i - 1
+                _cb = [frozenset(c) for c in
+                       __import__("itertools").combinations(
+                           sorted(_d[_src][1]), 3)]
+                from collections import Counter as _C
+                _cnt = _C()
+                for _j in range(1, _src):
+                    _s = set(_d[_j][1])
+                    if any(c.issubset(_s) for c in _cb):
+                        _cnt[_d[_j - 1][1][ball - 1]] += 1
+                if not _cnt:
+                    continue
+                _top = [k for k, _ in _cnt.most_common(5)]
+                _tot += 1
+                if _d[_i][1][ball - 1] in _top:
+                    _hit += 1
+            if _tot:
+                _cmp[_o] = (_hit, _tot, _hit / _tot)
+        if _cmp:
+            st.markdown("**近 100 期前 5 名命中率对比**")
+            st.dataframe(pd.DataFrame(
+                [{"排序": k, "命中": v[0], "样本": v[1],
+                  "命中率": f"{v[2]*100:.1f}%"} for k, v in _cmp.items()]),
+                use_container_width=True, hide_index=True)
+        else:
+            st.info("数据不足，无法对比")
 
     if not st.button("▶ 运行实验 F", key="lab_f_run"):
         return
