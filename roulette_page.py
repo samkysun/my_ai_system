@@ -298,6 +298,70 @@ def learn_rules(draws, lookback=800):
                               "阈值": T, "样本": events, "命中": hits,
                               "命中率": rate, "基线": base, "lift": lift})
 
+    # ---------- 族5：重号型（上期出现的号码，下期再出） ----------
+    for num in range(37):
+        events = hits = 0
+        for i in range(1, n):
+            if hist[i - 1] == num:
+                events += 1
+                if hist[i] == num:
+                    hits += 1
+        if events >= min_n:
+            base = 1 / 37
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "重号", "属性": "号码", "取值": str(num),
+                              "条件": f"上期出{num}", "阈值": 0,
+                              "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族6：尾数连型（上期某尾数，下期同尾再出） ----------
+    for tl in range(10):
+        events = hits = 0
+        for i in range(1, n):
+            if hist[i - 1] % 10 == tl:
+                events += 1
+                if hist[i] % 10 == tl:
+                    hits += 1
+        if events >= min_n:
+            base = sum(1 for x in hist if x % 10 == tl) / n
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "尾连", "属性": "尾数", "取值": str(tl),
+                              "条件": f"上期{tl}尾", "阈值": 0,
+                              "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族7：号码遗漏带（号码遗漏落区间后的命中） ----------
+    for num in range(37):
+        pos = [i for i, x in enumerate(hist) if x == num]
+        if len(pos) < 4:
+            continue
+        base = len(pos) / n
+        for lo, hi in ((10, 14), (15, 19), (20, 29), (30, 49), (50, 99)):
+            events = hits = 0
+            last = -1
+            for i in range(1, n):
+                gap = i - last - 1
+                if last >= 0 and lo <= gap <= hi:
+                    events += 1
+                    if hist[i] == num:
+                        hits += 1
+                if hist[i] == num:
+                    last = i
+            if events >= min_n:
+                rate = hits / events
+                lift = rate - base
+                if lift >= RULE_MIN_LIFT:
+                    rules.append({"类型": "号遗漏", "属性": "号码",
+                                  "取值": str(num),
+                                  "条件": f"遗漏{lo}~{hi}", "阈值": lo,
+                                  "样本": events, "命中": hits,
+                                  "命中率": rate, "基线": base,
+                                  "lift": lift})
+
     rules.sort(key=lambda x: -x["lift"])
     return rules
 
@@ -331,6 +395,25 @@ def apply_rules(draws, rules, om):
                 if recent.count(num) >= k:
                     score[num] += max(0.5, r["lift"] * 100)
             hit = False
+        elif typ == "重号":
+            hit = (last_draw is not None and str(last_draw) == v)
+        elif typ == "尾连":
+            hit = (last_draw is not None and str(last_draw % 10) == v)
+        elif typ == "号遗漏":
+            g = 0
+            for x in reversed(draws):
+                if x == int(v):
+                    break
+                g += 1
+            else:
+                g = len(draws)
+            cond = r["条件"]
+            try:
+                band = cond.replace("遗漏", "").split("~")
+                lo, hi = int(band[0]), int(band[1])
+            except Exception:
+                lo, hi = 0, 999
+            hit = lo <= g <= hi
         elif typ == "姐妹":
             gap = 0
             for i in range(len(draws) - 1, 0, -1):
@@ -346,6 +429,14 @@ def apply_rules(draws, rules, om):
             for num in range(37):
                 if _attr_val(num, key) == v:
                     score[num] += w
+        elif typ == "重号" and last_draw is not None:
+            score[int(v)] += w
+        elif typ == "尾连" and last_draw is not None:
+            for num in range(37):
+                if str(num % 10) == v:
+                    score[num] += w
+        elif typ == "号遗漏":
+            score[int(v)] += w
         elif typ == "姐妹" and last_draw is not None:
             for num in sister(last_draw):
                 score[num] += w
