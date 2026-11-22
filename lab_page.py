@@ -9,6 +9,7 @@
 ------------------------------------------------------------------
 """
 import itertools
+import json
 import time
 from collections import Counter
 from datetime import datetime
@@ -172,6 +173,8 @@ def _exp_pool(loader):
     sets = [frozenset(b) for _, b in data]
     start = max(50, len(data) - int(limit))
     tot_pool = tot_hit = draws = win_draws = 0
+    _rows = []
+    _poolcnt = Counter()
     for i in range(start, len(data)):
         if data[i][0][:4] < year_from:
             continue
@@ -187,10 +190,21 @@ def _exp_pool(loader):
             continue
         draws += 1
         tot_pool += len(pool)
-        hit = sum(1 for c in pool if all(v in sets[i] for v in c))
+        hit_combo = [c for c in pool if all(v in sets[i] for v in c)]
+        hit = len(hit_combo)
         tot_hit += hit
         if hit:
             win_draws += 1
+        _rows.append({
+            "期号": data[i][0],
+            "池注数": len(pool),
+            "命中注数": hit,
+            "命中组合": "、".join("-".join(f"{v:02d}" for v in sorted(c))
+                                for c in hit_combo[:5]),
+            "开奖": " ".join(f"{v:02d}" for v in sorted(sets[i])),
+        })
+        for _c in pool:
+            _poolcnt[_c] += 1
 
     if not draws:
         st.warning("没有样本")
@@ -200,6 +214,77 @@ def _exp_pool(loader):
               f"{tot_hit} 命中 / {tot_pool} 注")
     st.metric("有命中的期数", f"{win_draws/draws*100:.2f}%", f"{draws} 期")
     st.caption(f"理论单注命中率 0.1086%（1/921）")
+    if _rows:
+        st.markdown("**明细结果（最新在上）**")
+        _df = pd.DataFrame(list(reversed(_rows)))
+
+        def _hl(row):
+            if row["命中注数"]:
+                return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+            return [""] * len(row)
+
+        st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                     hide_index=True, height=320)
+        st.download_button(
+            "📥 下载明细",
+            _df.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"实验B_{year_from}.csv", mime="text/csv",
+            key="lab_b_dl")
+
+        with st.expander("组合池组成（按出现次数）", expanded=False):
+            st.dataframe(pd.DataFrame(
+                [{"组合": "-".join(f"{v:02d}" for v in sorted(c)),
+                  "出现期数": n}
+                 for c, n in _poolcnt.most_common(50)]),
+                use_container_width=True, hide_index=True, height=280)
+
+        # ---- 存档 ----
+        st.markdown("**存档**")
+        _ARC = "lab_exp_b_runs.json"
+        _arc = []
+        try:
+            _txt = loader["gh_read"](_ARC) if loader.get("gh_read") else ""
+            if _txt:
+                _arc = json.loads(_txt)
+                if not isinstance(_arc, list):
+                    _arc = []
+        except Exception:
+            _arc = []
+
+        if st.button("💾 保存本次结果", key="lab_b_save"):
+            _rec = {
+                "时间": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "参数": f"≥{minc}次｜{year_from}年起｜{int(limit)}期",
+                "样本期数": draws,
+                "平均每期注数": round(tot_pool / draws, 1),
+                "单注命中率": f"{tot_hit/tot_pool*100:.4f}%",
+                "有命中期数": f"{win_draws}/{draws}",
+                "明细": list(reversed(_rows))[:200],
+            }
+            _arc.append(_rec)
+            try:
+                loader["gh_write"](_ARC, json.dumps(_arc, ensure_ascii=False),
+                                   "保存实验B结果")
+                st.success("已存档")
+                st.rerun()
+            except Exception as _e2:
+                st.warning(f"存档失败：{_e2}")
+
+        if _arc:
+            st.caption(f"已有 {len(_arc)} 条存档")
+            _pick2 = st.selectbox(
+                "查看存档",
+                [f"{i+1}. {r.get('时间','')}｜{r.get('参数','')}"
+                 for i, r in enumerate(reversed(_arc))],
+                index=0, key="lab_b_arcpick")
+            _idx2 = len(_arc) - 1 - int(_pick2.split(".")[0]) + 1
+            _r2 = _arc[max(0, min(len(_arc) - 1, _idx2 - 1))]
+            st.json({k: v for k, v in _r2.items() if k != "明细"})
+            if _r2.get("明细"):
+                st.dataframe(pd.DataFrame(_r2["明细"]),
+                             use_container_width=True, hide_index=True,
+                             height=240)
+
     _save(loader, f"实验B 组合池 ≥{minc}次 {year_from}+",
           f"组合池 ≥{minc} 次｜{year_from} 年起｜{draws} 期\n"
           f"平均每期 {tot_pool/draws:.1f} 注\n"
