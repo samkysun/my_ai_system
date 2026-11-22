@@ -1709,11 +1709,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabc, tabd, tabe, tabf, tabg, tabh, tabi, tab4, tab3 = st.tabs(
+    st.caption("第一行：属性类实验")
+    tab2, tabc, tabd, tabe = st.tabs(
         ["实验B 组合池", "实验C 形态组合",
-         "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
-         "实验G 热号回测", "实验H 六码中三", "实验I 加注模拟",
-         "结论档案", "清理"])
+         "实验D 属性联动", "实验E 锁定目标球"])
     with tab2:
         _exp_pool(H)
     with tabc:
@@ -1722,6 +1721,12 @@ def render(df_data, H):
         _exp_link_attr(H)
     with tabe:
         _exp_target_multi(H)
+
+    st.divider()
+    st.caption("第二行：号码类实验")
+    tabf, tabg, tabh, tabi = st.tabs(
+        ["实验F 三三组合", "实验G 热号回测",
+         "实验H 六码中三", "实验I 加注模拟"])
     with tabf:
         _exp_combo_prev(H)
     with tabg:
@@ -1730,6 +1735,10 @@ def render(df_data, H):
         _exp_six_pick(H)
     with tabi:
         _exp_stake_plan(H)
+
+    st.divider()
+    st.caption("第三行：档案与清理")
+    tab4, tab3 = st.tabs(["结论档案", "清理"])
     with tab4:
         _archive()
     with tab3:
