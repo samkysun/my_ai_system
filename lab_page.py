@@ -364,6 +364,171 @@ def _exp_gate3(loader):
 
 
 # =====================================================================
+# 实验 D：属性联动
+# =====================================================================
+_LAB_ATTRS = ["生肖", "尾数", "门数", "段数", "数字合", "数字五行",
+              "生肖五行", "波单双", "波色", "方位", "福禄寿",
+              "大小肖", "阴阳天地", "3模", "尾五行"]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_zodiac(_sig):
+    import os
+    import csv as _csv
+    rows = _csv.reader(open("_zodiac_by_period.csv", encoding="utf-8-sig"))
+    head = next(rows, None)
+    return [r for r in rows if r and r[0]]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_zodiac_attrs(_sig):
+    import csv as _csv
+    rows = list(_csv.reader(open("_zodiac_attrs.csv", encoding="utf-8-sig")))
+    hdr = rows[0]
+    return {r[0]: {hdr[i]: r[i] for i in range(1, len(r))} for r in rows[1:] if r}
+
+
+def _attr_of(period_key, ball, attr, zodiac, zattrs, amap):
+    """取某期某球某属性"""
+    zrow = zodiac.get(period_key)
+    num = period_key[1][int(ball) - 1]
+    if attr == "生肖":
+        return zrow[int(ball) - 1] if zrow else ""
+    if attr in ("生肖五行", "颜色肖", "物象", "方位", "福禄寿", "大小肖",
+                "阴阳天地"):
+        z = zrow[int(ball) - 1] if zrow else ""
+        return zattrs.get(z, {}).get(attr, "")
+    a = amap.get(num, {})
+    if attr == "尾数":
+        return str(num % 10)
+    if attr == "数字合":
+        return f"{sum(int(c) for c in str(num)):02d}合"
+    if attr == "门数":
+        return a.get("门数", "")
+    if attr == "段数":
+        return a.get("段数", "")
+    return a.get(attr, "")
+
+
+def _exp_link_attr(loader):
+    st.markdown("#### 实验 D：属性联动（两球推一球）")
+    st.caption("取两个球位的属性组合，去历史找相同组合，统计下一期目标球位的属性分布。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index6.csv")
+        return
+    sig = str(len(data))
+    zrows = _load_zodiac(sig)
+    zodiac = {}
+    for r in zrows:
+        if len(r) >= 8:
+            zodiac[r[0]] = [r[i] for i in range(1, 8)]
+    zattrs = _load_zodiac_attrs(sig)
+    amap = _load_attr(loader)
+    periods = [p for p, _ in data]
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_d_attr")
+    with c2:
+        b1 = st.selectbox("触发球位 1", list(range(1, 8)), index=1,
+                          key="lab_d_b1")
+    with c3:
+        b2 = st.selectbox("触发球位 2", list(range(1, 8)), index=2,
+                          key="lab_d_b2")
+    _auto = (min(b1, b2) - 1) or 6
+    with c4:
+        tgt = st.selectbox("目标球位", list(range(1, 8)),
+                           index=_auto - 1, key="lab_d_tgt",
+                           help=f"规则：目标 = 触发最小值 - 1（1,2 则推 6）；"
+                                f"当前建议 {_auto}")
+
+    c5, c6, c7 = st.columns(3)
+    with c5:
+        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
+                            index=0, key="lab_d_base")
+    with c6:
+        span = st.selectbox("历史范围", ["全部", "最近 1000 期",
+                                        "最近 500 期", "最近 200 期"],
+                            index=0, key="lab_d_span")
+    with c7:
+        top_n = st.number_input("显示前 N", 3, 30, 10, 1, key="lab_d_top")
+
+    if st.button("▶ 运行实验 D", key="lab_d_run"):
+        if b1 == b2:
+            st.warning("两个触发球位不能相同")
+            return
+        idx = len(data) - 1 if base == "最新" else periods.index(base)
+        pkey = data[idx]
+        _v1 = _attr_of(pkey, b1, attr, zodiac, zattrs, amap)
+        _v2 = _attr_of(pkey, b2, attr, zodiac, zattrs, amap)
+        if not _v1 or not _v2:
+            st.warning("属性取值为空，换个属性或球位试试")
+            return
+        st.markdown(f"**基准组合**：{periods[idx]} 期　第{b1}球 {_v1}　"
+                    f"第{b2}球 {_v2}")
+
+        limits = {"全部": 0, "最近 1000 期": 1000, "最近 500 期": 500,
+                  "最近 200 期": 200}
+        lo = max(0, idx - limits[span]) if limits[span] else 0
+
+        from collections import Counter
+        cnt = Counter()
+        hits = []
+        for i in range(lo, idx):
+            if i + 1 >= idx:
+                break
+            a1 = _attr_of(data[i], b1, attr, zodiac, zattrs, amap)
+            a2 = _attr_of(data[i], b2, attr, zodiac, zattrs, amap)
+            if a1 == _v1 and a2 == _v2:
+                nv = _attr_of(data[i + 1], tgt, attr, zodiac, zattrs, amap)
+                if nv:
+                    cnt[nv] += 1
+                    hits.append((periods[i], periods[i + 1], nv))
+        total = sum(cnt.values())
+        st.metric("历史命中次数", total)
+        if not total:
+            st.info("历史里没有相同的属性组合")
+            return
+
+        st.markdown(f"**下一期第{tgt}球 {attr} 分布**")
+        st.dataframe(pd.DataFrame(
+            [{attr: k, "次数": v, "占比": f"{v/total*100:.1f}%"}
+             for k, v in cnt.most_common(int(top_n))]),
+            use_container_width=True, hide_index=True)
+
+        st.markdown("**明细（最近 20 条）**")
+        st.dataframe(pd.DataFrame(
+            [{"触发期": a, "下一期": b, f"实际{attr}": c}
+             for a, b, c in hits[-20:]]),
+            use_container_width=True, hide_index=True)
+
+        # 回测对比
+        if idx + 1 < len(data):
+            real = _attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap)
+            rank = [k for k, _ in cnt.most_common()]
+            pos = rank.index(real) + 1 if real in rank else None
+            st.markdown("**回测对比**")
+            ca, cb = st.columns(2)
+            ca.metric("真实下一期", periods[idx + 1])
+            cb.metric(f"真实{attr}", real)
+            if pos:
+                st.success(f"✅ 命中：历史出现 {cnt[real]} 次，排第 {pos} 位")
+            else:
+                st.error(f"❌ 未命中：历史从未出现 {real}")
+        else:
+            st.info("最新一期还没有下一期开奖")
+
+        _txt = (f"实验D｜{attr}｜触发 第{b1}+第{b2}球｜目标 第{tgt}球\n"
+                f"基准 {periods[idx]}：{_v1} + {_v2}\n"
+                f"历史命中 {total} 次\n"
+                + "\n".join(f"{k}：{v} 次（{v/total*100:.1f}%）"
+                            for k, v in cnt.most_common(int(top_n))))
+        _save(loader, f"实验D {attr} {b1}+{b2}->{tgt}", _txt)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -551,14 +716,17 @@ def render(df_data, H):
     st.title("🔬 研究中心（实验沙盒）")
     st.caption("在这里试各种公式，不满意就一键清空；确认可用再迁到正式页面。")
 
-    tab1, tab2, tabc, tab4, tab3 = st.tabs(
-        ["实验A 单条件杀号", "实验B 组合池", "实验C 门数三三", "结论档案", "清理"])
+    tab1, tab2, tabc, tabd, tab4, tab3 = st.tabs(
+        ["实验A 单条件杀号", "实验B 组合池", "实验C 形态组合",
+         "实验D 属性联动", "结论档案", "清理"])
     with tab1:
         _exp_single_kill(H)
     with tab2:
         _exp_pool(H)
     with tabc:
         _exp_gate3(H)
+    with tabd:
+        _exp_link_attr(H)
     with tab4:
         _archive()
     with tab3:
