@@ -501,15 +501,28 @@ def _exp_link_attr(loader):
 
         _lo, _hi = (int(tgt), 43 + int(tgt))
         st.markdown(f"**下一期第{tgt}球 {attr} 分布**（号码区间 {_lo}~{_hi}）")
+        def _nums_of(val):
+            """把任意属性值翻译成该球位区间内的号码"""
+            out = []
+            if attr == "数字五行" and _wx_mode == "按生肖":
+                for n, a in amap.items():
+                    if not (_lo <= n <= _hi):
+                        continue
+                    z = a.get("生肖", "")
+                    if zattrs.get(z, {}).get("生肖五行") == val:
+                        out.append(n)
+                return sorted(out)
+            for n, a in amap.items():
+                if _lo <= n <= _hi and a.get(attr) == val:
+                    out.append(n)
+            return sorted(out)
+
         _rows_d = []
         for k, v in cnt.most_common(int(top_n)):
-            _nums = []
-            if attr == "生肖":
-                _nums = [n for n, a in amap.items()
-                         if a.get("生肖") == k and _lo <= n <= _hi]
+            _nums = _nums_of(k)
             _rows_d.append({attr: k, "次数": v,
                             "占比": f"{v/total*100:.1f}%",
-                            "对应号码": " ".join(f"{n:02d}" for n in sorted(_nums))})
+                            "对应号码": " ".join(f"{n:02d}" for n in _nums)})
         st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
                      hide_index=True)
 
