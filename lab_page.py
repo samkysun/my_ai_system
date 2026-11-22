@@ -1053,23 +1053,23 @@ def _exp_six_pick(loader):
     ge = 0
     tot = 0
     for i in range(start, end):
-        picks = {}
-        ok_cnt = 0
+        _picks = set()
+        _pk_desc = []
         for b, k in ALLOC.items():
             c = Counter(seqs[b][max(0, i - int(_win)):i])
             pick = [v for v, _ in c.most_common(k)]
-            picks[b] = pick
-            if seqs[b][i] in pick:
-                ok_cnt += 1
+            _picks.update(pick)
+            _pk_desc.append(f"第{b}球 " + "/".join(f"{v:02d}" for v in pick))
+        _draw6 = set(data[i][1][:6])          # 只用 6 平码，特码不计
+        ok_cnt = len(_picks & _draw6)
         tot += 1
         dist[ok_cnt] += 1
         if ok_cnt >= int(_need):
             ge += 1
         rows.append({
             "期号": periods[i],
-            **{f"第{b}球推荐": " ".join(f"{v:02d}" for v in picks[b])
-               for b in ALLOC},
-            **{f"第{b}球实开": f"{seqs[b][i]:02d}" for b in ALLOC},
+            "推荐号码": "　".join(_pk_desc),
+            "开奖平码": " ".join(f"{v:02d}" for v in sorted(_draw6)),
             "命中个数": ok_cnt,
             "达标": "★" if ok_cnt >= int(_need) else "",
         })
@@ -1118,12 +1118,11 @@ def _exp_six_pick(loader):
         _ok = _tot = 0
         _sub = list(_alloc.items())
         for i2 in range(start, end):
-            _c2 = 0
+            _ps = set()
             for b, k in _sub:
                 cc = Counter(seqs[b][max(0, i2 - int(_win)):i2])
-                pk = [v for v, _ in cc.most_common(k)]
-                if seqs[b][i2] in pk:
-                    _c2 += 1
+                _ps.update(v for v, _ in cc.most_common(k))
+            _c2 = len(_ps & set(data[i2][1][:6]))
             _tot += 1
             if _c2 >= _need2:
                 _ok += 1
@@ -1145,7 +1144,7 @@ def _exp_six_pick(loader):
     with _c2h:
         _era = st.selectbox("统计起点", ["1976", "2005", "2015"], index=1,
                             key="lab_h_era")
-    _sp = st.checkbox("把特码也算进开奖号", value=False, key="lab_h_sp")
+    st.caption("判定口径：只比 6 个平码，特码不计入")
 
     _dist = Counter()
     _groups = 0
@@ -1166,8 +1165,6 @@ def _exp_six_pick(loader):
             for b, k in ALLOC.items():
                 _picks.update(v for v, _ in _c[b].most_common(k))
             _draws = set(data[i][1][:6])
-            if _sp:
-                _draws.add(data[i][1][6])
             _k = len(_picks & _draws)
             _dist[_k] += 1
             _tot2 += 1
