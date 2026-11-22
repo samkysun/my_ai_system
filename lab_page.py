@@ -899,8 +899,18 @@ def _exp_hot_pick(loader):
     cnt = Counter(hist)
     top = [v for v, _ in cnt.most_common(topn)]
     lo, hi = ball, 43 + ball
-    st.markdown(f"**当前推荐（第{ball}球，区间 {lo}~{hi}）**："
-                + "、".join(f"{v:02d}（{cnt[v]}次）" for v in top))
+    try:
+        _next_p = str(int(periods[-1]) + 1)
+    except Exception:
+        _next_p = "下一期"
+    _sum_top = sum(cnt[v] for v in top)
+    _p_top = _sum_top / len(hist) if hist else 0
+    st.success(f"🎯 预测 {_next_p} 期 第{ball}球：" +
+               "、".join(f"**{v:02d}**" for v in top) +
+               f"　（历史占比 {_p_top*100:.1f}%，平均 {1/_p_top:.1f} 期一次）"
+               if _p_top else "")
+    st.caption(f"依据：{hist_span} 频次统计｜区间 {lo}~{hi}｜"
+               f"最近一期 {periods[-1]} 开 {seq[-1]:02d}")
 
     # ---- 回测（walk-forward）----
     hit = tot = hits_series = 0
