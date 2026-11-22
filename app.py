@@ -5964,6 +5964,8 @@ def main_app():
         if render_lab:
             render_lab(df_data, {"load_excel_data": load_excel_data,
                                  "board_add": _board_add,
+                                 "gh_read": _gh_read_text,
+                                 "gh_write": _gh_write_text,
                                  "supabase": get_supabase_client})
         else:
             st.error("lab_page.py 未找到或加载失败")
