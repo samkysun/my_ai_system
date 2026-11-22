@@ -1234,6 +1234,164 @@ def _exp_six_pick(loader):
 
 
 # =====================================================================
+# 实验 I：递增加注模拟
+# =====================================================================
+def _exp_stake_plan(loader):
+    from math import comb
+    from collections import Counter
+
+    st.markdown("#### 实验 I：递增加注模拟")
+    st.caption("中奖后归零重新计数；连续未中达到起点后，每 N 期加注一档。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p for p, _ in data]
+    n = len(data)
+
+    _PLAN = {
+        "4码：第1球2 + 第6球2": {1: 2, 6: 2},
+        "5码：第1球2 + 第2球1 + 第6球2": {1: 2, 2: 1, 6: 2},
+        "6码：第1球1 + 第2球2 + 第5球2 + 第6球1": {1: 1, 2: 2, 5: 2, 6: 1},
+    }
+
+    # ---- 第一行：方案 + 赔率 ----
+    r1c1, r1c2 = st.columns(2)
+    with r1c1:
+        _pk = st.selectbox("号码方案", list(_PLAN.keys()), index=0,
+                           key="lab_i_plan")
+    with r1c2:
+        _odds = st.number_input("中奖赔率（倍）", 1, 100000, 655, 1,
+                                key="lab_i_odds")
+
+    # ---- 第二行：起点 + 递增间隔 ----
+    r2c1, r2c2 = st.columns(2)
+    with r2c1:
+        _start_at = st.number_input("连续多少期开始下注", 1, 2000, 150, 10,
+                                    key="lab_i_start")
+    with r2c2:
+        _step = st.number_input("每隔多少期加注一次", 5, 500, 50, 5,
+                                key="lab_i_step")
+
+    # ---- 第三行：递增比例 + 加注上限 ----
+    r3c1, r3c2 = st.columns(2)
+    with r3c1:
+        _inc = st.number_input("每次加注比例（%）", 0, 500, 20, 5,
+                               key="lab_i_inc")
+    with r3c2:
+        _cap = st.number_input("加注上限（倍）", 1, 1000, 10, 1,
+                               key="lab_i_cap")
+
+    # ---- 第四行：本金 + 统计起点 ----
+    r4c1, r4c2 = st.columns(2)
+    with r4c1:
+        _bank0 = st.number_input("本金（元）", 1000, 100000000, 100000, 1000,
+                                 key="lab_i_bank")
+    with r4c2:
+        _era = st.selectbox("统计起点", ["2005", "2015", "1976"], index=0,
+                            key="lab_i_era")
+
+    # ---- 第五行：滚动窗口 + 执行 ----
+    st.caption("热号计算窗口")
+    _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
+    _go = st.button("▶ 运行加注模拟", type="primary", key="lab_i_run")
+
+    if not _go:
+        return
+
+    ALLOC = _PLAN[_pk]
+    seqs = {b: [d[1][b - 1] for d in data] for b in ALLOC}
+    draws = [set(d[1][:6]) for d in data]
+
+    c = {b: Counter() for b in ALLOC}
+    gap = 0
+    mult = 1.0
+    spent = back = 0.0
+    bank = float(_bank0)
+    peak = bank
+    max_dd = 0.0
+    max_mult = 1.0
+    hits = 0
+    ruin_at = None
+    gaps = []
+    rows = []
+
+    for i in range(int(_win), n):
+        if periods[i][:4] >= _era:
+            picks = set()
+            for b, k in ALLOC.items():
+                picks.update(v for v, _ in c[b].most_common(k))
+            groups = comb(len(picks), 3)
+            cost = groups * mult
+            spent += cost
+            bank -= cost
+            k2 = len(picks & draws[i])
+            if k2 >= 3:
+                win = comb(k2, 3) * _odds * mult
+                back += win
+                bank += win
+                hits += 1
+                gaps.append(gap)
+                rows.append({"期号": periods[i], "倍数": f"{mult:.2f}",
+                             "投入": f"{cost:.0f}", "命中": k2,
+                             "回收": f"{win:.0f}", "资金": f"{bank:.0f}",
+                             "结果": "★中奖"})
+                gap = 0
+                mult = 1.0
+            else:
+                gap += 1
+                if gap >= int(_start_at):
+                    mult = min(1.0 * (1 + _inc / 100) **
+                               ((gap - int(_start_at)) // int(_step) + 1),
+                               float(_cap))
+                    max_mult = max(max_mult, mult)
+                if gap == int(_start_at):
+                    rows.append({"期号": periods[i], "倍数": "1.00",
+                                 "投入": "—", "命中": 0, "回收": "—",
+                                 "资金": f"{bank:.0f}", "结果": "开始下注"})
+            peak = max(peak, bank)
+            max_dd = max(max_dd, peak - bank)
+            if bank <= 0 and ruin_at is None:
+                ruin_at = periods[i]
+        for b in ALLOC:
+            c[b][seqs[b][i]] += 1
+
+    roi = (back / spent * 100) if spent else 0
+    st.markdown("**模拟结果**")
+    _m1, _m2, _m3 = st.columns(3)
+    _m1.metric("中奖次数", hits)
+    _m2.metric("回报率", f"{roi:.1f}%")
+    _m3.metric("期末资金", f"{bank:,.0f}")
+
+    _m4, _m5, _m6 = st.columns(3)
+    _m4.metric("总投入", f"{spent:,.0f}")
+    _m5.metric("最高加注", f"{max_mult:.1f} 倍")
+    _m6.metric("最大回撤", f"{max_dd:,.0f}")
+
+    if ruin_at:
+        st.error(f"❌ 资金在中途耗尽：{ruin_at} 期（本金 {_bank0:,}）")
+    else:
+        st.success("✅ 全程未爆仓")
+
+    if gaps:
+        st.caption(f"中奖间隔：{len(gaps)} 次｜最短 {min(gaps)} 期｜"
+                   f"中位 {sorted(gaps)[len(gaps)//2]} 期｜最长 {max(gaps)} 期")
+
+    if rows:
+        _df = pd.DataFrame(list(reversed(rows)))
+
+        def _hl(row):
+            if row["结果"] == "★中奖":
+                return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+            return [""] * len(row)
+
+        st.markdown("**关键节点（最新在上）**")
+        st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                     hide_index=True, height=360)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -1432,10 +1590,11 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabc, tabd, tabe, tabf, tabg, tabh, tab4, tab3 = st.tabs(
+    tab2, tabc, tabd, tabe, tabf, tabg, tabh, tabi, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验C 形态组合",
          "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
-         "实验G 热号回测", "实验H 六码中三", "结论档案", "清理"])
+         "实验G 热号回测", "实验H 六码中三", "实验I 加注模拟",
+         "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabc:
@@ -1450,6 +1609,8 @@ def render(df_data, H):
         _exp_hot_pick(H)
     with tabh:
         _exp_six_pick(H)
+    with tabi:
+        _exp_stake_plan(H)
     with tab4:
         _archive()
     with tab3:
