@@ -674,15 +674,15 @@ def _exp_target_multi(loader):
     if not total:
         st.warning("六组都没有历史命中")
         return
-    st.markdown(f"**汇总排行（锁定第{tgt}球，{attr}）**")
+    st.markdown(f"**汇总前二（锁定第{tgt}球，{attr}，共 {allc} 次）**")
     allc = sum(total.values())
     rows = []
-    for k, v in total.most_common():
+    for k, v in total.most_common(2):
         nums = [n for n, aa in amap.items()
                 if _lo <= n <= _hi and aa.get(attr) == k]
         rows.append({attr: k, "总次数": v, "占比": f"{v/allc*100:.1f}%",
                      "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
-    _top2 = [r[attr] for r in rows[:2]]
+    _top2 = [r[attr] for r in rows]
 
     _real = (_attr_of(data[idx + 1], tgt, attr, zodiac, zattrs, amap)
              if idx + 1 < len(data) else "")
@@ -696,7 +696,7 @@ def _exp_target_multi(loader):
 
     _df = pd.DataFrame(rows)
     def _hl(row):
-        if row[attr] in _top2:
+        if _real and row[attr] == _real:
             return ["background-color:#ffe08a;font-weight:bold"] * len(row)
         return [""] * len(row)
     st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
