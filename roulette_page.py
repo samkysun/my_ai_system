@@ -307,13 +307,30 @@ def build_candidates(draws, rec_nums=None):
         for num in range(37):
             if str(num % 10) == t:
                 add(num, f"尾{t}")
+
+    # 其它属性遗漏加权（生肖不入候选，姐妹/相邻只提醒）
+    _extra = [("四宝", "四宝"), ("物象", "物象"), ("五行尾", "五行尾"),
+              ("生肖五行", "生肖五行"), ("阴阳天地", "阴阳天地"),
+              ("波单双", "波单双")]
+    for _name, _key in _extra:
+        _gaps = {}
+        for _v in {attrs_of(x)[_key] for x in range(37)}:
+            _g = 0
+            for _x in reversed(draws):
+                if attrs_of(_x)[_key] == _v:
+                    break
+                _g += 1
+            else:
+                _g = len(draws)
+            _gaps[_v] = _g
+        for _v, _g in _gaps.items():
+            if _g >= TH_ZODIAC:
+                for _num in range(37):
+                    if attrs_of(_num)[_key] == _v:
+                        add(_num, f"{_name}{_v}", 1)
     # 生肖遗漏号码不再写入候选（按要求）
-    if sis_gap >= TH_SISTER:
-        for s in sis:
-            add(s, "姐妹", 2)
-    if adj_gap >= TH_ADJ:
-        for a in adj:
-            add(a, "轮盘邻", 2)
+    # 姐妹码只提醒，不写入候选
+    # 轮盘相邻只提醒，不写入候选
 
     # 属性重复加权：同号码命中多个不同属性条件
     _rec = [int(x) for x in (rec_nums or [])][:REC_N]
