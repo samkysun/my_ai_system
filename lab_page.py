@@ -730,6 +730,98 @@ def _exp_target_multi(loader):
 
 
 # =====================================================================
+# 实验 F：三三组合 → 上一期球位号码
+# =====================================================================
+def _exp_combo_prev(loader):
+    st.markdown("#### 实验 F：三三组合 → 上一期球位号码")
+    st.caption("取基准期 7 个号码的全部三三组合，找历史中出现过这些组合的期，"
+               "统计它们「上一期」指定球位的号码，按次数排序。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p for p, _ in data]
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
+                            index=0, key="lab_f_base")
+    with c2:
+        ball = st.selectbox("取第几球（升序）", list(range(1, 8)), index=0,
+                            key="lab_f_ball")
+    with c3:
+        span = st.selectbox("历史范围", ["全部", "最近 2000 期",
+                                        "最近 1000 期", "最近 500 期"],
+                            index=0, key="lab_f_span")
+
+    if not st.button("▶ 运行实验 F", key="lab_f_run"):
+        return
+
+    import itertools
+    from collections import Counter
+
+    idx = len(data) - 1 if base == "最新" else periods.index(base)
+    nums = data[idx][1]
+    combos = list(itertools.combinations(sorted(nums), 3))
+    st.markdown(f"**基准期 {periods[idx]}**：{nums}")
+    st.caption(f"三三组合共 {len(combos)} 组")
+
+    limits = {"全部": 0, "最近 2000 期": 2000, "最近 1000 期": 1000,
+              "最近 500 期": 500}
+    lo = max(1, idx - limits[span]) if limits[span] else 1
+
+    combo_set = [frozenset(c) for c in combos]
+    cnt = Counter()
+    matched = []
+    for j in range(lo, idx):
+        s = set(data[j][1])
+        if any(c.issubset(s) for c in combo_set):
+            prev = data[j - 1][1][ball - 1]
+            cnt[prev] += 1
+            matched.append((periods[j], periods[j - 1], prev))
+
+    st.metric("历史命中期数", len(matched))
+    if not cnt:
+        st.info("历史上没有包含这些组合的期")
+        return
+
+    actual = data[idx][1][ball - 1]
+    ranked = cnt.most_common()
+    order = [k for k, _ in ranked]
+    pos = order.index(actual) + 1 if actual in order else None
+    if pos:
+        st.success(f"✅ 本期第{ball}球实开 {actual:02d}，排第 {pos} 位")
+    else:
+        st.error(f"❌ 本期第{ball}球实开 {actual:02d}，未进榜")
+
+    total = sum(cnt.values())
+    rows = [{"名次": i + 1, "号码": f"{k:02d}", "次数": v,
+             "占比": f"{v/total*100:.1f}%",
+             "命中": "★" if k == actual else ""}
+            for i, (k, v) in enumerate(ranked)]
+    _df = pd.DataFrame(rows)
+
+    def _hl(row):
+        if row["命中"]:
+            return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+        return [""] * len(row)
+
+    st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                 hide_index=True)
+    st.download_button("📥 下载结果",
+                       _df.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"实验F_第{ball}球_{periods[idx]}.csv",
+                       mime="text/csv", key="lab_f_dl")
+
+    with st.expander(f"🔍 命中明细（全部 {len(matched)} 条）", expanded=False):
+        st.dataframe(pd.DataFrame(
+            [{"命中四期": a, "上一期": b, f"上一期第{ball}球": f"{c:02d}"}
+             for a, b, c in matched]),
+            use_container_width=True, hide_index=True, height=320)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -928,9 +1020,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab1, tab2, tabc, tabd, tabe, tab4, tab3 = st.tabs(
+    tab1, tab2, tabc, tabd, tabe, tabf, tab4, tab3 = st.tabs(
         ["实验A 单条件杀号", "实验B 组合池", "实验C 形态组合",
-         "实验D 属性联动", "实验E 锁定目标球", "结论档案", "清理"])
+         "实验D 属性联动", "实验E 锁定目标球", "实验F 三三组合",
+         "结论档案", "清理"])
     with tab1:
         _exp_single_kill(H)
     with tab2:
@@ -941,6 +1034,8 @@ def render(df_data, H):
         _exp_link_attr(H)
     with tabe:
         _exp_target_multi(H)
+    with tabf:
+        _exp_combo_prev(H)
     with tab4:
         _archive()
     with tab3:
