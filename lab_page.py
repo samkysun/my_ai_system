@@ -210,10 +210,14 @@ def _exp_pool(loader):
         st.warning("没有样本")
         return
 
-    st.metric("单注命中率", f"{tot_hit/tot_pool*100:.4f}%",
-              f"{tot_hit} 命中 / {tot_pool} 注")
-    st.metric("有命中的期数", f"{win_draws/draws*100:.2f}%", f"{draws} 期")
-    st.caption(f"理论单注命中率 0.1086%（1/921）")
+    st.success(f"✅ 计算完成：样本 {draws} 期｜共 {tot_pool} 注｜"
+               f"命中 {tot_hit} 注｜有命中的期 {win_draws} 期")
+    _m1, _m2, _m3 = st.columns(3)
+    _m1.metric("单注命中率", f"{tot_hit/tot_pool*100:.4f}%")
+    _m2.metric("有命中的期数占比", f"{win_draws/draws*100:.2f}%",
+               f"{win_draws}/{draws} 期")
+    _m3.metric("平均每期注数", f"{tot_pool/draws:.0f} 注")
+    st.caption("理论单注命中率 0.1086%（1/921）")
     if _rows:
         st.markdown("**明细结果（最新在上）**")
         _df = pd.DataFrame(list(reversed(_rows)))
