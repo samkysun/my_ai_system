@@ -1256,6 +1256,36 @@ def _exp_stake_plan(loader):
         "6码：第1球1 + 第2球2 + 第5球2 + 第6球1": {1: 1, 2: 2, 5: 2, 6: 1},
     }
 
+    # ---- 锁定状态 ----
+    import json as _json
+    _LOCK_FILE = "stake_plan_lock.json"
+    _lock = None
+    try:
+        _raw = loader.get("gh_read")
+        if _raw:
+            _txt = _raw(_LOCK_FILE)
+            if _txt:
+                _lock = _json.loads(_txt)
+    except Exception:
+        _lock = None
+
+    if _lock:
+        st.success(
+            f"🔒 已锁定方案（{_lock.get('locked_at', '')} 锁定）："
+            f"{_lock.get('plan', '')}｜窗口 {_lock.get('win', '')} 期｜"
+            f"推荐号码：{'、'.join('%02d' % v for v in _lock.get('picks', []))}")
+        _c1l, _c2l = st.columns(2)
+        with _c1l:
+            if st.button("🔓 解锁方案", key="lab_i_unlock"):
+                try:
+                    loader["gh_write"](_LOCK_FILE, "{}", "解锁加注方案")
+                except Exception:
+                    pass
+                st.warning("已解锁，请刷新页面")
+                st.rerun()
+        with _c2l:
+            st.caption("解锁后可以换方案；未中奖前不建议解锁")
+
     # ---- 第一行：方案 + 赔率 ----
     r1c1, r1c2 = st.columns(2)
     with r1c1:
@@ -1297,12 +1327,38 @@ def _exp_stake_plan(loader):
     _allw = st.checkbox("用全部历史（不滚动）", value=False, key="lab_i_allw")
     _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
     _go = st.button("▶ 运行加注模拟", type="primary", key="lab_i_run")
+    if st.button("🔒 锁定当前方案（长期跟踪用）", key="lab_i_lock"):
+        _cur = set()
+        for b, k in _PLAN[_pk].items():
+            _c2 = [v for v, _ in Counter(
+                [d[1][b - 1] for d in data[-int(_win):]]).most_common(k)]
+            _cur.update(_c2)
+        _obj = {"plan": _pk, "win": int(_win), "allw": bool(_allw),
+                "era": _era, "start_at": int(_start_at), "step": int(_step),
+                "inc": int(_inc), "cap": int(_cap), "odds": int(_odds),
+                "picks": sorted(_cur), "locked_at": periods[-1]}
+        try:
+            loader["gh_write"](_LOCK_FILE,
+                               _json.dumps(_obj, ensure_ascii=False),
+                               "锁定加注方案")
+            st.success("已锁定：" + "、".join("%02d" % v for v in sorted(_cur)))
+            st.rerun()
+        except Exception as _e:
+            st.warning(f"锁定失败：{_e}")
 
     if not _go:
         return
 
     ALLOC = _PLAN[_pk]
     seqs = {b: [d[1][b - 1] for d in data] for b in ALLOC}
+
+    # 锁定方案时，推荐号码固定为锁定时的那一组
+    _locked_picks = None
+    if _lock:
+        try:
+            _locked_picks = [int(x) for x in _lock.get("picks", [])]
+        except Exception:
+            _locked_picks = None
     draws = [set(d[1][:6]) for d in data]
 
     c = {b: Counter() for b in ALLOC}
@@ -1321,9 +1377,12 @@ def _exp_stake_plan(loader):
     _w = 0 if _allw else int(_win)
     for i in range(max(1, int(_win)), n):
         if periods[i][:4] >= _era:
-            picks = set()
-            for b, k in ALLOC.items():
-                picks.update(v for v, _ in c[b].most_common(k))
+            if _locked_picks:
+                picks = set(_locked_picks)
+            else:
+                picks = set()
+                for b, k in ALLOC.items():
+                    picks.update(v for v, _ in c[b].most_common(k))
             groups = comb(len(picks), 3)
             cost = groups * mult
             spent += cost
@@ -1391,9 +1450,12 @@ def _exp_stake_plan(loader):
 
     # 下一期推荐
     st.markdown("**下一期推荐号码**")
-    _np = set()
-    for b, k in ALLOC.items():
-        _np.update(v for v, _ in c[b].most_common(k))
+    if _locked_picks:
+        _np = set(_locked_picks)
+    else:
+        _np = set()
+        for b, k in ALLOC.items():
+            _np.update(v for v, _ in c[b].most_common(k))
     _np_list = sorted(_np)
     _cur_gap = gap
     _cur_mult = mult
