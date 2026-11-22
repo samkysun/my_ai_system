@@ -39,7 +39,8 @@ SIBAO = ["画"] + ["书", "琴", "书", "琴", "书", "棋", "棋", "画", "棋"
                   "棋", "画", "棋", "琴", "画", "画", "书"]  # 0~36
 
 TH_TAIL, TH_ZODIAC, TH_SISTER, TH_ADJ = 20, 15, 15, 15
-MAX_PICK = 15
+MAX_PICK = 10
+REC_N = 4
 
 HIST_FILE = "roulette_history.json"
 
@@ -260,7 +261,7 @@ def smart_top3(draws):
             z += w[f] * ((rows[n][i] - means[i]) / sds[i] if sds[i] else 0)
         scored.append((n, z, rows[n]))
     scored.sort(key=lambda x: -x[1])
-    top = scored[:3]
+    top = scored[:REC_N]
     total = sum(abs(x[1]) for x in scored) or 1
     out = [(n, z, z / total) for n, z, _ in top]
     return out, w
@@ -304,10 +305,7 @@ def build_candidates(draws, rec_nums=None):
         for num in range(37):
             if str(num % 10) == t:
                 add(num, f"尾{t}")
-    for z in hot_z:
-        for num in range(37):
-            if zodiac_of(num) == z:
-                add(num, f"肖{z}")
+    # 生肖遗漏号码不再写入候选（按要求）
     if sis_gap >= TH_SISTER:
         for s in sis:
             add(s, "姐妹", 2)
@@ -316,14 +314,17 @@ def build_candidates(draws, rec_nums=None):
             add(a, "轮盘邻", 2)
 
     # 属性重复加权：同号码命中多个不同属性条件
-    _rec = [int(x) for x in (rec_nums or [])]
-    _all = dict(score)
-    for _n in _rec:
-        _all.setdefault(_n, 0)
-    ranked = sorted(_all.items(), key=lambda x: (-x[1], x[0]))
-    # 推荐号码强制排在最前
-    ranked = [(n, s) for n in _rec if n in _all for s in [_all[n]]] + \
-             [(n, s) for n, s in ranked if n not in _rec]
+    _rec = [int(x) for x in (rec_nums or [])][:REC_N]
+    _rest = sorted(((n, s) for n, s in score.items() if n not in _rec),
+                   key=lambda x: (-x[1], x[0]))
+    _strong = [(n, s) for n, s in _rest if s >= 2]
+    _weak = [(n, s) for n, s in _rest if s < 2]
+    ranked = [(n, score.get(n, 0)) for n in _rec]
+    for n, s in _strong + _weak:
+        if len(ranked) >= MAX_PICK:
+            break
+        if n not in _rec:
+            ranked.append((n, s))
     ranked = ranked[:MAX_PICK]
     levels = []
     if ranked:
@@ -349,7 +350,7 @@ def build_candidates(draws, rec_nums=None):
 # ============================================================
 def render(df_data, H):
     st.title("🎡 轮盘预测系统（欧式 0~36）")
-    st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤15 个）。")
+    st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤10 个）。")
 
     draws = load_history(H)
 
@@ -400,7 +401,7 @@ def render(df_data, H):
     for kind, vals in alerts:
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
 
-    st.markdown("### 🎯 候选号码（最多 15 个）")
+    st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
     else:
@@ -420,7 +421,7 @@ def render(df_data, H):
                            file_name="轮盘候选.csv", mime="text/csv",
                            key="rou_dl")
 
-    st.markdown("### 🧠 系统推荐 3 码（已并入上方候选）")
+    st.markdown("### 🧠 系统推荐 4 码（已并入上方候选）")
     if not _top3:
         st.caption("历史数据不足（建议 80 期以上），暂不推荐")
     else:
