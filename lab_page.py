@@ -667,7 +667,7 @@ def _exp_target_multi(loader):
                          "该组首位": top[0],
                          "首位次数": top[1],
                          "该组分布": "、".join(f"{k}{v}"
-                                              for k, v in c.most_common(8))})
+                                              for k, v in c.most_common())})
 
     st.markdown("**各组合分别结果**")
     st.dataframe(pd.DataFrame(per_pair), use_container_width=True,
@@ -677,20 +677,26 @@ def _exp_target_multi(loader):
         st.warning("六组都没有历史命中")
         return
     allc = sum(total.values())
-    st.markdown(f"**汇总前二（锁定第{tgt}球，{attr}，共 {allc} 次）**")
+    st.markdown(f"**汇总累计（锁定第{tgt}球，{attr}，共 {allc} 次）**")
     _rank = total.most_common()
     _top1 = _rank[0][1] if _rank else 0
     _second = next((v for _, v in _rank if v < _top1), None)
     _thr = _second if _second is not None else _top1
     _top_set = [k for k, v in _rank if v >= _thr] if _rank else []
-    _show = [r for r in _rank if r[0] in _top_set]
-    if len(_show) > 2:
-        st.info(f"第 2 名存在并列：{'、'.join(_top_set)}（共 {len(_show)} 个），已一并计入")
+    if len(_top_set) > 1:
+        st.info(f"前二名：{'、'.join(_top_set)}" +
+                ("（含并列）" if len(_top_set) > 2 else ""))
     rows = []
-    for k, v in _show:
+    _prev = None
+    _rank_no = 0
+    for _i, (k, v) in enumerate(_rank):
+        if v != _prev:
+            _rank_no = _i + 1
+            _prev = v
         nums = [n for n, aa in amap.items()
                 if _lo <= n <= _hi and aa.get(attr) == k]
-        rows.append({attr: k, "总次数": v, "占比": f"{v/allc*100:.1f}%",
+        rows.append({"名次": _rank_no, attr: k, "总次数": v,
+                     "占比": f"{v/allc*100:.1f}%",
                      "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
     _top2 = list(_top_set)
 
@@ -708,6 +714,8 @@ def _exp_target_multi(loader):
     def _hl(row):
         if _real and row[attr] == _real:
             return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+        if row[attr] in _top2:
+            return ["background-color:#e8f0fe"] * len(row)
         return [""] * len(row)
     st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
                  hide_index=True)
