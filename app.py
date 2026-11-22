@@ -5564,7 +5564,8 @@ def change_password(username, old_pass, new_pass):
         return False, f"修改失败：{str(e)[:200]}"
 
 
-_LOGIN_TTL_DAYS = 7
+_LOGIN_TTL_SEC = 3600      # 1 小时滑动过期
+_LOGIN_RENEW_SEC = 1800    # 剩余不足 30 分钟自动续期
 
 
 def _login_secret():
@@ -5580,7 +5581,7 @@ def make_login_token(username):
     import base64 as _b64
     import hmac as _hm
     import hashlib as _hl
-    exp = int(_time_sec.time()) + _LOGIN_TTL_DAYS * 86400
+    exp = int(_time_sec.time()) + _LOGIN_TTL_SEC
     _tv = str(st.secrets.get("TOKEN_VERSION", "1"))
     raw = f"{username}|{exp}|{_tv}".encode("utf-8")
     payload = _b64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -5612,6 +5613,45 @@ def check_login_token(tok):
         return user
     except Exception:
         return ""
+
+
+def login_token_left(tok):
+    """令牌剩余秒数；无效返回 0"""
+    import base64 as _b64
+    try:
+        if not tok or "." not in tok:
+            return 0
+        payload = tok.rsplit(".", 1)[0]
+        raw = _b64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
+        parts = raw.rsplit("|", 2)
+        if len(parts) != 3:
+            return 0
+        return int(parts[1]) - int(_time_sec.time())
+    except Exception:
+        return 0
+
+
+def _login_persist_js(tok, need_redirect=False):
+    """把令牌存入浏览器本地；缺失 URL 参数时自动跳转补齐"""
+    import streamlit.components.v1 as _comp
+    _js = """
+<script>
+(function(){
+  var t = %s;
+  var need = %s;
+  try {
+    if (t) { localStorage.setItem('dsh_t', t); }
+    var saved = localStorage.getItem('dsh_t');
+    var u = new URL(window.parent.location.href);
+    if (need && saved && !u.searchParams.get('t')) {
+      u.searchParams.set('t', saved);
+      window.parent.location.replace(u.toString());
+    }
+  } catch (e) {}
+})();
+</script>
+""" % (repr(tok or ""), "true" if need_redirect else "false")
+    _comp.html(_js, height=0)
 
 
 def _qp_set(key, val):
@@ -5862,6 +5902,13 @@ if not st.session_state.get("logged_in"):
     _tok0 = _qp_get("t")
     _u0 = check_login_token(_tok0) if _tok0 else ""
     if _u0:
+        _left = login_token_left(_tok0)
+        if _left < _LOGIN_RENEW_SEC:
+            _tok0 = make_login_token(_u0)
+            _qp_set("t", _tok0)
+        if not st.session_state.get("_login_js_done"):
+            st.session_state["_login_js_done"] = True
+            _login_persist_js(_tok0, need_redirect=not _qp_get("t"))
         _admin_n0 = st.secrets.get("ADMIN_USERNAME", "admin")
         if _u0 == _admin_n0:
             st.session_state.logged_in = True
@@ -5880,4 +5927,7 @@ if not st.session_state.get("logged_in"):
 if not st.session_state.logged_in:
     login_page()
 else:
+    if not st.session_state.get("_login_js_done"):
+        st.session_state["_login_js_done"] = True
+        _login_persist_js(_qp_get("t"))
     main_app()
