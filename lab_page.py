@@ -546,8 +546,27 @@ def _exp_link_attr(loader):
                     if _lo <= n <= _hi and a.get(attr) == k]
             rows.append({attr: k, "次数": v, "占比": f"{v/hits*100:.1f}%",
                          "对应号码": " ".join(f"{n:02d}" for n in sorted(nums))})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True,
-                     hide_index=True)
+        _real = (_attr_of(data[idx + 1], _tgt, attr, zodiac, zattrs, amap)
+                 if idx + 1 < len(data) else "")
+        _rank = [r[attr] for r in rows]
+        _pos = (_rank.index(_real) + 1) if (_real and _real in _rank) else None
+        if _real:
+            if _pos:
+                st.success(f"真实下一期 {data[idx+1][0]} 开 **{_real}**，"
+                           f"在榜上第 {_pos} 位 ✅")
+            else:
+                st.error(f"真实下一期 {data[idx+1][0]} 开 **{_real}**，"
+                         f"未进榜 ❌")
+        _df = pd.DataFrame(rows)
+        if _real:
+            def _hl(row):
+                c = ("background-color:#ffe08a;font-weight:bold"
+                     if row[attr] == _real else "")
+                return [c] * len(row)
+            st.dataframe(_df.style.apply(_hl, axis=1),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.dataframe(_df, use_container_width=True, hide_index=True)
         with st.expander(f"🔍 触发行明细（全部 {len(_detail)} 条，可核对）",
                          expanded=False):
             _ddf = pd.DataFrame(_detail)
