@@ -460,7 +460,8 @@ def _exp_link_attr(loader):
     if not st.button("▶ 运行实验 D", key="lab_d_run"):
         return
 
-    idx = len(data) - 1 if base == "最新" else periods.index(base)
+    idx = (len(data) - 1 if base.startswith("最新一期")
+           else periods.index(base))
     st.markdown(f"**基准期 {periods[idx]}｜属性 {attr}**")
 
     from collections import Counter
@@ -576,8 +577,10 @@ def _exp_target_multi(loader):
     with c2:
         attr = st.selectbox("属性", _LAB_ATTRS, index=0, key="lab_e_attr")
     with c3:
-        base = st.selectbox("基准期", ["最新"] + list(reversed(periods[-300:])),
-                            index=0, key="lab_e_base")
+        base = st.selectbox(
+            "计算来源期（用它推算下一期）",
+            ["最新一期（算下一期）"] + list(reversed(periods[-300:])),
+            index=0, key="lab_e_base")
     _rng = st.radio("球位区间口径",
                     ["严格（数学边界）", "经验（历史99%）"],
                     horizontal=True, key="lab_e_rng")
@@ -585,15 +588,18 @@ def _exp_target_multi(loader):
     if not st.button("▶ 运行实验 E", key="lab_e_run"):
         return
 
-    idx = len(data) - 1 if base == "最新" else periods.index(base)
+    idx = (len(data) - 1 if base.startswith("最新一期")
+           else periods.index(base))
     pairs = [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
     _EMP = {1: (1, 28), 2: (2, 36), 3: (5, 41), 4: (9, 45),
             5: (14, 48), 6: (22, 49), 7: (1, 49)}
     _lo, _hi = (_EMP.get(tgt, (tgt, 43 + tgt)) if _rng.startswith("经验")
                 else (tgt, 43 + tgt))
 
-    st.markdown(f"**基准期 {periods[idx]}｜锁定第{tgt}球｜属性 {attr}｜"
-                f"号码区间 {_lo}~{_hi}**")
+    _tgtname = (periods[idx + 1] if idx + 1 < len(data)
+                else f"{periods[idx]} 的下一期（未开）")
+    st.markdown(f"**用 {periods[idx]} 推算 {_tgtname}｜锁定第{tgt}球｜"
+                f"属性 {attr}｜号码区间 {_lo}~{_hi}**")
 
     from collections import Counter
     total = Counter()
