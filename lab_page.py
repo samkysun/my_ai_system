@@ -887,6 +887,10 @@ def _exp_hot_pick(loader):
     with st.columns([1, 3])[0]:
         _end_p = st.selectbox("回测结束期", list(reversed(periods)), index=0,
                               key="lab_g_end")
+    _win = st.selectbox(
+        "回测滚动窗口（每期用最近多少期算热号）",
+        [50, 100, 200, 500, 0], index=1, key="lab_g_win",
+        format_func=lambda x: "全部累计（推荐不变）" if x == 0 else f"最近 {x} 期")
 
     if not st.button("▶ 运行实验 G", key="lab_g_run"):
         return
@@ -926,9 +930,8 @@ def _exp_hot_pick(loader):
     start = max(topn, _i1)
     end = min(n, _i2 + 1)
     for i in range(start, end):
-        c_hist = seq[:i]
-        if span:
-            c_hist = seq[max(0, i - span):i]
+        _w = int(_win) if int(_win) > 0 else (span or i)
+        c_hist = seq[max(0, i - _w):i]
         if not c_hist:
             continue
         c = Counter(c_hist)
