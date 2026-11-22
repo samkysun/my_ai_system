@@ -1709,40 +1709,36 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    st.caption("第一行：属性类实验")
-    tab2, tabc, tabd, tabe = st.tabs(
-        ["实验B 组合池", "实验C 形态组合",
-         "实验D 属性联动", "实验E 锁定目标球"])
-    with tab2:
-        _exp_pool(H)
-    with tabc:
-        _exp_gate3(H)
-    with tabd:
-        _exp_link_attr(H)
-    with tabe:
-        _exp_target_multi(H)
-
-    st.divider()
-    st.caption("第二行：号码类实验")
-    tabf, tabg, tabh, tabi = st.tabs(
-        ["实验F 三三组合", "实验G 热号回测",
-         "实验H 六码中三", "实验I 加注模拟"])
-    with tabf:
-        _exp_combo_prev(H)
-    with tabg:
-        _exp_hot_pick(H)
+    tabh, tabi, tab4, tab3 = st.tabs(
+        ["实验H 六码中三", "实验I 加注模拟", "结论档案", "清理"])
     with tabh:
         _exp_six_pick(H)
     with tabi:
         _exp_stake_plan(H)
-
-    st.divider()
-    st.caption("第三行：档案与清理")
-    tab4, tab3 = st.tabs(["结论档案", "清理"])
     with tab4:
         _archive()
     with tab3:
         _cleanup(H)
+
+    st.divider()
+    st.caption("📁 旧实验（已收进下拉框，需要时再打开）")
+    _old = st.selectbox(
+        "选择旧实验",
+        ["（不打开）", "实验B 组合池", "实验C 形态组合", "实验D 属性联动",
+         "实验E 锁定目标球", "实验F 三三组合", "实验G 热号回测"],
+        index=0, key="lab_old_pick")
+    if _old.startswith("实验B"):
+        _exp_pool(H)
+    elif _old.startswith("实验C"):
+        _exp_gate3(H)
+    elif _old.startswith("实验D"):
+        _exp_link_attr(H)
+    elif _old.startswith("实验E"):
+        _exp_target_multi(H)
+    elif _old.startswith("实验F"):
+        _exp_combo_prev(H)
+    elif _old.startswith("实验G"):
+        _exp_hot_pick(H)
 
     st.divider()
     st.caption(f"本页所有实验数据统一存入看板的「{SRC_TAG}」来源，便于一键清除。")
