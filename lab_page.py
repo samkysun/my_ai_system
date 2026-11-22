@@ -423,9 +423,6 @@ def _attr_of(period_key, ball, attr, zodiac, zattrs, amap, wx_mode="按号码"):
         return str(num % 10)
     if attr == "数字合":
         return a.get("数字合", "")      # 严格取源数据值（含 22=05合）
-    if attr == "数字五行" and wx_mode == "按生肖":
-        z = zrow[int(ball) - 1] if zrow else ""
-        return zattrs.get(z, {}).get("生肖五行", "")
     if attr == "门数":
         return a.get("门数", "")
     if attr == "段数":
@@ -475,10 +472,7 @@ def _exp_link_attr(loader):
                                 index=0, key="lab_d_span")
         with ac3:
             top_n = st.number_input("显示前 N", 3, 30, 10, 1, key="lab_d_top")
-        _wx_mode = st.radio("数字五行口径",
-                            ["按号码（源数据，不变）", "按生肖（随年份变化）"],
-                            horizontal=True, key="lab_d_wx")
-    _wx_mode = st.session_state.get("lab_d_wx", "按号码（源数据，不变）")
+    _wx_mode = "按号码（源数据，不变）"
     tgt = st.session_state.get("lab_d_tgt", _auto)
     span = st.session_state.get("lab_d_span", "全部")
     top_n = st.session_state.get("lab_d_top", 10)
@@ -527,14 +521,6 @@ def _exp_link_attr(loader):
         def _nums_of(val):
             """把任意属性值翻译成该球位区间内的号码"""
             out = []
-            if attr == "数字五行" and _wx_mode == "按生肖":
-                for n, a in amap.items():
-                    if not (_lo <= n <= _hi):
-                        continue
-                    z = a.get("生肖", "")
-                    if zattrs.get(z, {}).get("生肖五行") == val:
-                        out.append(n)
-                return sorted(out)
             for n, a in amap.items():
                 if _lo <= n <= _hi and a.get(attr) == val:
                     out.append(n)
