@@ -1020,10 +1020,21 @@ def _exp_six_pick(loader):
     with c4:
         _need = st.number_input("目标命中个数", 1, 4, 3, 1, key="lab_h_need")
 
-    ALLOC = {1: 1, 2: 2, 5: 2, 6: 1}       # 系统分配：共 6 个
+    _PLAN = {
+        "4码：第1球2个 + 第6球2个": {1: 2, 6: 2},
+        "5码：第1球2 + 第2球1 + 第6球2": {1: 2, 2: 1, 6: 2},
+        "6码：第1球1 + 第2球2 + 第5球2 + 第6球1": {1: 1, 2: 2, 5: 2, 6: 1},
+        "7码：第1球2 + 第2球2 + 第5球2 + 第6球1": {1: 2, 2: 2, 5: 2, 6: 1},
+        "8码：第1球2 + 第2球2 + 第5球2 + 第6球2": {1: 2, 2: 2, 5: 2, 6: 2},
+    }
+    _pk = st.selectbox("号码方案", list(_PLAN.keys()), index=2,
+                       key="lab_h_plan")
+    ALLOC = _PLAN[_pk]
+    _tote = sum(ALLOC.values())
+    from math import comb as _cb
     st.caption("号码分配：" + "　".join(f"第{k}球 {v} 个"
                                        for k, v in ALLOC.items())
-               + "　（合计 6 个）")
+               + f"　（合计 {_tote} 个，复式 {_cb(_tote, 3)} 组/期）")
 
     if not st.button("▶ 运行实验 H", key="lab_h_run"):
         return
