@@ -1325,11 +1325,11 @@ def _exp_stake_plan(loader):
     # ---- 第五行：滚动窗口 + 执行 ----
     st.caption("热号计算方式")
     _allw = st.checkbox("用全部历史（不滚动）", value=False, key="lab_i_allw")
+    _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
     if _allw:
         st.warning("当前是「全部历史」模式：推荐号码会长期恒定不变")
     else:
         st.info(f"当前是「滚动 {int(_win)} 期」模式：推荐号码会随期变化")
-    _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
     _go = st.button("▶ 运行加注模拟", type="primary", key="lab_i_run")
     if st.button("🔒 锁定当前方案（长期跟踪用）", key="lab_i_lock"):
         _cur = set()
