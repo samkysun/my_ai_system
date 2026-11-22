@@ -1325,6 +1325,10 @@ def _exp_stake_plan(loader):
     # ---- 第五行：滚动窗口 + 执行 ----
     st.caption("热号计算方式")
     _allw = st.checkbox("用全部历史（不滚动）", value=False, key="lab_i_allw")
+    if _allw:
+        st.warning("当前是「全部历史」模式：推荐号码会长期恒定不变")
+    else:
+        st.info(f"当前是「滚动 {int(_win)} 期」模式：推荐号码会随期变化")
     _win = st.slider("滚动窗口（期）", 20, 500, 100, 10, key="lab_i_win")
     _go = st.button("▶ 运行加注模拟", type="primary", key="lab_i_run")
     if st.button("🔒 锁定当前方案（长期跟踪用）", key="lab_i_lock"):
@@ -1447,6 +1451,34 @@ def _exp_stake_plan(loader):
     if gaps:
         st.caption(f"中奖间隔：{len(gaps)} 次｜最短 {min(gaps)} 期｜"
                    f"中位 {sorted(gaps)[len(gaps)//2]} 期｜最长 {max(gaps)} 期")
+
+    # 每期推荐（全部期数）
+    _all_rows = []
+    _cc = {b: Counter() for b in ALLOC}
+    for i in range(len(periods)):
+        if i >= 1:
+            _ps = set()
+            for b, k in ALLOC.items():
+                _ps.update(v for v, _ in _cc[b].most_common(k))
+            _all_rows.append({"期号": periods[i],
+                              "推荐号码": " ".join(f"{v:02d}" for v in sorted(_ps))})
+        for b in ALLOC:
+            _cc[b][seqs[b][i]] += 1
+            if not _allw and i - int(_win) >= 0:
+                _ov = seqs[b][i - int(_win)]
+                _cc[b][_ov] -= 1
+                if _cc[b][_ov] <= 0:
+                    del _cc[b][_ov]
+
+    st.markdown("**每期推荐号码（最近 100 期，最新在上）**")
+    _show = list(reversed(_all_rows))[:100]
+    st.dataframe(pd.DataFrame(_show), use_container_width=True,
+                 hide_index=True, height=300)
+    st.download_button("📥 下载全部期数的推荐号码",
+                       pd.DataFrame(list(reversed(_all_rows))).to_csv(
+                           index=False).encode("utf-8-sig"),
+                       file_name="每期推荐号码.csv", mime="text/csv",
+                       key="lab_i_allcsv")
 
     # 下一期推荐
     st.markdown("**下一期推荐号码**")
