@@ -362,6 +362,98 @@ def learn_rules(draws, lookback=800):
                                   "命中率": rate, "基线": base,
                                   "lift": lift})
 
+    # ---------- 族8：号码段型 ----------
+    segs = [(0, 9), (10, 19), (20, 29), (30, 36)]
+    for lo, hi in segs:
+        events = hits = 0
+        last = -1
+        for i in range(1, n):
+            gap = i - last - 1
+            if last >= 0 and gap >= 15:
+                events += 1
+                if lo <= hist[i] <= hi:
+                    hits += 1
+            if lo <= hist[i] <= hi:
+                last = i
+        if events >= min_n:
+            base = sum(1 for x in hist if lo <= x <= hi) / n
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "号码段", "属性": "区间",
+                              "取值": f"{lo}-{hi}", "条件": "遗漏≥15",
+                              "阈值": lo, "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族9：大小型 ----------
+    for name2, pred in (("小", lambda x: x <= 18), ("大", lambda x: x >= 19)):
+        events = hits = 0
+        last = -1
+        for i in range(1, n):
+            gap = i - last - 1
+            if last >= 0 and gap >= 10:
+                events += 1
+                if pred(hist[i]):
+                    hits += 1
+            if pred(hist[i]):
+                last = i
+        if events >= min_n:
+            base = sum(1 for x in hist if pred(x)) / n
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "大小", "属性": "大小", "取值": name2,
+                              "条件": "遗漏≥10", "阈值": 10,
+                              "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族10：奇偶型 ----------
+    for name2, pred in (("奇", lambda x: x % 2 == 1),
+                        ("偶", lambda x: x % 2 == 0)):
+        events = hits = 0
+        last = -1
+        for i in range(1, n):
+            gap = i - last - 1
+            if last >= 0 and gap >= 10:
+                events += 1
+                if pred(hist[i]):
+                    hits += 1
+            if pred(hist[i]):
+                last = i
+        if events >= min_n:
+            base = sum(1 for x in hist if pred(x)) / n
+            rate = hits / events
+            lift = rate - base
+            if lift >= RULE_MIN_LIFT:
+                rules.append({"类型": "奇偶", "属性": "奇偶", "取值": name2,
+                              "条件": "遗漏≥10", "阈值": 10,
+                              "样本": events, "命中": hits,
+                              "命中率": rate, "基线": base, "lift": lift})
+
+    # ---------- 族11：两期序列型（前两期属性组合 → 下期） ----------
+    for key in RULE_ATTRS:
+        seq = [_attr_val(x, key) for x in hist]
+        base_map = {}
+        for v in set(seq):
+            base_map[v] = seq.count(v) / n
+        pat = {}
+        for i in range(2, n):
+            pat.setdefault((seq[i - 2], seq[i - 1]), {}).setdefault(seq[i], 0)
+            pat[(seq[i - 2], seq[i - 1])][seq[i]] += 1
+        for (a1, a2), m in pat.items():
+            tot = sum(m.values())
+            if tot < min_n:
+                continue
+            for b, c in m.items():
+                rate = c / tot
+                lift = rate - base_map.get(b, 0)
+                if lift >= RULE_MIN_LIFT * 2:
+                    rules.append({"类型": "序列", "属性": key, "取值": b,
+                                  "条件": f"{a1}→{a2}", "阈值": 0,
+                                  "样本": tot, "命中": c,
+                                  "命中率": rate,
+                                  "基线": base_map.get(b, 0), "lift": lift})
+
     rules.sort(key=lambda x: -x["lift"])
     return rules
 
@@ -414,6 +506,44 @@ def apply_rules(draws, rules, om):
             except Exception:
                 lo, hi = 0, 999
             hit = lo <= g <= hi
+        elif typ == "号码段":
+            seg = r["取值"].split("-")
+            g = 0
+            for x in reversed(draws):
+                if int(seg[0]) <= x <= int(seg[1]):
+                    break
+                g += 1
+            else:
+                g = len(draws)
+            hit = g >= 15
+        elif typ == "大小":
+            pred = (lambda x: x <= 18) if r["取值"] == "小" else (lambda x: x >= 19)
+            g = 0
+            for x in reversed(draws):
+                if pred(x):
+                    break
+                g += 1
+            else:
+                g = len(draws)
+            hit = g >= 10
+        elif typ == "奇偶":
+            pred = (lambda x: x % 2 == 1) if r["取值"] == "奇" else \
+                   (lambda x: x % 2 == 0)
+            g = 0
+            for x in reversed(draws):
+                if pred(x):
+                    break
+                g += 1
+            else:
+                g = len(draws)
+            hit = g >= 10
+        elif typ == "序列":
+            if len(draws) >= 2:
+                a1 = _attr_val(draws[-2], key)
+                a2 = _attr_val(draws[-1], key)
+                hit = (r["条件"] == f"{a1}→{a2}")
+            else:
+                hit = False
         elif typ == "姐妹":
             gap = 0
             for i in range(len(draws) - 1, 0, -1):
@@ -437,6 +567,23 @@ def apply_rules(draws, rules, om):
                     score[num] += w
         elif typ == "号遗漏":
             score[int(v)] += w
+        elif typ == "号码段":
+            lo2, hi2 = [int(z) for z in r["取值"].split("-")]
+            for num in range(lo2, hi2 + 1):
+                score[num] += w
+        elif typ == "大小":
+            lo2, hi2 = (0, 18) if r["取值"] == "小" else (19, 36)
+            for num in range(lo2, hi2 + 1):
+                score[num] += w
+        elif typ == "奇偶":
+            want = 1 if r["取值"] == "奇" else 0
+            for num in range(37):
+                if num % 2 == want:
+                    score[num] += w
+        elif typ == "序列":
+            for num in range(37):
+                if _attr_val(num, key) == v:
+                    score[num] += w
         elif typ == "姐妹" and last_draw is not None:
             for num in sister(last_draw):
                 score[num] += w
