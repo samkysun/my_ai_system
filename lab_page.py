@@ -899,7 +899,7 @@ def _exp_combo_prev(loader):
                  hide_index=True)
     st.download_button("📥 下载结果",
                        _df.to_csv(index=False).encode("utf-8-sig"),
-                       file_name=f"实验F_第{ball}球_{periods[idx]}.csv",
+                       file_name=f"实验F_{_ord}_第{ball}球_{_tname}.csv",
                        mime="text/csv", key="lab_f_dl")
 
     with st.expander(f"🔍 命中明细（全部 {len(matched)} 条）", expanded=False):
