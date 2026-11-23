@@ -1538,11 +1538,18 @@ def render(df_data, H):
                          "四宝": a["四宝"], "物象": a["物象"],
                          "五行尾": a["五行尾"], "生肖五行": a["生肖五行"],
                          "阴阳天地": a["阴阳天地"], "波单双": a["波单双"]})
-        _hot = [r2["号码"] for r2 in rows if "极可能" in str(r2["判断"])]
-        _mid = [r2["号码"] for r2 in rows if "较可能" in str(r2["判断"])]
+        _rcmap = {r2["号码"]: int(_rhit.get(r2["号码"], 0)) for r2 in rows}
+        _hot_all = sorted([r2["号码"] for r2 in rows
+                           if _rcmap.get(r2["号码"], 0) >= 3],
+                          key=lambda v: -_rcmap.get(v, 0))
+        _hot = _hot_all[:3]
+        _mid = [r2["号码"] for r2 in rows
+                if "较可能" in str(r2["判断"])]
         if _hot:
+            _extra = len(_hot_all) - len(_hot)
             st.success("🔥 极可能开出：" + "、".join(f"{v}" for v in _hot)
-                       + "（" + str(len(_hot)) + " 个号码同时命中多条规则）")
+                       + (f"（另有 {_extra} 个也命中多条规则，见下表）"
+                          if _extra > 0 else "（最高置信）"))
         elif _mid:
             st.info("⭐ 较可能：" + "、".join(f"{v}" for v in _mid))
         else:
