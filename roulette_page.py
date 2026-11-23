@@ -1326,7 +1326,7 @@ def render(df_data, H):
             _nm0 = sorted(((int(a), b) for a, b in _pf0.get("nums", {}).items()),
                           key=lambda x: -x[1])[:10]
             st.dataframe(pd.DataFrame(
-                [{"排名": i + 1, "号码": f"{a:02d}", "出现": b,
+                [{"排名": i + 1, "号码": f"{a}", "出现": b,
                   "占比": f"{b/_sp0*100:.1f}%"} for i, (a, b) in enumerate(_nm0)]),
                 use_container_width=True, hide_index=True)
             st.caption(
@@ -1365,7 +1365,7 @@ def render(df_data, H):
                     _hot0 = [r0["号码"] for r0 in _rows0 if "极可能" in str(r0["判断"])]
                     if _hot0:
                         st.success("🔥 极可能开出：" +
-                                   "、".join(f"{v0:02d}" for v in _hot0))
+                                   "、".join(f"{v0}" for v in _hot0))
             else:
                 _fr0 = frequency_candidates(_pf0)
                 if _fr0:
@@ -1406,7 +1406,7 @@ def render(df_data, H):
         _who = _dlr_now
         st.info(
             f"☁ 云端档案｜{_who} 累计 {_sp} 期："
-            f"热号 {'、'.join(f'{a:02d}' for a, _ in _nm3)}｜"
+            f"热号 {'、'.join(f'{a}' for a, _ in _nm3)}｜"
             f"生肖 {'、'.join(f'{a}{b/_sp*100:.0f}%' for a, b in _zd3)}｜"
             f"大号 {_prof_use.get('big',0)/_sp*100:.0f}%｜"
             f"姐妹 {_prof_use.get('sister',0)/max(1,_sp-1)*100:.0f}%｜"
@@ -1468,6 +1468,24 @@ def render(df_data, H):
     for kind, vals in alerts:
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
 
+    # ---- 荷官状态说明 ----
+    _dlr_s = _norm_name(st.session_state.get("_roulette_dealer"))
+    if _dlr_s:
+        _pf_s = (st.session_state.get("_roulette_profiles") or {}).get(
+            "官:" + _dlr_s)
+        _seq_s = [int(x) for x in ((_pf_s or {}).get("seq") or [])]
+        if _seq_s and len(_seq_s) >= 20:
+            st.success(f"✅ 已更换为「{_dlr_s}」荷官｜云端有 {len(_seq_s)} 期档案"
+                       f" → 即刻按他的规则出候选")
+        elif _seq_s:
+            st.warning(f"🆕「{_dlr_s}」荷官云端仅 {len(_seq_s)} 期，"
+                       f"样本偏少，候选仅供参考")
+        else:
+            st.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，"
+                       f"需在本页积累（满 20 期开始出规则候选）")
+    else:
+        st.info("尚未选择荷官：候选只按本页数据计算")
+
     st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
@@ -1494,10 +1512,10 @@ def render(df_data, H):
         _hot = [r2["号码"] for r2 in rows if "极可能" in str(r2["判断"])]
         _mid = [r2["号码"] for r2 in rows if "较可能" in str(r2["判断"])]
         if _hot:
-            st.success("🔥 极可能开出：" + "、".join(f"{v:02d}" for v in _hot)
+            st.success("🔥 极可能开出：" + "、".join(f"{v}" for v in _hot)
                        + "（" + str(len(_hot)) + " 个号码同时命中多条规则）")
         elif _mid:
-            st.info("⭐ 较可能：" + "、".join(f"{v:02d}" for v in _mid))
+            st.info("⭐ 较可能：" + "、".join(f"{v}" for v in _mid))
         else:
             st.caption("本期没有规则共振的号码（无高置信提示）")
         dfc = pd.DataFrame(rows)
@@ -1600,7 +1618,7 @@ def render(df_data, H):
                        if _nums[i2] in sister(_nums[i2 - 1]))
             _adj = sum(1 for i2 in range(1, len(_nums))
                        if _nums[i2] in wheel_neighbors(_nums[i2 - 1]))
-            _top3 = "、".join(f"{v:02d}" for v, _ in _c0.most_common(3))
+            _top3 = "、".join(f"{v}" for v, _ in _c0.most_common(3))
             _rows_d.append({
                 "荷官": _nm,
                 "期数": _n0,
@@ -1700,7 +1718,7 @@ def render(df_data, H):
                 "荷官": str(_k)[2:],
                 "累计期数": _sp,
                 "可用序列": len(_v.get("seq", []) or []),
-                "最热号码": "、".join(f"{a:02d}" for a, _ in _nm2),
+                "最热号码": "、".join(f"{a}" for a, _ in _nm2),
                 "最热生肖": "、".join(f"{a}{b/_sp*100:.0f}%" for a, b in _zod2),
                 "大号%": f"{_v.get('big',0)/_sp*100:.0f}%",
                 "单数%": f"{_v.get('odd',0)/_sp*100:.0f}%",
