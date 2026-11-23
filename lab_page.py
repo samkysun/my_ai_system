@@ -1852,6 +1852,42 @@ def _exp_hot_cold(loader):
                            mime="text/csv", key="lab_k_dl")
     st.caption("提示：命中率高不代表能盈利，还要看与「随机取值」基线比较；"
                "追热命中率若低于 1/取值数，说明该属性无规律。")
+    st.markdown("**跨球位对照（用 A 球的匹配规律预测 B 球）**")
+    if st.button("▶ 运行跨球对照", key="lab_k_cross"):
+        _seqs = vals
+        _mat = []
+        for _b0 in range(1, 7):
+            _row = {"规律来源": f"第{_b0}球"}
+            for _b1 in range(1, 7):
+                _s0 = _seqs[_b0]
+                _s1 = _seqs[_b1]
+                _idx = _dd(_C)
+                _seen = _C()
+                _ok = _tot2 = 0
+                for _i in range(1, n - 1):
+                    _idx[_s0[_i - 1]][_s1[_i]] += 1
+                    _seen[_s0[_i - 1]] += 1
+                    if _i < start:
+                        continue
+                    _v = _s0[_i]
+                    if _seen.get(_v, 0) < int(need):
+                        continue
+                    _mc = _idx.get(_v)
+                    if not _mc:
+                        continue
+                    _pred = _mc.most_common(1)[0][0]
+                    _tot2 += 1
+                    if _s1[_i + 1] == _pred:
+                        _ok += 1
+                _row[f"第{_b1}球"] = (f"{_ok/_tot2*100:.1f}%"
+                                      if _tot2 else "—")
+            _mat.append(_row)
+        st.dataframe(pd.DataFrame(_mat), use_container_width=True,
+                     hide_index=True)
+        st.caption("行 = 提供规律（基准列）的球位；列 = 被预测的球位。"
+                   "数值为追热命中率，可与你单球回测结果对照。")
+
+
 
 
 # =====================================================================
