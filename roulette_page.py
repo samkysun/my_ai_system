@@ -1309,35 +1309,8 @@ def render(df_data, H):
     if "_roulette_known_names" not in st.session_state:
         st.session_state["_roulette_known_names"] = load_known_names(H, _ven)
 
-    _v1, _v2 = st.columns([2, 2])
-    with _v1:
-        _vlist = st.session_state.get("_roulette_venues", []) or []
-        _vopts = (_vlist or ["（未命名场所）"]) + ["➕ 新建场所"]
-        _vidx = _vopts.index(_ven) if _ven in _vopts else 0
-        _vsel = st.selectbox("场所", _vopts, index=_vidx, key="rou_venue_sel")
-        if _vsel == "➕ 新建场所":
-            _vnew = _norm_name(st.text_input("输入新场所名字",
-                                             key="rou_venue_new"))
-            if st.button("➕ 创建并切换", key="rou_venue_add") and _vnew:
-                _vs = set(st.session_state.get("_roulette_venues", []) or [])
-                _vs.add(_vnew)
-                st.session_state["_roulette_venues"] = sorted(_vs)
-                st.session_state["_roulette_venue"] = _vnew
-                save_venues(H, sorted(_vs))
-                st.session_state["_roulette_known_names"] = load_known_names(H, _vnew)
-                st.success(f"已切换到新场所：{_vnew}")
-                st.rerun()
-        else:
-            _v = "（未命名场所）" if _vsel == "（未命名场所）" else _vsel
-            if _v != _ven:
-                st.session_state["_roulette_venue"] = _v
-                st.session_state["_roulette_known_names"] = load_known_names(H, _v)
-                st.session_state["_roulette_dealers"] = []
-                st.session_state["_roulette_marks"] = []
-                st.session_state["_roulette_dealer"] = ""
-                st.rerun()
-    with _v2:
-        st.caption("同一场所的荷官与档案互不混淆；切换场所即切换整套数据")
+    if _cur_venue():
+        st.caption(f"当前场所：{_cur_venue()}（切换/新建在页面最下方）")
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
@@ -2004,6 +1977,21 @@ def render(df_data, H):
     st.markdown("### 🏢 新建场所（老场所资料保留）")
     st.caption("不同场所的荷官与规则分开存档，互不混淆。"
                "新建后自动切换，老场所随时可切回，数据不丢。")
+    _vlist2 = st.session_state.get("_roulette_venues", []) or []
+    if len(_vlist2) > 1:
+        _vcur2 = _cur_venue()
+        _vidx2 = _vlist2.index(_vcur2) if _vcur2 in _vlist2 else 0
+        _vsel2 = st.selectbox("切换到已有场所", _vlist2, index=_vidx2,
+                              key="rou_venue_switch")
+        if _vsel2 and _vsel2 != _vcur2:
+            if st.button(f"↔ 切换到「{_vsel2}」", key="rou_venue_switch_btn"):
+                st.session_state["_roulette_venue"] = _vsel2
+                st.session_state["_roulette_known_names"] = load_known_names(H, _vsel2)
+                st.session_state["_roulette_dealers"] = []
+                st.session_state["_roulette_marks"] = []
+                st.session_state["_roulette_dealer"] = ""
+                st.rerun()
+
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
                                    key="rou_venue_add2"))
     if st.button("➕ 新建并切换场所", key="rou_venue_add_btn"):
