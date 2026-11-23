@@ -1352,6 +1352,49 @@ def find_profile(prof, venue, dealer):
     return None, ""
 
 
+def dealer_habits(pf):
+    """从档案里找出这个荷官的显著习惯，返回 [(名称, 实际率, 理论率, z)]"""
+    out = []
+    if not pf:
+        return out
+    n = int(pf.get("spins", 0))
+    if n < 30:
+        return out
+
+    def z(actual, base, cnt_n):
+        p0 = base if base > 0 else 0.001
+        se = (p0 * (1 - p0) / max(1, cnt_n)) ** 0.5
+        return (actual - p0) / se if se > 0 else 0.0
+
+    big = pf.get("big", 0) / n
+    out.append(("大号(19-36)", big, 18 / 37, z(big, 18 / 37, n)))
+    red = pf.get("red", 0) / n
+    out.append(("红波", red, 18 / 37, z(red, 18 / 37, n)))
+    odd = pf.get("odd", 0) / n
+    out.append(("单数", odd, 18 / 37, z(odd, 18 / 37, n)))
+    sis = pf.get("sister", 0) / max(1, n - 1)
+    out.append(("姐妹码", sis, 2 / 37, z(sis, 2 / 37, max(1, n - 1))))
+    adj = pf.get("adj", 0) / max(1, n - 1)
+    out.append(("轮盘相邻", adj, 2 / 37, z(adj, 2 / 37, max(1, n - 1))))
+
+    nums = {int(k): int(v) for k, v in (pf.get("nums") or {}).items()}
+    if nums:
+        top = sorted(nums.items(), key=lambda x: -x[1])[:1]
+        if top:
+            n0, c0 = top[0]
+            out.append((f"偏好号码 {n0}", c0 / n, 1 / 37,
+                        z(c0 / n, 1 / 37, n)))
+        sect = {}
+        for k2, v2 in nums.items():
+            s2 = POS[k2] // 6 + 1
+            sect[s2] = sect.get(s2, 0) + v2
+        if sect:
+            s_best, c_best = max(sect.items(), key=lambda x: x[1])
+            out.append((f"偏爱轮盘第{s_best}段", c_best / n, 6 / 37,
+                        z(c_best / n, 6 / 37, n)))
+    return out
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -1810,6 +1853,27 @@ def render(df_data, H):
         elif _redp <= 0.44:
             for _n2 in (2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35):
                 _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
+        # 习惯加权（z≥2 才生效）
+        _habits = dealer_habits(_prof_use)
+        _hb_note = []
+        for _hn, _hr, _hb, _hz in _habits:
+            if _hz < 2:
+                continue
+            _hb_note.append(f"{_hn} {_hr*100:.0f}%（理论{_hb*100:.0f}%，z={_hz:.1f}）")
+            if _hn.startswith("姐妹码") and draws:
+                for _sn in sister(draws[-1]):
+                    _bonus[_sn] = _bonus.get(_sn, 0) + 0.5
+            elif _hn.startswith("轮盘相邻") and draws:
+                for _wn in wheel_neighbors(draws[-1]):
+                    _bonus[_wn] = _bonus.get(_wn, 0) + 0.5
+            elif _hn.startswith("偏好号码"):
+                try:
+                    _pn = int(_hn.split()[-1])
+                    _bonus[_pn] = _bonus.get(_pn, 0) + 0.4
+                except Exception:
+                    pass
+        st.session_state["_rou_habits_note"] = "；".join(_hb_note)
+
         st.session_state["_rou_bonus_note"] = (
             "热号 " + "、".join(str(a) for a, _ in _nm3) + " 各 +0.6"
             + "；大小倾向 " + ("大" if _bigp >= 0.58 else ("小" if _bigp <= 0.42 else "均衡"))
@@ -2134,6 +2198,10 @@ def render(df_data, H):
     if _bn:
         with st.expander("🧠 系统参考了哪些荷官档案参数（点击查看）", expanded=False):
             st.caption(_bn)
+            _hb2 = st.session_state.get("_rou_habits_note")
+            if _hb2:
+                st.markdown("**系统识别到的显著习惯（z≥2）：**")
+                st.caption(_hb2)
             st.caption("这些参数只用于内部加权，用户只需看上方候选号码。")
 
     try:
