@@ -1652,6 +1652,7 @@ def _venue_section(H, sfx=""):
                 st.session_state["_roulette_dealers"] = []
                 st.session_state["_roulette_marks"] = []
                 st.session_state["_roulette_dealer"] = ""
+                st.session_state["_rou_reset_dealer_widget"] = True
                 st.session_state.pop("_roulette_rhit", None)
                 st.success(f"已切换到「{_vsel2}」，本场数据从 0 开始｜"
                            f"云端该场所有 {len(_pn)} 位荷官档案")
@@ -1689,6 +1690,7 @@ def _venue_section(H, sfx=""):
             st.session_state["_roulette_dealers"] = []
             st.session_state["_roulette_marks"] = []
             st.session_state["_roulette_dealer"] = ""
+            st.session_state["_rou_reset_dealer_widget"] = True
             st.success(f"已新建并切换到：{_nv}")
             st.rerun()
 
@@ -1718,10 +1720,6 @@ def render(df_data, H):
     if "_roulette_dealers" not in st.session_state:
         st.session_state["_roulette_dealers"] = []
 
-    if st.session_state.pop("_rou_reset_dealer_widget", False):
-        for _wk in ("rou_dealer_one", "rou_dealer_sel",
-                    "rou_dealer_name", "rou_dealer_match"):
-            st.session_state.pop(_wk, None)
 
     _pend_save = st.session_state.get("_rou_pending_save")
     if _pend_save:
@@ -1731,6 +1729,11 @@ def render(df_data, H):
                 st.success("上次未保存的档案已补写成功")
         except Exception:
             pass
+
+    if st.session_state.pop("_rou_reset_dealer_widget", False):
+        for _wk in ("rou_dealer_one", "rou_dealer_sel",
+                    "rou_dealer_name", "rou_dealer_match"):
+            st.session_state.pop(_wk, None)
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
