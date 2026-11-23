@@ -1261,10 +1261,10 @@ def render(df_data, H):
     _cloud_seq = []
     if _prof_use:
         _cloud_seq = [int(x) for x in (_prof_use.get("seq") or [])][-300:]
-    if len(_cloud_seq) >= 40:
+    if len(_cloud_seq) >= 20:
         # 有档案时：用云端序列（含历史）作为主统计源
         _calc = _cloud_seq
-        _cold = len(draws) < 40
+        _cold = len(draws) < 20
         if not _cold:
             st.caption(f"☁ 参考云端「{_dlr_now}」档案 {len(_cloud_seq)} 期"
                        f"（本地 {len(draws)} 期已包含在内）")
