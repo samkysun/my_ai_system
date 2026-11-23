@@ -652,9 +652,12 @@ _RULE_CACHE = {}
 def learn_rules_cached(draws, lookback=800):
     """按历史签名缓存，避免每次重算"""
     try:
+        _dl = st.session_state.get("_roulette_dealers", []) or []
+        _dlsig = tuple((int(d0.get("start", 0)), str(d0.get("name", "")))
+                       for d0 in _dl if isinstance(d0, dict))
         sig = (len(draws), lookback,
                tuple(draws[-6:]) if len(draws) >= 6 else tuple(draws),
-               tuple(st.session_state.get("_roulette_dealers", [])))
+               _dlsig)
     except Exception:
         return learn_rules(draws, lookback)
     hit = _RULE_CACHE.get(sig)
