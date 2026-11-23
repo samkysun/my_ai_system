@@ -1310,7 +1310,8 @@ def render(df_data, H):
         st.session_state["_roulette_known_names"] = load_known_names(H, _ven)
 
     if _cur_venue():
-        st.caption(f"当前场所：{_cur_venue()}（切换/新建在页面最下方）")
+        st.caption(f"当前场所：{_cur_venue()}｜"
+                   f"本场数据独立统计（切换/新建在页面最下方）")
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
@@ -1985,11 +1986,19 @@ def render(df_data, H):
                               key="rou_venue_switch")
         if _vsel2 and _vsel2 != _vcur2:
             if st.button(f"↔ 切换到「{_vsel2}」", key="rou_venue_switch_btn"):
+                try:
+                    save_history(H, [])
+                except Exception:
+                    pass
+                st.session_state["_roulette_hist"] = []
+                st.session_state["_roulette_pending"] = []
                 st.session_state["_roulette_venue"] = _vsel2
                 st.session_state["_roulette_known_names"] = load_known_names(H, _vsel2)
                 st.session_state["_roulette_dealers"] = []
                 st.session_state["_roulette_marks"] = []
                 st.session_state["_roulette_dealer"] = ""
+                st.session_state.pop("_roulette_rhit", None)
+                st.success(f"已切换到「{_vsel2}」，本场数据从 0 开始")
                 st.rerun()
 
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
@@ -2001,6 +2010,12 @@ def render(df_data, H):
             _vs2 = set(st.session_state.get("_roulette_venues", []) or [])
             _vs2.add(_nv)
             st.session_state["_roulette_venues"] = sorted(_vs2)
+            try:
+                save_history(H, [])
+            except Exception:
+                pass
+            st.session_state["_roulette_hist"] = []
+            st.session_state["_roulette_pending"] = []
             st.session_state["_roulette_venue"] = _nv
             save_venues(H, sorted(_vs2))
             st.session_state["_roulette_known_names"] = load_known_names(H, _nv)
