@@ -1360,7 +1360,7 @@ def build_candidates(draws, rec_nums=None, extra_bonus=None):
 # ============================================================
 # 页面
 # ============================================================
-def _venue_section(H):
+def _venue_section(H, sfx=""):
     st.divider()
     st.markdown("### 🏢 场所管理（老场所资料保留）")
     st.divider()
@@ -1372,9 +1372,9 @@ def _venue_section(H):
         _vcur2 = _cur_venue()
         _vidx2 = _vlist2.index(_vcur2) if _vcur2 in _vlist2 else 0
         _vsel2 = st.selectbox("切换到已有场所", _vlist2, index=_vidx2,
-                              key="rou_venue_switch")
+                              key=f"rou_venue_switch{sfx}")
         if _vsel2 and _vsel2 != _vcur2:
-            if st.button(f"↔ 切换到「{_vsel2}」", key="rou_venue_switch_btn"):
+            if st.button(f"↔ 切换到「{_vsel2}」", key=f"rou_venue_switch_btn{sfx}"):
                 try:
                     save_history(H, [])
                 except Exception:
@@ -1395,8 +1395,8 @@ def _venue_section(H):
                 st.rerun()
 
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
-                                   key="rou_venue_add2"))
-    if st.button("➕ 新建并切换场所", key="rou_venue_add_btn"):
+                                   key=f"rou_venue_add2{sfx}"))
+    if st.button("➕ 新建并切换场所", key=f"rou_venue_add_btn{sfx}"):
         if not _nv:
             st.warning("请输入场所名字")
         else:
@@ -1562,7 +1562,7 @@ def render(df_data, H):
 
     with st.expander("🏢 场所管理（切换 / 新建场所）", expanded=False):
         try:
-            _venue_section(H)
+            _venue_section(H, "_p")
         except Exception as _ve0:
             st.error(f"场所管理出错：{type(_ve0).__name__}: {_ve0}")
 
@@ -2108,6 +2108,6 @@ def render(df_data, H):
             st.caption("档案为空")
 
     try:
-        _venue_section(H)
+        _venue_section(H, "_b")
     except Exception as _ve2:
         st.error(f"场所管理出错：{type(_ve2).__name__}: {_ve2}")
