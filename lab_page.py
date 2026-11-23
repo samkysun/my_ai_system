@@ -2006,12 +2006,20 @@ def _exp_simple(loader):
             rows_n += 1
             nx = seq[j + 1]
             cnt[nx] += 1
-            detail.append({"历史触发期": periods[j],
-                           "下一期": periods[j + 1],
-                           f"下一期第{ball}球{attr}": nx})
+            _seg_p = [periods[j - d + 1 + q] for q in range(d)]
+            _seg_v = [seq[j - d + 1 + q] for q in range(d)]
+            _seg_n = [data[j - d + 1 + q][1][ball - 1] for q in range(d)]
+            detail.append({
+                "起 ~ 止": f"{_seg_p[0]} ~ {_seg_p[-1]}",
+                "排列(属性)": " → ".join(_seg_v),
+                "排列(号码)": " → ".join(str(x) for x in _seg_n),
+                f"下一期({periods[j + 1]})": nx,
+            })
 
     st.markdown(f"### 本期：{pick} 期，第{ball}球 {attr} = **{v}**")
-    st.caption("联动模式：" + " → ".join(pat) + f"（连续 {d} 期）")
+    _cur_nums = [data[idx - d + 1 + q][1][ball - 1] for q in range(d)]
+    st.caption("本期排列：" + " → ".join(str(x) for x in _cur_nums)
+               + f"（{attr}：" + " → ".join(pat) + f"，共 {d} 期）")
     st.markdown(f"历史上连续相同的有 **{rows_n}** 期（要求 ≥{int(need)} 期）")
     if rows_n < int(need):
         st.warning(f"匹配只有 {rows_n} 期，不足 {int(need)} 期，仅供参考")
