@@ -1757,7 +1757,13 @@ def _exp_hot_cold(loader):
     with c2:
         need = st.number_input("最少匹配行数", 1, 20, 3, 1, key="lab_k_need")
     with c3:
-        bt = st.number_input("回测期数", 50, 3000, 300, 50, key="lab_k_bt")
+        _st_p = st.selectbox("起始期", list(reversed(periods)),
+                             index=min(299, len(periods) - 1),
+                             key="lab_k_start")
+    _c5 = st.columns(2)
+    with _c5[0]:
+        _en_p = st.selectbox("结束期", list(reversed(periods)), index=0,
+                             key="lab_k_end")
     with c4:
         ball0 = st.selectbox("基准球位", list(range(1, 7)), index=0,
                              key="lab_k_ball")
@@ -1769,7 +1775,13 @@ def _exp_hot_cold(loader):
     for b in range(1, 7):
         vals[b] = [val_of(d[1][b - 1], attr) for d in data]
 
-    start = max(50, n - int(bt))
+    _i1 = periods.index(_st_p)
+    _i2 = periods.index(_en_p)
+    if _i1 > _i2:
+        _i1, _i2 = _i2, _i1
+    start = max(50, _i1)
+    end_i = min(n - 1, _i2)
+    st.caption(f"回测区间：{periods[start]} ~ {periods[end_i]}（{end_i - start + 1} 期）")
     rows = []
     per_ball = {b: {"hot": [0, 0], "cold": [0, 0]} for b in range(1, 7)}
     detail = []
@@ -1780,10 +1792,10 @@ def _exp_hot_cold(loader):
         universe = sorted({v for v in seq if v})
         idx = _dd(_C)          # 值 -> 下一期值计数
         seen = _C()            # 值 -> 匹配行数
-        for i in range(1, n - 1):
+        for i in range(1, end_i):
             idx[seq[i - 1]][seq[i]] += 1
             seen[seq[i - 1]] += 1
-            if i < start:
+            if i < start or i > end_i - 1:
                 continue
             v = seq[i]
             cnt = seen.get(v, 0)
