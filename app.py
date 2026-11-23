@@ -277,6 +277,8 @@ def _board_cloud_read():
                 .execute().data) or []
         out = []
         for r in rows:
+            if str(r.get("source", "")).startswith("__"):
+                continue          # 轮盘等内部数据不进入看板
             out.append({
                 "source": r.get("source", ""),
                 "title": r.get("title", ""),
