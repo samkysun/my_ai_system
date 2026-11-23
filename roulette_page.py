@@ -1422,6 +1422,7 @@ def _venue_section(H):
 
 def render(df_data, H):
     st.title("🎡 轮盘预测系统（欧式 0~36）")
+    st.caption("v2026-11-23b｜场所与荷官管理在页面最下方")
     st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤10 个）。")
 
     draws = load_history(H)
