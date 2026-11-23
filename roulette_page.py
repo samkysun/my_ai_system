@@ -1736,9 +1736,9 @@ def render(df_data, H):
     with _d1:
         # 已知荷官（云端名单 + 档案 + 本次会话）
         _ven2 = _cur_venue()
-        if st.session_state.get("_roulette_known_venue") != _ven2:
-            st.session_state["_roulette_known_names"] = load_known_names(H, _ven2)
-            st.session_state["_roulette_known_venue"] = _ven2
+        # 名字严格锁定当前场所：只用云端该场所名单 + 该场所有档案的人
+        st.session_state["_roulette_known_names"] = load_known_names(H, _ven2)
+        st.session_state["_roulette_known_venue"] = _ven2
         _known = set(st.session_state.get("_roulette_known_names", []) or [])
         for _d0 in st.session_state.get("_roulette_dealers", []) or []:
             _nmx = _norm_name(_d0.get("name"))
