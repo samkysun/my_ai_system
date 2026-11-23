@@ -322,8 +322,7 @@ def save_profiles(loader, prof):
         if not fn:
             return False
         txt = json.dumps(prof, ensure_ascii=False)
-        fn(PROFILE_FILE, txt, "轮盘档案更新")
-        return True
+        return bool(fn(PROFILE_FILE, txt, "轮盘档案更新"))
     except Exception:
         return False
 
@@ -1362,8 +1361,12 @@ def render(df_data, H):
                     st.warning("还没有选择荷官：本次只记录号码，不写档案")
                 record_spin(_prof, _keys, int(num), _prev)
                 st.session_state["_roulette_profiles"] = _prof
-                if _keys and not save_profiles(H, _prof):
-                    st.warning("档案写入云端失败（稍后可点底部按钮重试）")
+                _sp_after = int(_prof.get(_keys[0], {}).get("spins", 0)) if _keys else 0
+                _saved = save_profiles(H, _prof) if _keys else False
+                st.session_state["_rou_prof_msg"] = (
+                    f"档案：{_dlr} 累计 {_sp_after} 次" +
+                    ("（已存云端）" if _saved else "（云端保存失败）")
+                ) if _keys else "未选择荷官，本次不写档案"
             except Exception:
                 pass
             st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
@@ -1371,6 +1374,9 @@ def render(df_data, H):
     with c3:
         st.caption(f"已记录 {len(draws)} 期" +
                    (f"｜最新 {draws[-1]}" if draws else ""))
+
+    if st.session_state.get("_rou_prof_msg"):
+        st.caption("☁ " + st.session_state["_rou_prof_msg"])
 
     if draws:
         with st.expander("📜 历史记录", expanded=False):
