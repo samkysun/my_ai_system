@@ -1368,6 +1368,36 @@ def build_candidates(draws, rec_nums=None, extra_bonus=None):
 # ============================================================
 # 页面
 # ============================================================
+def _flush_segment(H, draws):
+    """把最近一段（当前荷官）的录入记录合并进云端档案"""
+    dls = st.session_state.get("_roulette_dealers", []) or []
+    if not dls:
+        return 0
+    last = dls[-1]
+    name = _norm_name(last.get("name"))
+    start = int(last.get("start", 0))
+    if not name or start >= len(draws):
+        return 0
+    seg = list(draws[start:])
+    if not seg:
+        return 0
+    try:
+        prof = load_profiles(H)
+        prev = draws[start - 1] if start > 0 else None
+        for v in seg:
+            record_spin(prof, [_pkey(_cur_venue(), name)], v, prev)
+            prev = v
+        ok = save_profiles(H, prof)
+        st.session_state["_roulette_profiles"] = prof
+        kn = set(st.session_state.get("_roulette_known_names", []) or [])
+        kn.add(name)
+        st.session_state["_roulette_known_names"] = sorted(kn)
+        save_known_names(H, sorted(kn), _cur_venue())
+        return len(seg) if ok else -len(seg)
+    except Exception:
+        return -len(seg)
+
+
 def _venue_section(H, sfx=""):
     st.divider()
     st.markdown("### 🏢 场所管理（老场所资料保留）")
@@ -1527,6 +1557,7 @@ def render(df_data, H):
 
     with _d2:
         if st.button("🔄 换荷官（重新统计）", key="rou_new_dealer"):
+            _fl = _flush_segment(H, draws)
             _marks = list(st.session_state.get("_roulette_marks", []))
             _marks.append(len(draws))
             st.session_state["_roulette_marks"] = _marks
@@ -1551,6 +1582,10 @@ def render(df_data, H):
             _nd = _norm_name(st.session_state.get("_roulette_dealer"))
             _npf = (_prof3 or {}).get(_pkey(_cur_venue(), _nd)) if _nd else None
             _nsp = int((_npf or {}).get("spins", 0))
+            if _fl:
+                st.info(("已把上一位荷官的 %d 期记录存入云端档案"
+                         % abs(_fl)) if _fl > 0
+                        else "上一位荷官记录已记录，但云端保存失败")
             if _nd and _nsp >= 40:
                 st.success(f"已换为「{_nd}」｜云端有 {_nsp} 次记录 → 录入后即可出候选")
             elif _nd and _nsp > 0:
