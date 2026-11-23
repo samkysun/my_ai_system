@@ -1987,19 +1987,22 @@ def _exp_simple(loader):
     with c3:
         attr = st.selectbox("属性", ATTRS, index=0, key="lab_l_attr")
     with c4:
-        need = st.number_input("最少匹配几期", 1, 20, 3, 1,
-                               key="lab_l_need")
+        depth = st.number_input("联动行数（连续几期）", 1, 8, 3, 1,
+                                key="lab_l_depth")
+    need = st.number_input("最少匹配几期", 1, 20, 3, 1, key="lab_l_need")
 
     idx = periods.index(pick)
     seq = [val_of(d[1][ball - 1], attr) for d in data]
     v = seq[idx]
     lo, hi = int(ball), 43 + int(ball)
 
+    d = int(depth)
+    pat = seq[idx - d + 1: idx + 1]
     cnt = _C()
     rows_n = 0
     detail = []
-    for j in range(idx):
-        if seq[j] == v:
+    for j in range(d - 1, idx):
+        if seq[j - d + 1: j + 1] == pat:
             rows_n += 1
             nx = seq[j + 1]
             cnt[nx] += 1
@@ -2008,7 +2011,8 @@ def _exp_simple(loader):
                            f"下一期第{ball}球{attr}": nx})
 
     st.markdown(f"### 本期：{pick} 期，第{ball}球 {attr} = **{v}**")
-    st.markdown(f"历史上同值共 **{rows_n}** 期（要求 ≥{int(need)} 期）")
+    st.caption("联动模式：" + " → ".join(pat) + f"（连续 {d} 期）")
+    st.markdown(f"历史上连续相同的有 **{rows_n}** 期（要求 ≥{int(need)} 期）")
     if rows_n < int(need):
         st.warning(f"匹配只有 {rows_n} 期，不足 {int(need)} 期，仅供参考")
 
