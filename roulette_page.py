@@ -1893,67 +1893,25 @@ def render(df_data, H):
             f"大号 {_prof_use.get('big',0)/_sp*100:.0f}%｜"
             f"姐妹 {_prof_use.get('sister',0)/max(1,_sp-1)*100:.0f}%｜"
             f"相邻 {_prof_use.get('adj',0)/max(1,_sp-1)*100:.0f}%")
-        _use_bonus = st.checkbox(
-            "把这个台/荷官的历史倾向计入候选（轻度加权）", value=False,
-            key="rou_use_bonus")
-        if _use_bonus:
-            for _a, _b2 in _nm3:
-                _bonus[_a] = 0.5
-
-    # ---- 冷启动：本地不足 40 期但云端有该荷官档案 ----
-    _cold = False
-    _cloud_seq = []
-    if _prof_use:
-        _cloud_seq = [int(x) for x in (_prof_use.get("seq") or [])][-300:]
-    if len(_cloud_seq) >= 40:
-        # 有档案时：用云端序列（含历史）作为主统计源
-        _calc = _cloud_seq
-        _cold = len(draws) < 40
-        if not _cold:
-            st.caption(f"☁ 参考云端「{_dlr_now}」档案 {len(_cloud_seq)} 期"
-                       f"（本地 {len(draws)} 期已包含在内）")
-        _sp = int(_prof_use["spins"])
-        _cnt = {int(k): v for k, v in _prof_use.get("nums", {}).items()}
-        _expect = _sp / 37.0
-        _hot = sorted(_cnt.items(), key=lambda x: -x[1])[:10]
-        for _n, _c in _hot:
-            _bonus[_n] = round(min(3.0, max(0.3, (_c / _expect - 1) * 1.5)), 2)
-        st.success(f"☁ 冷启动：使用云端「{_dlr_now}」档案"
-                   f"（累计 {_sp} 期，最近序列 {len(_cloud_seq)} 期）"
-                   f"——系统已用它的历史序列学习规则")
-        _sis_rate = _prof_use.get("sister", 0) / max(1, _sp - 1)
-        _adj_rate = _prof_use.get("adj", 0) / max(1, _sp - 1)
-        if _sis_rate >= 0.08:
-            st.warning(f"该荷官姐妹码偏高（{_sis_rate*100:.0f}%，理论 5.4%）")
-        if _adj_rate >= 0.08:
-            st.warning(f"该荷官轮盘相邻偏高（{_adj_rate*100:.0f}%，理论 5.4%）")
-
-    if len(_calc) < 40:
-        _pf_fb = (st.session_state.get("_roulette_profiles") or {}).get(
-            _pkey(_cur_venue(),
-                  _norm_name(st.session_state.get("_roulette_dealer"))))
-        if _pf_fb and int(_pf_fb.get("spins", 0)) >= 40:
-            _fr1 = frequency_candidates(_pf_fb)
-            if _fr1:
-                st.success(f"☁ 该荷官云端档案 {int(_pf_fb.get('spins',0))} 期"
-                           f"（缺完整序列）→ 按长期频率出候选")
-                st.markdown("### 🎯 候选号码（依据荷官长期频率）")
-                st.dataframe(pd.DataFrame(
-                    [{"号码": a, "判断": b, "偏离": f"{c*100:+.0f}%",
-                      "说明": d} for a, c, b, d in _fr1]),
-                    use_container_width=True, hide_index=True)
-                try:
-                    _venue_section(H)
-                except Exception:
-                    pass
-                return
-        st.warning(f"📉 当前可用数据仅 {len(_calc)} 期（不足 40 期），"
-                   f"暂不给出候选号码。请继续录入或换一位有档案的荷官。")
-        try:
-            _venue_section(H)
-        except Exception:
-            pass
-        return
+        # 自动参考该荷官档案（无需勾选）
+        _spw = int(_prof_use.get("spins", 0))
+        for _a, _b2 in _nm3:
+            _bonus[_a] = _bonus.get(_a, 0) + 0.6
+        _bigp = _prof_use.get("big", 0) / max(1, _spw)
+        if _bigp >= 0.58:
+            for _n2 in range(19, 37):
+                _bonus[_n2] = _bonus.get(_n2, 0) + 0.3
+        elif _bigp <= 0.42:
+            for _n2 in range(0, 19):
+                _bonus[_n2] = _bonus.get(_n2, 0) + 0.3
+        _redp = _prof_use.get("red", 0) / max(1, _spw)
+        if _redp >= 0.56:
+            for _n2 in (1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36):
+                _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
+        elif _redp <= 0.44:
+            for _n2 in (2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35):
+                _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
+        st.caption("已自动参考该荷官档案：热号 +0.6、大小倾向 +0.3、波色倾向 +0.2")
 
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
