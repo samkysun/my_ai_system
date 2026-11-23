@@ -1422,6 +1422,33 @@ def _venue_section(H, sfx=""):
 
 def render(df_data, H):
     st.title("🎡 轮盘预测系统（欧式 0~36）")
+
+    draws = load_history(H)
+    if "_roulette_rules_mem" not in st.session_state:
+        st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
+    if "_roulette_profiles" not in st.session_state:
+        st.session_state["_roulette_profiles"] = load_profiles(H)
+    if "_roulette_venues" not in st.session_state:
+        st.session_state["_roulette_venues"] = load_venues(H)
+    if "_roulette_known_names" not in st.session_state:
+        st.session_state["_roulette_known_names"] = load_known_names(
+            H, _cur_venue())
+    if "_roulette_pending" not in st.session_state:
+        st.session_state["_roulette_pending"] = []
+    if "_roulette_marks" not in st.session_state:
+        st.session_state["_roulette_marks"] = []
+    if "_roulette_dealers" not in st.session_state:
+        st.session_state["_roulette_dealers"] = []
+
+    _pend_save = st.session_state.get("_rou_pending_save")
+    if _pend_save:
+        try:
+            if _direct_gh_write(*_pend_save):
+                st.session_state.pop("_rou_pending_save", None)
+                st.success("上次未保存的档案已补写成功")
+        except Exception:
+            pass
+
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
         # 已知荷官（云端名单 + 档案 + 本次会话）
