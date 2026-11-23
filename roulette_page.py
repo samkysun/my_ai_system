@@ -1037,9 +1037,19 @@ def render(df_data, H):
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
-        _dealer = st.text_input("当前荷官", value=st.session_state.get(
-            "_roulette_dealer", ""), key="rou_dealer_name")
-        if _dealer != st.session_state.get("_roulette_dealer", ""):
+        _known = sorted({d0.get("name", "").strip()
+                         for d0 in st.session_state.get("_roulette_dealers", [])
+                         if d0.get("name", "").strip()})
+        _opts = _known + ["（手动输入）"] if _known else ["（手动输入）"]
+        _cur_name = st.session_state.get("_roulette_dealer", "")
+        _idx = _opts.index(_cur_name) if _cur_name in _opts else len(_opts) - 1
+        _sel = st.selectbox("当前荷官", _opts, index=_idx, key="rou_dealer_sel")
+        if _sel == "（手动输入）":
+            _dealer = st.text_input("输入荷官代号", value=_cur_name,
+                                    key="rou_dealer_name")
+        else:
+            _dealer = _sel
+        if _dealer != _cur_name:
             st.session_state["_roulette_dealer"] = _dealer
     with _d2:
         if st.button("🔄 换荷官（重新统计）", key="rou_new_dealer"):
@@ -1279,27 +1289,29 @@ def render(df_data, H):
         st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
                      hide_index=True)
 
-        # 当前荷官的详细类型
-        _cur_nums = current_segment(draws)
-        if len(_cur_nums) >= 20:
-            st.markdown(f"**当前荷官（{st.session_state.get('_roulette_dealer') or '未命名'}）"
-                        f"的偏好明细**")
-            _n1 = len(_cur_nums)
+        # 选择查看哪位荷官
+        _names = [n0 for n0, _s0, _v0 in _segs if _v0]
+        _view = st.selectbox("查看荷官详情", _names,
+                             index=len(_names) - 1, key="rou_view_dealer")
+        _vnums = next((v0 for n0, _s0, v0 in _segs if n0 == _view), [])
+        if len(_vnums) >= 10:
+            st.markdown(f"**{_view} 的偏好明细（{len(_vnums)} 期）**")
+            _n1 = len(_vnums)
             _c1d = Counter(
                 "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
-                else ("绿(0)" if x == 0 else "蓝波") for x in _cur_nums)
-            _c2d = Counter("单" if x % 2 else "双" for x in _cur_nums)
+                else ("绿(0)" if x == 0 else "蓝波") for x in _vnums)
+            _c2d = Counter("单" if x % 2 else "双" for x in _vnums)
             _c3d = Counter("大(19-36)" if x >= 19 else "小(0-18)"
-                           for x in _cur_nums)
-            _c4d = Counter(f"{x%10}尾" for x in _cur_nums)
-            _c5d = Counter(f"第{POS[x]//6+1}段" for x in _cur_nums)
+                           for x in _vnums)
+            _c4d = Counter(f"{x%10}尾" for x in _vnums)
+            _c5d = Counter(f"第{POS[x]//6+1}段" for x in _vnums)
             _dd = []
-            _c6d = Counter(zodiac_of(x) for x in _cur_nums)
-            _c7d = Counter("与上期姐妹" if _cur_nums[i2] in sister(_cur_nums[i2-1])
-                           else "非姐妹" for i2 in range(1, len(_cur_nums)))
+            _c6d = Counter(zodiac_of(x) for x in _vnums)
+            _c7d = Counter("与上期姐妹" if _vnums[i2] in sister(_vnums[i2-1])
+                           else "非姐妹" for i2 in range(1, len(_vnums)))
             _c8d = Counter("与上期轮盘相邻"
-                           if _cur_nums[i2] in wheel_neighbors(_cur_nums[i2-1])
-                           else "非相邻" for i2 in range(1, len(_cur_nums)))
+                           if _vnums[i2] in wheel_neighbors(_vnums[i2-1])
+                           else "非相邻" for i2 in range(1, len(_vnums)))
             for _title, _cc in (("波色", _c1d), ("单双", _c2d),
                                 ("大小", _c3d), ("尾数", _c4d),
                                 ("轮盘扇区", _c5d), ("生肖", _c6d),
