@@ -1587,15 +1587,6 @@ def render(df_data, H):
         st.caption(f"已记录 {len(draws)} 期" +
                    (f"｜最新 {draws[-1]}" if draws else ""))
 
-    with st.expander("🏢 场所管理（切换 / 新建场所）", expanded=False):
-        try:
-            _venue_section(H, "_p")
-        except Exception as _ve0:
-            st.error(f"场所管理出错：{type(_ve0).__name__}: {_ve0}")
-
-    if st.session_state.get("_rou_prof_msg"):
-        st.caption("☁ " + st.session_state["_rou_prof_msg"])
-
     if draws:
         with st.expander("📜 历史记录", expanded=False):
             df = pd.DataFrame({"序号": list(range(1, len(draws) + 1)),
