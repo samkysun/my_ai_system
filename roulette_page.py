@@ -429,7 +429,56 @@ def _write_cloud(loader, name, text, msg="更新"):
     return False
 
 
+SRC_PROF = "__roulette_profile__"
+
+
+def _sb_client(loader):
+    try:
+        fn = loader.get("supabase")
+        return fn() if fn else None
+    except Exception:
+        return None
+
+
+def load_profiles_sb(loader):
+    c = _sb_client(loader)
+    if not c:
+        return None
+    try:
+        res = (c.table("ai_board").select("title,content")
+               .eq("source", SRC_PROF).execute())
+        out = {}
+        for row in (res.data or []):
+            try:
+                out[row["title"]] = json.loads(row["content"] or "{}")
+            except Exception:
+                continue
+        return out
+    except Exception:
+        return None
+
+
+def save_profiles_sb(loader, prof):
+    c = _sb_client(loader)
+    if not c:
+        return False
+    try:
+        c.table("ai_board").delete().eq("source", SRC_PROF).execute()
+        rows = [{"source": SRC_PROF, "title": k,
+                 "content": json.dumps(v, ensure_ascii=False)}
+                for k, v in (prof or {}).items()]
+        for i in range(0, len(rows), 50):
+            c.table("ai_board").insert(rows[i:i + 50]).execute()
+        return True
+    except Exception:
+        return False
+
+
 def load_profiles(loader):
+    _sb = load_profiles_sb(loader)
+    if _sb:
+        _sb, _d0 = normalize_profiles(_sb)
+        return _sb
     try:
         fn = loader.get("gh_read")
         if not fn:
@@ -448,6 +497,8 @@ def load_profiles(loader):
 
 
 def save_profiles(loader, prof):
+    if save_profiles_sb(loader, prof):
+        return True
     try:
         fn = loader.get("gh_write")
         if not fn:
