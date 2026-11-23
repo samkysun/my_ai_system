@@ -389,6 +389,13 @@ def load_known_names(loader, venue=""):
 
 
 def save_known_names(loader, names, venue=""):
+    # 与云端现有名单合并，绝不丢名字
+    _exist = set()
+    try:
+        _exist.update(load_known_names(loader, venue) or [])
+    except Exception:
+        pass
+    names = sorted(set(_norm_name(x) for x in (names or []) if _norm_name(x)) | _exist)
     c = _sb_client(loader)
     if c:
         try:
