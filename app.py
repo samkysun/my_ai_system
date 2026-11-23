@@ -6066,7 +6066,4 @@ if not st.session_state.get("logged_in"):
 if not st.session_state.logged_in:
     login_page()
 else:
-    if not st.session_state.get("_login_js_done"):
-        st.session_state["_login_js_done"] = True
-        _login_persist_js(_qp_get("t"))
     main_app()
