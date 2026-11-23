@@ -190,10 +190,18 @@ def normalize_profiles(prof, changed=None):
         if not isinstance(v, dict):
             dirty = True
             continue
-        if not str(k).startswith("官:"):
-            dirty = True          # 旧台号/组合键，直接丢弃
-            continue
-        name = _norm_name(str(k)[2:])
+        _kstr = str(k)
+        if _kstr.startswith("官:"):
+            _rawname = _kstr[2:]
+        elif "官:" in _kstr:          # 旧组合键 台:T|官:X → 取荷官名
+            _rawname = _kstr.split("官:", 1)[1]
+            dirty = True
+        elif _kstr.startswith("台:"):
+            continue                  # 纯台号档案，无可归属荷官
+        else:
+            _rawname = _kstr
+            dirty = True
+        name = _norm_name(_rawname)
         if not name:
             dirty = True
             continue
@@ -1794,6 +1802,32 @@ def render(df_data, H):
         if _prows:
             st.dataframe(pd.DataFrame(_prows), use_container_width=True,
                          hide_index=True)
+            _del_names = [str(r0["荷官"]) for r0 in _prows]
+            _dc1, _dc2 = st.columns([2, 1])
+            with _dc1:
+                _del_pick = st.selectbox("选择要删除档案的荷官", _del_names,
+                                         key="rou_prof_del")
+            with _dc2:
+                _del_ok = st.checkbox("确认删除", key="rou_prof_del_ok")
+            if st.button("🗑 删除该荷官档案", key="rou_prof_del_btn"):
+                if not _del_ok:
+                    st.warning("请先勾选「确认删除」")
+                else:
+                    _np = dict(_prof2)
+                    _np.pop("官:" + _del_pick, None)
+                    st.session_state["_roulette_profiles"] = _np
+                    if save_profiles(H, _np):
+                        _kn2 = [x for x in (st.session_state.get(
+                            "_roulette_known_names") or []) if x != _del_pick]
+                        st.session_state["_roulette_known_names"] = _kn2
+                        try:
+                            save_known_names(H, _kn2)
+                        except Exception:
+                            pass
+                        st.success(f"已删除「{_del_pick}」的云端档案")
+                        st.rerun()
+                    else:
+                        st.error("删除失败：云端写入失败")
 
             st.caption("档案只用于识别台/荷官的长期倾向，"
                        "当前推荐仍只看页面上录入的数据。")
