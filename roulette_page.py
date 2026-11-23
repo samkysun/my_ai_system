@@ -1843,6 +1843,7 @@ def render(df_data, H):
                     _np.pop("官:" + _del_pick, None)
                     st.session_state["_roulette_profiles"] = _np
                     if save_profiles(H, _np):
+                        # 1) 名单里删掉
                         _kn2 = [x for x in (st.session_state.get(
                             "_roulette_known_names") or []) if x != _del_pick]
                         st.session_state["_roulette_known_names"] = _kn2
@@ -1850,7 +1851,18 @@ def render(df_data, H):
                             save_known_names(H, _kn2)
                         except Exception:
                             pass
-                        st.success(f"已删除「{_del_pick}」的云端档案")
+                        # 2) 本场分段也删掉
+                        _dl3 = [d0 for d0 in
+                                (st.session_state.get("_roulette_dealers") or [])
+                                if _norm_name(d0.get("name")) != _del_pick]
+                        st.session_state["_roulette_dealers"] = _dl3
+                        st.session_state["_roulette_marks"] = [
+                            int(d0.get("start", 0)) for d0 in _dl3]
+                        # 3) 当前荷官清空
+                        if _norm_name(st.session_state.get("_roulette_dealer")) == _del_pick:
+                            st.session_state["_roulette_dealer"] = ""
+                            st.session_state["rou_dealer_one"] = None
+                        st.success(f"已删除「{_del_pick}」的档案与历史名字")
                         st.rerun()
                     else:
                         st.error("删除失败：云端写入失败")
