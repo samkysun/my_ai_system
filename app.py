@@ -5129,13 +5129,17 @@ def render_admin_panel():
                             _names_ad.remove(_nm)
                             try:
                                 _c_rd.table("ai_board").delete() \
-                                    .eq("source", "__roulette_dealers__") \
-                                    .eq("title", _vsel_ad).execute()
-                                _c_rd.table("ai_board").insert({
-                                    "source": "__roulette_dealers__",
-                                    "title": _vsel_ad,
-                                    "content": json.dumps(_names_ad, ensure_ascii=False)
-                                }).execute()
+                                    .eq("source", "__roulette_dealers__").execute()
+                                _allrows = []
+                                for _vk2, _vn2 in _venue_map.items():
+                                    _lst = (_names_ad if _vk2 == _vsel_ad else _vn2)
+                                    _allrows.append({
+                                        "source": "__roulette_dealers__",
+                                        "title": _vk2,
+                                        "content": json.dumps(sorted(set(_lst)),
+                                                               ensure_ascii=False)})
+                                if _allrows:
+                                    _c_rd.table("ai_board").insert(_allrows).execute()
                                 st.success(f"已删除「{_nm}」")
                                 st.rerun()
                             except Exception as _e_del:
