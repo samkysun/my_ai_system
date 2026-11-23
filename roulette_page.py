@@ -402,7 +402,7 @@ def _direct_gh_write(name, text, msg="更新"):
 
 
 def _write_cloud(loader, name, text, msg="更新"):
-    """先走 loader，失败则直连"""
+    """先走 loader；失败则直连，最多重试 3 次"""
     try:
         fn = loader.get("gh_write")
         if fn:
@@ -411,7 +411,17 @@ def _write_cloud(loader, name, text, msg="更新"):
             _LAST_WRITE_ERR["msg"] = "loader 写入返回 False"
     except Exception as e:
         _LAST_WRITE_ERR["msg"] = f"loader 异常 {type(e).__name__}: {str(e)[:100]}"
-    return _direct_gh_write(name, text, msg)
+    import time as _tm
+    for _i in range(3):
+        if _direct_gh_write(name, text, msg):
+            return True
+        _tm.sleep(0.6)
+    # 记下待补写，下次刷新时重试
+    try:
+        st.session_state["_rou_pending_save"] = (name, text, msg)
+    except Exception:
+        pass
+    return False
 
 
 def load_profiles(loader):
@@ -1360,6 +1370,15 @@ def render(df_data, H):
     draws = load_history(H)
     if "_roulette_rules_mem" not in st.session_state:
         st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
+    _pend_save = st.session_state.get("_rou_pending_save")
+    if _pend_save:
+        try:
+            if _direct_gh_write(*_pend_save):
+                st.session_state.pop("_rou_pending_save", None)
+                st.success("上次未保存的档案已补写成功")
+        except Exception:
+            pass
+
     if "_roulette_profiles" not in st.session_state:
         st.session_state["_roulette_profiles"] = load_profiles(H)
     if "_roulette_venues" not in st.session_state:
