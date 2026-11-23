@@ -1,1 +1,1 @@
-{"draws": [], "pending": [], "dealer_marks": [1, 0], "dealers": [{"start": 1, "name": "000"}, {"start": 0, "name": "1111"}], "dealer_name": "1111", "venue": "美高梅"}
+{"draws": [1], "pending": [], "dealer_marks": [1, 0], "dealers": [{"start": 1, "name": "000"}, {"start": 0, "name": "1111"}], "dealer_name": "1111", "venue": "美高梅"}
