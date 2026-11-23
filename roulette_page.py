@@ -137,14 +137,23 @@ def save_history(loader, draws, pending=None):
     if not fn:
         return False
     try:
-        fn(HIST_FILE, json.dumps({
+        _payload = json.dumps({
             "draws": draws,
             "pending": st.session_state.get("_roulette_pending", []),
             "dealer_marks": st.session_state.get("_roulette_marks", []),
             "dealers": st.session_state.get("_roulette_dealers", []),
             "dealer_name": st.session_state.get("_roulette_dealer", ""),
             "venue": st.session_state.get("_roulette_venue", ""),
-        }, ensure_ascii=False), "轮盘本场记录更新")
+        }, ensure_ascii=False)
+
+        def _bg():
+            try:
+                fn(HIST_FILE, _payload, "轮盘本场记录更新")
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
         return True
     except Exception:
         return False
@@ -271,7 +280,7 @@ def load_venues(loader):
     try:
         fn = loader.get("gh_read")
         if fn:
-            raw = fn(VENUE_FILE)
+            raw = _cached_read(loader, VENUE_FILE)
             if raw:
                 obj = json.loads(raw)
                 if isinstance(obj, list):
@@ -319,6 +328,32 @@ def _split_key(k):
     return DEFAULT_VENUE, ""
 
 
+_RCACHE = {}
+_RCACHE_TTL = 25.0
+
+
+def _cached_read(loader, name):
+    import time as _tm
+    now = _tm.time()
+    ent = _RCACHE.get(name)
+    if ent and now - ent[0] < _RCACHE_TTL:
+        return ent[1]
+    try:
+        fn = loader.get("gh_read")
+        txt = fn(name) if fn else ""
+    except Exception:
+        txt = ""
+    _RCACHE[name] = (now, txt)
+    return txt
+
+
+def _cache_drop(name=None):
+    if name:
+        _RCACHE.pop(name, None)
+    else:
+        _RCACHE.clear()
+
+
 def load_known_names(loader, venue=""):
     try:
         fn = loader.get("gh_read")
@@ -345,7 +380,7 @@ def save_known_names(loader, names, venue=""):
             return False
         obj = {}
         try:
-            raw = fn(KNOWN_FILE) if False else loader.get("gh_read")(KNOWN_FILE)
+            raw = _cached_read(loader, KNOWN_FILE) if False else loader.get("gh_read")(KNOWN_FILE)
             if raw:
                 _o = json.loads(raw)
                 if isinstance(_o, dict):
@@ -517,7 +552,9 @@ def save_profiles(loader, prof):
         if not fn:
             return False
         txt = json.dumps(prof, ensure_ascii=False)
-        return _write_cloud(loader, PROFILE_FILE, txt, "轮盘档案更新")
+        _ok = _write_cloud(loader, PROFILE_FILE, txt, "轮盘档案更新")
+        _cache_drop(PROFILE_FILE)
+        return _ok
     except Exception:
         return False
 
