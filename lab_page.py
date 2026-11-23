@@ -549,6 +549,10 @@ def _exp_link_attr(loader):
     if not st.button("▶ 运行实验 D", key="lab_d_run"):
         return
 
+    _strict = st.checkbox("严格模式：匹配期不包含紧邻基准期的那一期",
+                          value=False, key="lab_d_strict")
+    _blind = st.checkbox("盲测：不显示真实下一期结果",
+                         value=False, key="lab_d_blind")
     idx = (len(data) - 1 if base.startswith("最新一期")
            else periods.index(base))
     st.markdown(f"**基准期 {periods[idx]}｜属性 {attr}**")
@@ -570,7 +574,8 @@ def _exp_link_attr(loader):
         cnt = Counter()
         hits = 0
         _detail = []
-        for i in range(0, idx):
+        _lim = idx - 1 if _strict else idx
+        for i in range(0, max(0, _lim)):
             a1 = _attr_of(data[i], _b1, attr, zodiac, zattrs, amap)
             a2 = _attr_of(data[i], _b2, attr, zodiac, zattrs, amap)
             if a1 == _v1 and a2 == _v2:
@@ -604,6 +609,9 @@ def _exp_link_attr(loader):
                  if idx + 1 < len(data) else "")
         _rank = [r[attr] for r in rows]
         _pos = (_rank.index(_real) + 1) if (_real and _real in _rank) else None
+        if _blind:
+            _real = ""
+            st.caption("盲测模式：已隐藏真实下一期结果")
         if _real:
             if _pos:
                 st.success(f"真实下一期 {data[idx+1][0]} 开 **{_real}**，"
