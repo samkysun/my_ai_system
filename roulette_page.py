@@ -1218,14 +1218,15 @@ def render(df_data, H):
     # ---- 冷启动：本地不足 40 期但云端有该荷官档案 ----
     _cold = False
     _cloud_seq = []
-    if len(_calc) < 40 and _prof_use:
+    if _prof_use:
         _cloud_seq = [int(x) for x in (_prof_use.get("seq") or [])][-300:]
-        if len(_cloud_seq) >= 40:
-            _calc = _cloud_seq
-    if len(_cloud_seq) >= 40 and not draws:
-        pass
-    if len(_cloud_seq) >= 40 and len(draws) < 40 and _prof_use:
-        _cold = True
+    if len(_cloud_seq) >= 40:
+        # 有档案时：用云端序列（含历史）作为主统计源
+        _calc = _cloud_seq
+        _cold = len(draws) < 40
+        if not _cold:
+            st.caption(f"☁ 参考云端「{_dlr_now}」档案 {len(_cloud_seq)} 期"
+                       f"（本地 {len(draws)} 期已包含在内）")
         _sp = int(_prof_use["spins"])
         _cnt = {int(k): v for k, v in _prof_use.get("nums", {}).items()}
         _expect = _sp / 37.0
