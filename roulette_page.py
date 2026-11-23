@@ -1181,7 +1181,7 @@ def render(df_data, H):
 
     # ---------- 各荷官对比 ----------
     st.divider()
-    st.markdown("### 👤 各荷官历史表现对比")
+    st.markdown("### 👤 各荷官偏好分析")
     _segs = dealer_segments(draws)
     if len(_segs) <= 1:
         st.caption("还没有换过荷官；点上方「🔄 换荷官」后可对比。")
@@ -1191,19 +1191,58 @@ def render(df_data, H):
         for _nm, _st0, _nums in _segs:
             if not _nums:
                 continue
+            _n0 = len(_nums)
             _c0 = Counter(_nums)
+
+            def _pref(fn):
+                c = Counter(fn(x) for x in _nums)
+                v, k = c.most_common(1)[0]
+                return f"{v} {k/_n0*100:.0f}%"
+
+            _bal = _pref(lambda x: "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36} else ("绿" if x == 0 else "蓝波"))
+            _oddeven = _pref(lambda x: "双" if x % 2 == 0 else "单")
+            _big = _pref(lambda x: "大(19-36)" if x >= 19 else "小(0-18)")
+            _seg = _pref(lambda x: f"{x//10*10}-{x//10*10+9}" if x < 30 else "30-36")
+            _tail = _pref(lambda x: f"{x%10}尾")
+            _sector = _pref(lambda x: f"第{POS[x]//6+1}段")
             _top3 = "、".join(f"{v:02d}" for v, _ in _c0.most_common(3))
-            _seg_hot = Counter(x // 6 for x in _nums)
-            _sector = _seg_hot.most_common(1)[0][0] if _seg_hot else 0
             _rows_d.append({
                 "荷官": _nm,
-                "期数": len(_nums),
-                "起始序号": _st0 + 1,
+                "期数": _n0,
+                "波色偏好": _bal,
+                "单双": _oddeven,
+                "大小": _big,
+                "号码段": _seg,
+                "尾数": _tail,
+                "轮盘扇区": _sector,
                 "最热号码": _top3,
-                "偏好扇区": f"第{_sector+1}段（{_sector*6}~{min(36,_sector*6+5)}）",
-                "是否当前": "✅" if _st0 == _cur_start else "",
+                "当前": "✅" if _st0 == _cur_start else "",
             })
         st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
                      hide_index=True)
-        st.caption("说明：分段按你点「换荷官」的位置划分；"
-                   "当前荷官段最热号码仅供参考。")
+
+        # 当前荷官的详细类型
+        _cur_nums = current_segment(draws)
+        if len(_cur_nums) >= 20:
+            st.markdown(f"**当前荷官（{st.session_state.get('_roulette_dealer') or '未命名'}）"
+                        f"的偏好明细**")
+            _n1 = len(_cur_nums)
+            _c1d = Counter(
+                "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
+                else ("绿(0)" if x == 0 else "蓝波") for x in _cur_nums)
+            _c2d = Counter("单" if x % 2 else "双" for x in _cur_nums)
+            _c3d = Counter("大(19-36)" if x >= 19 else "小(0-18)"
+                           for x in _cur_nums)
+            _c4d = Counter(f"{x%10}尾" for x in _cur_nums)
+            _c5d = Counter(f"第{POS[x]//6+1}段" for x in _cur_nums)
+            _dd = []
+            for _title, _cc in (("波色", _c1d), ("单双", _c2d),
+                                ("大小", _c3d), ("尾数", _c4d),
+                                ("轮盘扇区", _c5d)):
+                _txt = "、".join(f"{v}{k/_n1*100:.0f}%"
+                                for v, k in _cc.most_common(3))
+                _dd.append({"维度": _title, "分布": _txt})
+            st.dataframe(pd.DataFrame(_dd), use_container_width=True,
+                         hide_index=True)
+        st.caption("说明：百分比 = 该类型在本荷官全部开奖中的占比；"
+                   "样本少时仅供参考。")
