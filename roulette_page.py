@@ -355,6 +355,21 @@ def _cache_drop(name=None):
 
 
 def load_known_names(loader, venue=""):
+    c = _sb_client(loader)
+    if c:
+        try:
+            res = (c.table("ai_board").select("title,content")
+                   .eq("source", SRC_PROF_NAMES).execute())
+            for row in (res.data or []):
+                if row.get("title") == venue:
+                    try:
+                        return [_norm_name(x) for x in
+                                json.loads(row.get("content") or "[]")]
+                    except Exception:
+                        return []
+            return []
+        except Exception:
+            pass
     try:
         fn = loader.get("gh_read")
         if not fn:
@@ -374,6 +389,18 @@ def load_known_names(loader, venue=""):
 
 
 def save_known_names(loader, names, venue=""):
+    c = _sb_client(loader)
+    if c:
+        try:
+            c.table("ai_board").delete().eq("source", SRC_PROF_NAMES) \
+                .eq("title", venue).execute()
+            c.table("ai_board").insert({
+                "source": SRC_PROF_NAMES, "title": venue,
+                "content": json.dumps(sorted(set(names)), ensure_ascii=False)
+            }).execute()
+            return True
+        except Exception:
+            pass
     try:
         fn = loader.get("gh_write")
         if not fn:
@@ -465,6 +492,7 @@ def _write_cloud(loader, name, text, msg="更新"):
 
 
 SRC_PROF = "__roulette_profile__"
+SRC_PROF_NAMES = "__roulette_dealers__"
 
 
 def _sb_client(loader):
@@ -507,6 +535,40 @@ def save_profiles_sb(loader, prof):
         return True
     except Exception:
         return False
+
+
+def rebuild_known_lists(loader):
+    """按档案重建各场所名单：只保留该场所有档案的荷官"""
+    prof = load_profiles(loader) or {}
+    venues = []
+    try:
+        venues = load_venues(loader) or []
+    except Exception:
+        venues = []
+    buckets = {}
+    for k in prof:
+        vk, dk = _split_key(k)
+        if dk:
+            buckets.setdefault(vk, set()).add(dk)
+    for v in venues:
+        buckets.setdefault(v, set())
+    c = _sb_client(loader)
+    if c:
+        try:
+            c.table("ai_board").delete().eq("source", SRC_PROF_NAMES).execute()
+            rows = [{"source": SRC_PROF_NAMES, "title": v,
+                     "content": json.dumps(sorted(list(ds)), ensure_ascii=False)}
+                    for v, ds in buckets.items()]
+            if rows:
+                c.table("ai_board").insert(rows).execute()
+            return buckets
+        except Exception:
+            pass
+    try:
+        save_known_names(loader, [], "")
+    except Exception:
+        pass
+    return buckets
 
 
 def load_profiles(loader):
@@ -1594,6 +1656,12 @@ def _venue_section(H, sfx=""):
                 st.success(f"已切换到「{_vsel2}」，本场数据从 0 开始｜"
                            f"云端该场所有 {len(_pn)} 位荷官档案")
                 st.rerun()
+
+    if st.button("🩹 修复各场所荷官名单（按档案重建）", key=f"rou_fix_names{sfx}"):
+        _bk = rebuild_known_lists(H)
+        st.session_state["_roulette_known_names"] = load_known_names(H, _cur_venue())
+        st.success("已按档案重建：" + "、".join(f"{k}({len(v)}人)" for k, v in _bk.items()))
+        st.rerun()
 
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
                                    key=f"rou_venue_add2{sfx}"))
