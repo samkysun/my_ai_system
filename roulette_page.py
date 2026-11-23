@@ -1189,7 +1189,32 @@ def render(df_data, H):
                 f"红波 {_pf0.get('red',0)/_sp0*100:.0f}%｜"
                 f"姐妹 {_pf0.get('sister',0)/max(1,_sp0-1)*100:.0f}%｜"
                 f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
-            st.info("录入本期号码后，系统会自动结合这份档案给出候选。")
+            _seq0 = [int(x) for x in (_pf0.get("seq") or [])][-300:]
+            if len(_seq0) >= 40:
+                _top0, _ = smart_top3(_seq0)
+                _rec0 = [n for n, _, _ in _top0] if _top0 else []
+                _om0, _al0, _lv0 = build_candidates(_seq0, _rec0)
+                if _al0:
+                    st.markdown("**该荷官的遗漏提醒（来自云端档案）**")
+                    for _k0, _v0 in _al0:
+                        st.warning(f"{_k0}：{'、'.join(_v0)}")
+                st.markdown("### 🎯 候选号码（基于云端档案）")
+                _rows0 = []
+                for _n0, _s0, _lv0b, _wh0 in _lv0:
+                    _a0 = attrs_of(_n0)
+                    _rc0 = int((st.session_state.get("_roulette_rhit") or {}).get(_n0, 0))
+                    _j0 = ("🔥 极可能开" if _rc0 >= 3 else
+                           "⭐ 较可能" if _rc0 == 2 else
+                           "○ 留意" if _rc0 == 1 else "")
+                    _rows0.append({"等级": _lv0b, "号码": _n0, "判断": _j0,
+                                   "得分": round(_s0, 2),
+                                   "命中条件": "、".join(sorted(set(_wh0))),
+                                   "尾数": _a0["尾数"], "生肖": _a0["生肖"]})
+                st.dataframe(pd.DataFrame(_rows0), use_container_width=True,
+                             hide_index=True)
+                st.caption("以上候选完全来自云端档案，无需本地录入。")
+            else:
+                st.info("录入本期号码后，系统会自动结合这份档案给出候选。")
         return
 
     _seg_draws = current_segment(draws)
