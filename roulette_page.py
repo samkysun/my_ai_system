@@ -1838,7 +1838,14 @@ def render(df_data, H):
             save_history(H, draws, [x for x in st.session_state.get(
                 "_roulette_pending", []) if x != int(num)])
             try:
-                _profA = load_profiles(H)
+                _profA = load_profiles(H) or {}
+                # 与本地会话中的档案合并（取较大值），避免读到旧数据导致少记
+                for _mk, _mv in (st.session_state.get("_roulette_profiles")
+                                 or {}).items():
+                    if _mk not in _profA:
+                        _profA[_mk] = _mv
+                    else:
+                        _merge_profile(_profA[_mk], _mv)
                 _prevA = draws[-2] if len(draws) >= 2 else None
                 _dlrA = _norm_name(st.session_state.get("_roulette_dealer"))
                 if _dlrA:
@@ -2256,6 +2263,22 @@ def render(df_data, H):
         st.caption(f"共 {len(_prows)} 条档案（当前场所：{_cur_venue()}）")
     else:
         st.caption("云端还没有档案；每录入一期会自动累积。")
+
+    if st.button("🩺 校验并修复累计次数", key="rou_fix_spins"):
+        _pfz = st.session_state.get("_roulette_profiles") or {}
+        _fixed = 0
+        for _kz, _vz in _pfz.items():
+            if not isinstance(_vz, dict):
+                continue
+            _before = int(_vz.get("spins", 0))
+            _fix_spins(_vz)
+            if int(_vz.get("spins", 0)) != _before:
+                _fixed += 1
+        st.session_state["_roulette_profiles"] = _pfz
+        _okz = save_profiles(H, _pfz)
+        st.success(f"已校验 {len(_pfz)} 条档案，修正 {_fixed} 条" +
+                   ("（已存云端）" if _okz else "（云端保存失败）"))
+        st.rerun()
 
     if st.button("🔄 重新读取云端档案", key="rou_reload_prof"):
         st.session_state["_roulette_profiles"] = load_profiles(H)
