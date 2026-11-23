@@ -1556,6 +1556,22 @@ def render(df_data, H):
     if not _prof2:
         _prof2 = load_profiles(H)
         st.session_state["_roulette_profiles"] = _prof2
+    # 显示前再按名字合并一次，确保绝不出现同名
+    _merged = {}
+    for _k, _v in (_prof2 or {}).items():
+        if not isinstance(_v, dict) or not str(_k).startswith("官:"):
+            continue
+        _nmx = str(_k)[2:].replace(" ", "").replace("\u3000", "").strip()
+        if not _nmx:
+            continue
+        _nkx = "官:" + _nmx
+        if _nkx in _merged:
+            _merge_profile(_merged[_nkx], _v)
+        else:
+            _merged[_nkx] = dict(_v)
+    _prof2 = _merged
+    st.session_state["_roulette_profiles"] = _prof2
+
     if not _prof2:
         st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
     else:
@@ -1568,7 +1584,7 @@ def render(df_data, H):
                           key=lambda x: -x[1])[:3]
             _zod2 = sorted(_v.get("zod", {}).items(), key=lambda x: -x[1])[:2]
             _prows.append({
-                "对象": _k,
+                "荷官": str(_k)[2:],
                 "累计期数": _sp,
                 "可用序列": len(_v.get("seq", []) or []),
                 "最热号码": "、".join(f"{a:02d}" for a, _ in _nm2),
