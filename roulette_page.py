@@ -1756,9 +1756,17 @@ def render(df_data, H):
                     [{"号码": a, "判断": b, "偏离": f"{c*100:+.0f}%",
                       "说明": d} for a, c, b, d in _fr1]),
                     use_container_width=True, hide_index=True)
+                try:
+                    _venue_section(H)
+                except Exception:
+                    pass
                 return
         st.warning(f"📉 当前可用数据仅 {len(_calc)} 期（不足 40 期），"
                    f"暂不给出候选号码。请继续录入或换一位有档案的荷官。")
+        try:
+            _venue_section(H)
+        except Exception:
+            pass
         return
 
     _top3, _w = smart_top3(_calc)
