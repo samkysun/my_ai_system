@@ -1414,6 +1414,10 @@ def _venue_section(H, sfx=""):
         if _vsel2 and _vsel2 != _vcur2:
             if st.button(f"↔ 切换到「{_vsel2}」", key=f"rou_venue_switch_btn{sfx}"):
                 try:
+                    _flush_segment(H, st.session_state.get("_roulette_hist", []))
+                except Exception:
+                    pass
+                try:
                     save_history(H, [])
                 except Exception:
                     pass
@@ -1435,6 +1439,10 @@ def _venue_section(H, sfx=""):
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
                                    key=f"rou_venue_add2{sfx}"))
     if st.button("➕ 新建并切换场所", key=f"rou_venue_add_btn{sfx}"):
+        try:
+            _flush_segment(H, st.session_state.get("_roulette_hist", []))
+        except Exception:
+            pass
         if not _nv:
             st.warning("请输入场所名字")
         else:
