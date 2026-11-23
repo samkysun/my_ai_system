@@ -2144,6 +2144,19 @@ def render(df_data, H):
 
     if not _prof2:
         st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
+        if st.button("🔄 重新读取云端档案", key="rou_reload_prof"):
+            _fresh = load_profiles(H)
+            st.session_state["_roulette_profiles"] = _fresh
+            st.success(f"已重新读取：{len(_fresh)} 条档案")
+            st.rerun()
+        _diag = {}
+        try:
+            _rf2 = H.get("gh_read")
+            _tmp = _rf2(PROFILE_FILE) if _rf2 else ""
+            _diag["读取长度"] = len(_tmp or "")
+        except Exception as _de:
+            _diag["读取异常"] = f"{type(_de).__name__}: {_de}"
+        st.caption("诊断：" + "｜".join(f"{k}={v}" for k, v in _diag.items()))
     else:
         _prows = []
         for _k, _v in _prof2.items():
