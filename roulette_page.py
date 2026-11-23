@@ -1540,8 +1540,12 @@ def render(df_data, H):
                 _prof3 = load_profiles(H)          # 换荷官时强制核查云端
                 st.session_state["_roulette_profiles"] = _prof3
                 _okp = save_profiles(H, _prof3)
-                save_known_names(H, st.session_state.get(
-                    "_roulette_known_names", []) or [])
+                _kn3 = set(st.session_state.get("_roulette_known_names", []) or [])
+                _nd3 = _norm_name(st.session_state.get("_roulette_dealer"))
+                if _nd3:
+                    _kn3.add(_nd3)
+                    st.session_state["_roulette_known_names"] = sorted(_kn3)
+                save_known_names(H, sorted(_kn3), _cur_venue())
             except Exception:
                 _okp = False
             _nd = _norm_name(st.session_state.get("_roulette_dealer"))
