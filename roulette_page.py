@@ -2580,6 +2580,20 @@ def render(df_data, H):
             except Exception:
                 st.dataframe(_dfp, use_container_width=True,
                              hide_index=True, height=360)
+            _cl1, _cl2 = st.columns([1, 2])
+            with _cl1:
+                _clok = st.checkbox("确认清空", key="rou_predlog_clok")
+            with _cl2:
+                if st.button("🗑 清空全部命中记录", key="rou_predlog_clear"):
+                    if not _clok:
+                        st.warning("请先勾选「确认清空」")
+                    else:
+                        st.session_state["_rou_pred_log"] = []
+                        _okcl = save_pred_log(H, [])
+                        st.success("已清空云端命中记录" if _okcl
+                                   else "已清空本地，云端写入失败")
+                        st.rerun()
+
             st.download_button("📥 下载命中记录",
                                _dfp.to_csv(index=False).encode("utf-8-sig"),
                                file_name="轮盘候选命中记录.csv",
