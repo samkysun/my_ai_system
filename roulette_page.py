@@ -2594,10 +2594,34 @@ def render(df_data, H):
                                    else "已清空本地，云端写入失败")
                         st.rerun()
 
-            st.download_button("📥 下载命中记录",
-                               _dfp.to_csv(index=False).encode("utf-8-sig"),
-                               file_name="轮盘候选命中记录.csv",
-                               mime="text/csv", key="rou_predlog_dl")
+            _dl1, _dl2 = st.columns(2)
+            with _dl1:
+                st.download_button("📥 下载明细 CSV",
+                                   _dfp.to_csv(index=False).encode("utf-8-sig"),
+                                   file_name="轮盘候选命中记录.csv",
+                                   mime="text/csv", key="rou_predlog_dl")
+            with _dl2:
+                try:
+                    import io as _io
+                    _buf = _io.BytesIO()
+                    with pd.ExcelWriter(_buf, engine="openpyxl") as _w:
+                        _dfp.to_excel(_w, sheet_name="明细", index=False)
+                        if _byv:
+                            pd.DataFrame(
+                                [{"场所": k, "期数": v[0], "命中": v[1],
+                                  "命中率": f"{v[1]/max(1,v[0])*100:.1f}%"}
+                                 for k, v in _byv.items()]).to_excel(
+                                _w, sheet_name="场所统计", index=False)
+                        if _byd:
+                            pd.DataFrame(_rows_d2).to_excel(
+                                _w, sheet_name="荷官统计", index=False)
+                    st.download_button(
+                        "📥 下载完整报表 Excel", _buf.getvalue(),
+                        file_name="轮盘命中报表.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="rou_predlog_xls")
+                except Exception:
+                    st.caption("Excel 导出不可用，请用 CSV")
 
     _bn = st.session_state.get("_rou_bonus_note")
     if _bn:
