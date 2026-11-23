@@ -76,11 +76,8 @@ st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
 
 
 def _inject_css(css, key=""):
-    """统一用 markdown 注入样式（st.html 会引发 removeChild 报错）"""
-    try:
-        st.markdown(css, unsafe_allow_html=True)
-    except Exception:
-        pass
+    """暂时关闭样式注入：<style> 注入会在重跑时触发 removeChild 报错"""
+    return
 
 
 _inject_css(GLOBAL_RESULT_CSS)
