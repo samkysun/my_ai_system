@@ -285,9 +285,10 @@ def save_venues(loader, names):
         fn = loader.get("gh_write")
         if not fn:
             return False
-        return bool(fn(VENUE_FILE,
-                       json.dumps(sorted(set(names)), ensure_ascii=False),
-                       "场所名单更新"))
+        return _write_cloud(
+            loader, VENUE_FILE,
+            json.dumps(sorted(set(names)), ensure_ascii=False),
+            "场所名单更新")
     except Exception:
         return False
 
@@ -349,10 +350,58 @@ def save_known_names(loader, names, venue=""):
         except Exception:
             obj = {}
         obj[venue] = sorted(set(names))
-        return bool(fn(KNOWN_FILE, json.dumps(obj, ensure_ascii=False),
-                       "荷官名单更新"))
+        return _write_cloud(
+            loader, KNOWN_FILE,
+            json.dumps(obj, ensure_ascii=False), "荷官名单更新")
     except Exception:
         return False
+
+
+def _direct_gh_write(name, text, msg="更新"):
+    """直接用 secrets 里的 token 写 GitHub（绕过 loader）"""
+    import base64 as _b64
+    import urllib.request as _ur
+    import urllib.error as _ue
+    try:
+        tk = st.secrets.get("GITHUB_TOKEN", "")
+        rp = st.secrets.get("GITHUB_REPO", "")
+        if not tk or not rp:
+            return False
+        hd = {"Authorization": f"Bearer {tk}",
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json"}
+        sha = None
+        try:
+            rq = _ur.Request(
+                f"https://api.github.com/repos/{rp}/contents/{name}?ref=main",
+                headers=hd)
+            with _ur.urlopen(rq, timeout=20) as r:
+                sha = json.loads(r.read().decode()).get("sha")
+        except _ue.HTTPError:
+            sha = None
+        body = {"message": msg,
+                "content": _b64.b64encode(text.encode("utf-8")).decode(),
+                "branch": "main"}
+        if sha:
+            body["sha"] = sha
+        rq2 = _ur.Request(
+            f"https://api.github.com/repos/{rp}/contents/{name}",
+            data=json.dumps(body).encode(), headers=hd, method="PUT")
+        with _ur.urlopen(rq2, timeout=30) as r:
+            return r.status in (200, 201)
+    except Exception:
+        return False
+
+
+def _write_cloud(loader, name, text, msg="更新"):
+    """先走 loader，失败则直连"""
+    try:
+        fn = loader.get("gh_write")
+        if fn and fn(name, text, msg):
+            return True
+    except Exception:
+        pass
+    return _direct_gh_write(name, text, msg)
 
 
 def load_profiles(loader):
@@ -379,7 +428,7 @@ def save_profiles(loader, prof):
         if not fn:
             return False
         txt = json.dumps(prof, ensure_ascii=False)
-        return bool(fn(PROFILE_FILE, txt, "轮盘档案更新"))
+        return _write_cloud(loader, PROFILE_FILE, txt, "轮盘档案更新")
     except Exception:
         return False
 
