@@ -153,6 +153,11 @@ def _norm_name(s):
     if s is None:
         return ""
     s = str(s).replace("\u3000", "").replace("\xa0", "")
+    try:
+        import unicodedata as _ud
+        s = _ud.normalize("NFKC", s)
+    except Exception:
+        pass
     return _re.sub(r"\s+", "", s).strip()
 
 
