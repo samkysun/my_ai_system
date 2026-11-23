@@ -2026,54 +2026,6 @@ def render(df_data, H):
         st.caption(f"已记录 {len(draws)} 期" +
                    (f"｜最新 {draws[-1]}" if draws else ""))
 
-    with st.expander("⚡ 批量录入（推荐：一次输入多期，避免连点丢数）",
-                     expanded=False):
-        _bulk = st.text_area("号码（逗号/空格/换行分隔）", height=90,
-                             key="rou_bulk2",
-                             placeholder="例：12 5 31 0 17 8 24")
-        _bd2 = _norm_name(st.session_state.get("_roulette_dealer"))
-        st.caption(f"将计入：{_cur_venue()}｜荷官 {_bd2 or '（未选）'}｜"
-                   f"当前已记录 {len(draws)} 期")
-        if st.button("⚡ 一次性录入", key="rou_bulk2_run"):
-            _nums2 = []
-            for _tk in ((_bulk or "").replace("，", " ").replace(",", " ")
-                        .replace("\n", " ").replace("\t", " ")
-                        .replace(";", " ").split(" ")):
-                _tk = _tk.strip()
-                if not _tk:
-                    continue
-                try:
-                    _v2 = int(float(_tk))
-                except Exception:
-                    continue
-                if 0 <= _v2 <= 36:
-                    _nums2.append(_v2)
-            if not _nums2:
-                st.warning("没解析到有效号码")
-            elif not _bd2:
-                st.warning("请先选择荷官")
-            else:
-                _cur2 = list(st.session_state.get("_roulette_hist", []))
-                _prev2 = _cur2[-1] if _cur2 else None
-                _pf2 = load_profiles(H) or {}
-                for _vv2 in _nums2:
-                    record_spin(_pf2, [_pkey(_cur_venue(), _bd2)], _vv2, _prev2)
-                    _prev2 = _vv2
-                _cur2.extend(_nums2)
-                st.session_state["_roulette_hist"] = _cur2
-                st.session_state["_roulette_profiles"] = _pf2
-                save_history(H, _cur2)
-                _ok2 = save_profiles(H, _pf2)
-                _kn2b = set(st.session_state.get("_roulette_known_names", []) or [])
-                _kn2b.add(_bd2)
-                st.session_state["_roulette_known_names"] = sorted(_kn2b)
-                save_known_names(H, sorted(_kn2b), _cur_venue())
-                _tot2 = int(_pf2.get(_pkey(_cur_venue(), _bd2), {}).get("spins", 0))
-                st.session_state["_rou_prof_msg"] = (
-                    f"批量录入 {len(_nums2)} 期｜{_bd2} 累计 {_tot2} 次" +
-                    ("（已存云端）" if _ok2 else "（云端保存失败）"))
-                st.rerun()
-
     if st.session_state.get("_rou_prof_msg"):
         st.caption("☁ " + st.session_state["_rou_prof_msg"])
 
