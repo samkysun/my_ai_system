@@ -2332,6 +2332,27 @@ def render(df_data, H):
     else:
         st.caption("云端还没有档案；每录入一期会自动累积。")
 
+    if st.button("🧮 按序列重算姐妹/相邻/大小等统计", key="rou_recalc"):
+        _pfr = st.session_state.get("_roulette_profiles") or {}
+        _n_r = 0
+        for _kr, _vr in _pfr.items():
+            _seqr = [int(x) for x in (_vr.get("seq") or [])]
+            if len(_seqr) < 2:
+                continue
+            _vr["sister"] = sum(1 for i in range(1, len(_seqr))
+                                if _seqr[i] in sister(_seqr[i - 1]))
+            _vr["adj"] = sum(1 for i in range(1, len(_seqr))
+                             if _seqr[i] in wheel_neighbors(_seqr[i - 1]))
+            _vr["big"] = sum(1 for x in _seqr if x >= 19)
+            _vr["odd"] = sum(1 for x in _seqr if x % 2 == 1)
+            _vr["red"] = sum(1 for x in _seqr
+                             if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36})
+            _n_r += 1
+        st.session_state["_roulette_profiles"] = _pfr
+        _okr = save_profiles(H, _pfr)
+        st.success(f"已重算 {_n_r} 条档案" + ("（已存云端）" if _okr else "（保存失败）"))
+        st.rerun()
+
     if st.button("🩺 校验并修复累计次数", key="rou_fix_spins"):
         _pfz = st.session_state.get("_roulette_profiles") or {}
         _fixed = 0
