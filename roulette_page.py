@@ -2245,7 +2245,7 @@ def render(df_data, H):
         st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
     if st.button("🔧 测试云端写入", key="rou_write_test"):
         _tn = "roulette_write_test.json"
-        _payload = json.dumps({"time": _t.strftime("%Y-%m-%d %H:%M:%S"),
+        _payload = json.dumps({"time": time.strftime("%Y-%m-%d %H:%M:%S"),
                                "venue": _cur_venue()},
                               ensure_ascii=False)
         _r1 = False
