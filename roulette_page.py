@@ -1213,17 +1213,7 @@ def render(df_data, H):
             _typed = st.text_input("输入荷官全名", value="",
                                    key="rou_dealer_name",
                                    placeholder="先输入关键字，下面下拉会筛选历史名字")
-            _kw3 = _norm_name(_typed)
-            _hits3 = ([x for x in _known if _kw3 in x] if _kw3 else _known)
-            _opts3 = _hits3 + ["（使用上面输入的新名字）"]
-            _pick3 = st.selectbox(
-                "匹配到的历史荷官（输入关键字会自动筛选）", _opts3, index=0,
-                key="rou_dealer_match",
-                help="选中历史名字=沿用旧档案；选最后一项=用新名字建档")
-            if _pick3 == "（使用上面输入的新名字）":
-                _dealer = _kw3
-            else:
-                _dealer = _pick3
+            _dealer = _norm_name(_typed)
         else:
             _dealer = _sel
         if _dealer:
