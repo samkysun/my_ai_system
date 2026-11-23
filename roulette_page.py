@@ -239,22 +239,14 @@ def normalize_profiles(prof, changed=None):
         if not isinstance(v, dict):
             dirty = True
             continue
-        _kstr = str(k)
-        if _kstr.startswith("官:"):
-            _rawname = _kstr[2:]
-        elif "官:" in _kstr:          # 旧组合键 台:T|官:X → 取荷官名
-            _rawname = _kstr.split("官:", 1)[1]
-            dirty = True
-        elif _kstr.startswith("台:"):
-            continue                  # 纯台号档案，无可归属荷官
-        else:
-            _rawname = _kstr
-            dirty = True
-        name = _norm_name(_rawname)
+        _venue_k, _dealer_k = _split_key(k)
+        name = _dealer_k
+        if not name:
+            continue
         if not name:
             dirty = True
             continue
-        nk = "官:" + name
+        nk = _pkey(_venue_k, name)
         if nk in out:
             _merge_profile(out[nk], v)
             dirty = True
@@ -271,7 +263,57 @@ def normalize_profiles(prof, changed=None):
 KNOWN_FILE = "roulette_dealers.json"
 
 
-def load_known_names(loader):
+VENUE_FILE = "roulette_venues.json"
+
+
+def load_venues(loader):
+    try:
+        fn = loader.get("gh_read")
+        if fn:
+            raw = fn(VENUE_FILE)
+            if raw:
+                obj = json.loads(raw)
+                if isinstance(obj, list):
+                    return [str(x) for x in obj if str(x).strip()]
+    except Exception:
+        pass
+    return []
+
+
+def save_venues(loader, names):
+    try:
+        fn = loader.get("gh_write")
+        if not fn:
+            return False
+        return bool(fn(VENUE_FILE,
+                       json.dumps(sorted(set(names)), ensure_ascii=False),
+                       "场所名单更新"))
+    except Exception:
+        return False
+
+
+def _cur_venue():
+    return _norm_name(st.session_state.get("_roulette_venue", ""))
+
+
+def _pkey(venue, dealer):
+    return f"地:{venue}|官:{dealer}" if venue else f"官:{dealer}"
+
+
+def _split_key(k):
+    """返回 (场所, 荷官)"""
+    s = str(k)
+    if s.startswith("地:") and "|官:" in s:
+        v, d = s[2:].split("|官:", 1)
+        return _norm_name(v), _norm_name(d)
+    if s.startswith("官:"):
+        return "", _norm_name(s[2:])
+    if "官:" in s:
+        return "", _norm_name(s.split("官:", 1)[1])
+    return "", ""
+
+
+def load_known_names(loader, venue=""):
     try:
         fn = loader.get("gh_read")
         if not fn:
@@ -279,21 +321,36 @@ def load_known_names(loader):
         raw = fn(KNOWN_FILE)
         if raw:
             obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return [_norm_name(x) for x in (obj.get(venue) or [])
+                        if _norm_name(x)]
             if isinstance(obj, list):
-                return [_norm_name(x) for x in obj if _norm_name(x)]
+                return ([_norm_name(x) for x in obj if _norm_name(x)]
+                        if not venue else [])
     except Exception:
         pass
     return []
 
 
-def save_known_names(loader, names):
+def save_known_names(loader, names, venue=""):
     try:
         fn = loader.get("gh_write")
         if not fn:
             return False
-        fn(KNOWN_FILE, json.dumps(sorted(set(names)), ensure_ascii=False),
-           "荷官名单更新")
-        return True
+        obj = {}
+        try:
+            raw = fn(KNOWN_FILE) if False else loader.get("gh_read")(KNOWN_FILE)
+            if raw:
+                _o = json.loads(raw)
+                if isinstance(_o, dict):
+                    obj = _o
+                elif isinstance(_o, list):
+                    obj = {"": _o}
+        except Exception:
+            obj = {}
+        obj[venue] = sorted(set(names))
+        return bool(fn(KNOWN_FILE, json.dumps(obj, ensure_ascii=False),
+                       "荷官名单更新"))
     except Exception:
         return False
 
@@ -1246,8 +1303,41 @@ def render(df_data, H):
         st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
     if "_roulette_profiles" not in st.session_state:
         st.session_state["_roulette_profiles"] = load_profiles(H)
+    if "_roulette_venues" not in st.session_state:
+        st.session_state["_roulette_venues"] = load_venues(H)
+    _ven = _cur_venue()
     if "_roulette_known_names" not in st.session_state:
-        st.session_state["_roulette_known_names"] = load_known_names(H)
+        st.session_state["_roulette_known_names"] = load_known_names(H, _ven)
+
+    _v1, _v2 = st.columns([2, 2])
+    with _v1:
+        _vlist = st.session_state.get("_roulette_venues", []) or []
+        _vopts = (_vlist or ["（未命名场所）"]) + ["➕ 新建场所"]
+        _vidx = _vopts.index(_ven) if _ven in _vopts else 0
+        _vsel = st.selectbox("场所", _vopts, index=_vidx, key="rou_venue_sel")
+        if _vsel == "➕ 新建场所":
+            _vnew = _norm_name(st.text_input("输入新场所名字",
+                                             key="rou_venue_new"))
+            if st.button("➕ 创建并切换", key="rou_venue_add") and _vnew:
+                _vs = set(st.session_state.get("_roulette_venues", []) or [])
+                _vs.add(_vnew)
+                st.session_state["_roulette_venues"] = sorted(_vs)
+                st.session_state["_roulette_venue"] = _vnew
+                save_venues(H, sorted(_vs))
+                st.session_state["_roulette_known_names"] = load_known_names(H, _vnew)
+                st.success(f"已切换到新场所：{_vnew}")
+                st.rerun()
+        else:
+            _v = "（未命名场所）" if _vsel == "（未命名场所）" else _vsel
+            if _v != _ven:
+                st.session_state["_roulette_venue"] = _v
+                st.session_state["_roulette_known_names"] = load_known_names(H, _v)
+                st.session_state["_roulette_dealers"] = []
+                st.session_state["_roulette_marks"] = []
+                st.session_state["_roulette_dealer"] = ""
+                st.rerun()
+    with _v2:
+        st.caption("同一场所的荷官与档案互不混淆；切换场所即切换整套数据")
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
@@ -1258,10 +1348,9 @@ def render(df_data, H):
             if _nmx:
                 _known.add(_nmx)
         for _k0 in (st.session_state.get("_roulette_profiles") or {}).keys():
-            if str(_k0).startswith("官:"):
-                _nmx = _norm_name(str(_k0)[2:])
-                if _nmx:
-                    _known.add(_nmx)
+            _vk, _dk = _split_key(_k0)
+            if _vk == _ven and _dk:
+                _known.add(_dk)
         _known = sorted(_known)
         _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
 
@@ -1300,7 +1389,7 @@ def render(df_data, H):
                 _kn.add(_dealer)
                 st.session_state["_roulette_known_names"] = sorted(_kn)
                 try:
-                    save_known_names(H, sorted(_kn))
+                    save_known_names(H, sorted(_kn), _ven)
                 except Exception:
                     pass
 
@@ -1356,7 +1445,7 @@ def render(df_data, H):
                 _prof = load_profiles(H)
                 _prev = draws[-2] if len(draws) >= 2 else None
                 _dlr = _norm_name(st.session_state.get("_roulette_dealer", ""))
-                _keys = ["官:" + _dlr] if _dlr else []
+                _keys = [_pkey(_ven, _dlr)] if _dlr else []
                 if not _keys:
                     st.warning("还没有选择荷官：本次只记录号码，不写档案")
                 record_spin(_prof, _keys, int(num), _prev)
@@ -1910,49 +1999,25 @@ def render(df_data, H):
         else:
             st.caption("档案为空")
 
-    # ---------- 清空所有荷官资料（换场所用） ----------
+    # ---------- 新建场所 ----------
     st.divider()
-    st.markdown("### 🧹 换场所：清空所有荷官资料")
-    st.caption("到新场所、荷官全换了时使用。会删除所有荷官名字、云端档案、"
-               "规则记忆与本场记录。")
-
-    if st.button("🗑 删除所有荷官资料", key="rou_clear_all_btn"):
-        st.session_state["_rou_del_step"] = 1
-
-    _step = int(st.session_state.get("_rou_del_step", 0))
-    if _step == 1:
-        st.error("⚠️ 一旦删除就无法恢复，是否确定删除？")
-        st.markdown("**将删除：荷官名单、云端档案、规则记忆、本场记录**")
-        _q1, _q2 = st.columns(2)
-        with _q1:
-            if st.button("✅ 确定删除（不可恢复）", key="rou_del_yes"):
-                try:
-                    save_profiles(H, {})
-                except Exception:
-                    pass
-                try:
-                    save_known_names(H, [])
-                except Exception:
-                    pass
-                try:
-                    _fn = H.get("gh_write")
-                    if _fn:
-                        _fn(RULE_MEM_FILE, "{}", "清空规则记忆")
-                except Exception:
-                    pass
-                for _k in ("_roulette_profiles", "_roulette_known_names",
-                           "_roulette_dealers", "_roulette_marks",
-                           "_roulette_rules_mem", "_roulette_rhit"):
-                    st.session_state.pop(_k, None)
-                st.session_state["_roulette_dealer"] = ""
-                try:
-                    save_history(H, [])
-                except Exception:
-                    pass
-                st.session_state["_rou_del_step"] = 0
-                st.success("已清空：荷官名单、云端档案、规则记忆、本场记录")
-                st.rerun()
-        with _q2:
-            if st.button("✖ 取消", key="rou_del_no"):
-                st.session_state["_rou_del_step"] = 0
-                st.rerun()
+    st.markdown("### 🏢 新建场所（老场所资料保留）")
+    st.caption("不同场所的荷官与规则分开存档，互不混淆。"
+               "新建后自动切换，老场所随时可切回，数据不丢。")
+    _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
+                                   key="rou_venue_add2"))
+    if st.button("➕ 新建并切换场所", key="rou_venue_add_btn"):
+        if not _nv:
+            st.warning("请输入场所名字")
+        else:
+            _vs2 = set(st.session_state.get("_roulette_venues", []) or [])
+            _vs2.add(_nv)
+            st.session_state["_roulette_venues"] = sorted(_vs2)
+            st.session_state["_roulette_venue"] = _nv
+            save_venues(H, sorted(_vs2))
+            st.session_state["_roulette_known_names"] = load_known_names(H, _nv)
+            st.session_state["_roulette_dealers"] = []
+            st.session_state["_roulette_marks"] = []
+            st.session_state["_roulette_dealer"] = ""
+            st.success(f"已新建并切换到：{_nv}")
+            st.rerun()
