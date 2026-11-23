@@ -357,6 +357,9 @@ def save_known_names(loader, names, venue=""):
         return False
 
 
+_LAST_WRITE_ERR = {"msg": ""}
+
+
 def _direct_gh_write(name, text, msg="更新"):
     """直接用 secrets 里的 token 写 GitHub（绕过 loader）"""
     import base64 as _b64
@@ -366,6 +369,7 @@ def _direct_gh_write(name, text, msg="更新"):
         tk = st.secrets.get("GITHUB_TOKEN", "")
         rp = st.secrets.get("GITHUB_REPO", "")
         if not tk or not rp:
+            _LAST_WRITE_ERR["msg"] = "secrets 缺少 GITHUB_TOKEN/REPO"
             return False
         hd = {"Authorization": f"Bearer {tk}",
               "Accept": "application/vnd.github+json",
@@ -388,8 +392,12 @@ def _direct_gh_write(name, text, msg="更新"):
             f"https://api.github.com/repos/{rp}/contents/{name}",
             data=json.dumps(body).encode(), headers=hd, method="PUT")
         with _ur.urlopen(rq2, timeout=30) as r:
-            return r.status in (200, 201)
-    except Exception:
+            ok = r.status in (200, 201)
+            if not ok:
+                _LAST_WRITE_ERR["msg"] = f"HTTP {r.status}"
+            return ok
+    except Exception as e:
+        _LAST_WRITE_ERR["msg"] = f"{type(e).__name__}: {str(e)[:120]}"
         return False
 
 
@@ -397,10 +405,12 @@ def _write_cloud(loader, name, text, msg="更新"):
     """先走 loader，失败则直连"""
     try:
         fn = loader.get("gh_write")
-        if fn and fn(name, text, msg):
-            return True
-    except Exception:
-        pass
+        if fn:
+            if fn(name, text, msg):
+                return True
+            _LAST_WRITE_ERR["msg"] = "loader 写入返回 False"
+    except Exception as e:
+        _LAST_WRITE_ERR["msg"] = f"loader 异常 {type(e).__name__}: {str(e)[:100]}"
     return _direct_gh_write(name, text, msg)
 
 
@@ -1477,7 +1487,8 @@ def render(df_data, H):
                 _saved = save_profiles(H, _prof) if _keys else False
                 st.session_state["_rou_prof_msg"] = (
                     f"档案：{_dlr} 累计 {_sp_after} 次" +
-                    ("（已存云端）" if _saved else "（云端保存失败）")
+                    ("（已存云端）" if _saved
+                     else f"（云端保存失败：{_LAST_WRITE_ERR.get('msg','未知')}）")
                 ) if _keys else "未选择荷官，本次不写档案"
             except Exception:
                 pass
