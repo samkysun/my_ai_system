@@ -206,6 +206,36 @@ def normalize_profiles(prof, changed=None):
     return out, dirty
 
 
+KNOWN_FILE = "roulette_dealers.json"
+
+
+def load_known_names(loader):
+    try:
+        fn = loader.get("gh_read")
+        if not fn:
+            return []
+        raw = fn(KNOWN_FILE)
+        if raw:
+            obj = json.loads(raw)
+            if isinstance(obj, list):
+                return [_norm_name(x) for x in obj if _norm_name(x)]
+    except Exception:
+        pass
+    return []
+
+
+def save_known_names(loader, names):
+    try:
+        fn = loader.get("gh_write")
+        if not fn:
+            return False
+        fn(KNOWN_FILE, json.dumps(sorted(set(names)), ensure_ascii=False),
+           "荷官名单更新")
+        return True
+    except Exception:
+        return False
+
+
 def load_profiles(loader):
     try:
         fn = loader.get("gh_read")
@@ -1155,11 +1185,13 @@ def render(df_data, H):
         st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
     if "_roulette_profiles" not in st.session_state:
         st.session_state["_roulette_profiles"] = load_profiles(H)
+    if "_roulette_known_names" not in st.session_state:
+        st.session_state["_roulette_known_names"] = load_known_names(H)
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
         # 已知荷官（会话内 + 云端档案）
-        _known = set()
+        _known = set(st.session_state.get("_roulette_known_names", []) or [])
         for _d0 in st.session_state.get("_roulette_dealers", []) or []:
             _nmx = _norm_name(_d0.get("name"))
             if _nmx:
@@ -1182,8 +1214,16 @@ def render(df_data, H):
                                                value="", key="rou_dealer_name"))
         else:
             _dealer = _sel
-        if _dealer and _dealer != _cur_name:
+        if _dealer:
             st.session_state["_roulette_dealer"] = _dealer
+            _kn = set(st.session_state.get("_roulette_known_names", []) or [])
+            if _dealer not in _kn:
+                _kn.add(_dealer)
+                st.session_state["_roulette_known_names"] = sorted(_kn)
+                try:
+                    save_known_names(H, sorted(_kn))
+                except Exception:
+                    pass
 
     with _d2:
         if st.button("🔄 换荷官（重新统计）", key="rou_new_dealer"):
