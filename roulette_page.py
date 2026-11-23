@@ -1515,10 +1515,12 @@ def render(df_data, H):
             "官:" + _dlr_s)
         _seq_s = [int(x) for x in ((_pf_s or {}).get("seq") or [])]
         if _seq_s and len(_seq_s) >= 40:
-            st.success(f"✅ 已更换为「{_dlr_s}」荷官｜云端有 {len(_seq_s)} 期档案"
-                       f" → 即刻按他的规则出候选")
+            _tot_s = int((_pf_s or {}).get("spins", 0))
+            st.success(f"✅ 已更换为「{_dlr_s}」荷官｜累计摇珠 {_tot_s} 次"
+                       f"（可用序列 {len(_seq_s)} 期）→ 即刻按他的规则出候选")
         elif _seq_s:
-            st.warning(f"🆕「{_dlr_s}」荷官云端仅 {len(_seq_s)} 期（不足 40），"
+            st.warning(f"🆕「{_dlr_s}」荷官累计 {int((_pf_s or {}).get('spins',0))} 次"
+                       f"（序列 {len(_seq_s)} 期，不足 40），"
                        f"样本偏少，候选仅供参考")
         else:
             st.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，"
@@ -1706,7 +1708,9 @@ def render(df_data, H):
 
             _rows_d.append({
                 "荷官": _nm,
-                "期数": _sp,
+                "本场期数": _sp_local,
+                "累计摇珠": _sp_cloud or _sp_local,
+                "采用期数": _sp,
                 "波色偏好": f"{_bal[0]} {_pct(_bal[1])}",
                 "单双": f"{_odd_s} {_pct(_odd if _odd_s == '单' else _tot - _odd)}",
                 "大小": f"{_big_s} {_pct(_big if _big_s.startswith('大') else _tot - _big)}",
