@@ -1422,38 +1422,6 @@ def _venue_section(H):
 
 def render(df_data, H):
     st.title("🎡 轮盘预测系统（欧式 0~36）")
-    st.caption("v2026-11-23c｜场所管理：下方展开框或页面最底部")
-    with st.expander("🏢 场所管理（切换 / 新建场所）", expanded=False):
-        try:
-            _venue_section(H)
-        except Exception as _ve0:
-            st.error(f"场所管理出错：{type(_ve0).__name__}: {_ve0}")
-    st.caption("输入每期开奖号码，自动统计遗漏并给出候选号码（≤10 个）。")
-
-    draws = load_history(H)
-    if "_roulette_rules_mem" not in st.session_state:
-        st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
-    _pend_save = st.session_state.get("_rou_pending_save")
-    if _pend_save:
-        try:
-            if _direct_gh_write(*_pend_save):
-                st.session_state.pop("_rou_pending_save", None)
-                st.success("上次未保存的档案已补写成功")
-        except Exception:
-            pass
-
-    if "_roulette_profiles" not in st.session_state:
-        st.session_state["_roulette_profiles"] = load_profiles(H)
-    if "_roulette_venues" not in st.session_state:
-        st.session_state["_roulette_venues"] = load_venues(H)
-    _ven = _cur_venue()
-    if "_roulette_known_names" not in st.session_state:
-        st.session_state["_roulette_known_names"] = load_known_names(H, _ven)
-
-    if _cur_venue():
-        st.caption(f"当前场所：{_cur_venue()}｜"
-                   f"本场数据独立统计（切换/新建在页面最下方）")
-
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
         # 已知荷官（云端名单 + 档案 + 本次会话）
@@ -1591,6 +1559,12 @@ def render(df_data, H):
     with c3:
         st.caption(f"已记录 {len(draws)} 期" +
                    (f"｜最新 {draws[-1]}" if draws else ""))
+
+    with st.expander("🏢 场所管理（切换 / 新建场所）", expanded=False):
+        try:
+            _venue_section(H)
+        except Exception as _ve0:
+            st.error(f"场所管理出错：{type(_ve0).__name__}: {_ve0}")
 
     if st.session_state.get("_rou_prof_msg"):
         st.caption("☁ " + st.session_state["_rou_prof_msg"])
