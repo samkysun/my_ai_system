@@ -1747,10 +1747,7 @@ def render(df_data, H):
             _nmx = _norm_name(_d0.get("name"))
             if _nmx:
                 _known.add(_nmx)
-        for _k0 in (st.session_state.get("_roulette_profiles") or {}).keys():
-            _vk, _dk = _split_key(_k0)
-            if _norm_name(_vk) == _ven2 and _dk:
-                _known.add(_dk)
+        # 下拉框只用名单（档案不再自动混入，避免删不掉）
         _known = sorted(_known)
         _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
 
