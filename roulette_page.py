@@ -501,6 +501,14 @@ def save_profiles(loader, prof):
         _LAST_WRITE_ERR["msg"] = "未注入 supabase 客户端"
     elif save_profiles_sb(loader, prof):
         _LAST_WRITE_ERR["msg"] = "supabase 写入成功"
+        # 同时备份到 GitHub（失败不影响主流程）
+        try:
+            _fn2 = loader.get("gh_write")
+            if _fn2:
+                _fn2(PROFILE_FILE, json.dumps(prof, ensure_ascii=False),
+                     "轮盘档案备份")
+        except Exception:
+            pass
         return True
     else:
         _LAST_WRITE_ERR["msg"] = "supabase 写入失败"
