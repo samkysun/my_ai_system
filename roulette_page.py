@@ -1440,6 +1440,11 @@ def render(df_data, H):
     if "_roulette_dealers" not in st.session_state:
         st.session_state["_roulette_dealers"] = []
 
+    if st.session_state.pop("_rou_reset_dealer_widget", False):
+        for _wk in ("rou_dealer_one", "rou_dealer_sel",
+                    "rou_dealer_name", "rou_dealer_match"):
+            st.session_state.pop(_wk, None)
+
     _pend_save = st.session_state.get("_rou_pending_save")
     if _pend_save:
         try:
@@ -2122,7 +2127,7 @@ def render(df_data, H):
                         # 3) 当前荷官清空
                         if _norm_name(st.session_state.get("_roulette_dealer")) == _del_pick:
                             st.session_state["_roulette_dealer"] = ""
-                            st.session_state["rou_dealer_one"] = None
+                            st.session_state["_rou_reset_dealer_widget"] = True
                         st.success(f"已删除「{_del_pick}」的档案与历史名字")
                         st.rerun()
                     else:
