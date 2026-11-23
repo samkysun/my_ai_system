@@ -5099,6 +5099,74 @@ def render_admin_panel():
                 st.session_state["_adm_rp_step"] = 0
                 st.rerun()
 
+    st.divider()
+    st.markdown("### 🎡 轮盘荷官名单管理（按场所）")
+    st.caption("这里增删的名字，就是轮盘页荷官输入框里可选的名单。")
+    try:
+        _c_rd = get_supabase_client()
+        _rows_rd = []
+        if _c_rd:
+            _rows_rd = (_c_rd.table("ai_board").select("title,content")
+                        .eq("source", "__roulette_dealers__").execute().data) or []
+        _venue_map = {}
+        for _r in _rows_rd:
+            try:
+                _venue_map[_r["title"]] = json.loads(_r["content"] or "[]")
+            except Exception:
+                _venue_map[_r["title"]] = []
+        if not _venue_map:
+            st.info("还没有场所名单；请先在轮盘页新建场所。")
+        else:
+            _vsel_ad = st.selectbox("选择场所", sorted(_venue_map.keys()),
+                                    key="adm_rd_venue")
+            _names_ad = list(_venue_map.get(_vsel_ad) or [])
+            st.markdown(f"**当前该场所荷官（{len(_names_ad)} 个）**")
+            if _names_ad:
+                _cols_ad = st.columns(4)
+                for _i, _nm in enumerate(_names_ad):
+                    with _cols_ad[_i % 4]:
+                        if st.button(f"🗑 {_nm}", key=f"adm_rd_del_{_vsel_ad}_{_nm}"):
+                            _names_ad.remove(_nm)
+                            try:
+                                _c_rd.table("ai_board").delete() \
+                                    .eq("source", "__roulette_dealers__") \
+                                    .eq("title", _vsel_ad).execute()
+                                _c_rd.table("ai_board").insert({
+                                    "source": "__roulette_dealers__",
+                                    "title": _vsel_ad,
+                                    "content": json.dumps(_names_ad, ensure_ascii=False)
+                                }).execute()
+                                st.success(f"已删除「{_nm}」")
+                                st.rerun()
+                            except Exception as _e_del:
+                                st.error(f"删除失败：{_e_del}")
+            else:
+                st.caption("该场所暂无荷官名字")
+            _new_ad = st.text_input("新增荷官名字", key="adm_rd_new")
+            if st.button("➕ 添加到该场所", key="adm_rd_add"):
+                _nn = (_new_ad or "").strip()
+                if not _nn:
+                    st.warning("请输入名字")
+                elif _nn in _names_ad:
+                    st.warning("已存在同名荷官")
+                else:
+                    _names_ad.append(_nn)
+                    try:
+                        _c_rd.table("ai_board").delete() \
+                            .eq("source", "__roulette_dealers__") \
+                            .eq("title", _vsel_ad).execute()
+                        _c_rd.table("ai_board").insert({
+                            "source": "__roulette_dealers__",
+                            "title": _vsel_ad,
+                            "content": json.dumps(sorted(_names_ad), ensure_ascii=False)
+                        }).execute()
+                        st.success(f"已添加「{_nn}」")
+                        st.rerun()
+                    except Exception as _e_add:
+                        st.error(f"添加失败：{_e_add}")
+    except Exception as _e_rd:
+        st.error(f"读取名单失败：{_e_rd}")
+
 # ==========================================
 # 8.5 遗漏核算（原 omission_page.py 内嵌 + 累积框）
 # ==========================================
