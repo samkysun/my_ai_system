@@ -5079,6 +5079,15 @@ def render_admin_panel():
                             _okc += 1
                     except Exception:
                         pass
+                try:
+                    _cc0 = get_supabase_client()
+                    if _cc0:
+                        for _src0 in ("__roulette_profile__",
+                                      "__roulette_dealers__"):
+                            _cc0.table("ai_board").delete() \
+                                .eq("source", _src0).execute()
+                except Exception:
+                    pass
                 for _k in ("_roulette_hist", "_roulette_profiles",
                            "_roulette_known_names", "_roulette_dealers",
                            "_roulette_marks", "_roulette_venue",
