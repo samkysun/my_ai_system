@@ -1210,8 +1210,28 @@ def render(df_data, H):
             key="rou_dealer_sel",
             help="下拉框内键入即可筛选；名单来自云端档案与本次已记录")
         if _sel == "➕ 新增荷官":
-            _dealer = _norm_name(st.text_input("输入荷官全名",
-                                               value="", key="rou_dealer_name"))
+            _typed = st.text_input("输入荷官全名", value="",
+                                   key="rou_dealer_name",
+                                   placeholder="边输入边匹配历史名字")
+            _dealer = _norm_name(_typed)
+            _kw2 = _norm_name(_typed)
+            if _kw2:
+                _hits = [x for x in _known if _kw2 in x]
+                if _hits:
+                    st.caption("历史里有相同关键字的荷官，点一下直接用：")
+                    _cols = st.columns(min(4, len(_hits)))
+                    for _i2, _h in enumerate(_hits[:8]):
+                        with _cols[_i2 % len(_cols)]:
+                            if st.button(_h, key=f"rou_pick_{_h}",
+                                         use_container_width=True):
+                                st.session_state["_roulette_dealer"] = _h
+                                _kn2 = set(st.session_state.get(
+                                    "_roulette_known_names", []) or [])
+                                _kn2.add(_h)
+                                st.session_state["_roulette_known_names"] = sorted(_kn2)
+                                st.rerun()
+                else:
+                    st.caption("历史里没有相似的荷官，将作为新荷官建档")
         else:
             _dealer = _sel
         if _dealer:
