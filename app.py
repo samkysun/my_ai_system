@@ -5138,6 +5138,10 @@ def render_admin_panel():
                             _names_ad.remove(_nm)
                             try:
                                 _c_rd.table("ai_board").delete() \
+                                    .eq("source", "__roulette_profile__") \
+                                    .eq("title", "地:" + _vsel_ad + "|官:" + _nm) \
+                                    .execute()
+                                _c_rd.table("ai_board").delete() \
                                     .eq("source", "__roulette_dealers__").execute()
                                 _allrows = []
                                 for _vk2, _vn2 in _venue_map.items():
