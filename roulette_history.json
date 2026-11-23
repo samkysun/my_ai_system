@@ -1,1 +1,1 @@
-{"draws": [], "pending": [], "dealer_marks": [1, 44, 44, 88, 130, 130, 173, 215, 258], "dealers": [{"start": 1, "name": "12"}, {"start": 44, "name": "12"}, {"start": 44, "name": "1111"}, {"start": 88, "name": "000"}, {"start": 130, "name": "12"}, {"start": 130, "name": "333"}, {"start": 173, "name": "000"}, {"start": 215, "name": "1111"}, {"start": 258, "name": "12"}], "dealer_name": "12", "venue": "默认场所"}
+{"draws": [0], "pending": [], "dealer_marks": [], "dealers": [], "dealer_name": "112", "venue": "威尼斯人"}
