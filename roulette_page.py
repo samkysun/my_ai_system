@@ -111,6 +111,14 @@ def load_history(loader):
                     int(x) for x in obj.get("pending", []) if 0 <= int(x) <= 36]
                 st.session_state["_roulette_marks"] = [
                     int(x) for x in obj.get("dealer_marks", [])]
+                _dl = obj.get("dealers", []) or []
+                if not _dl and obj.get("dealer_marks"):
+                    _dl = [{"start": int(x), "name": ""}
+                           for x in obj.get("dealer_marks", [])]
+                st.session_state["_roulette_dealers"] = [
+                    {"start": int(d0.get("start", 0)),
+                     "name": str(d0.get("name", "") or "")}
+                    for d0 in _dl if isinstance(d0, dict)]
                 st.session_state["_roulette_dealer"] = str(
                     obj.get("dealer_name", "") or "")
         except Exception:
@@ -132,6 +140,8 @@ def save_history(loader, draws, pending=None):
                                       "_roulette_pending", []),
                                   "dealer_marks": st.session_state.get(
                                       "_roulette_marks", []),
+                                  "dealers": st.session_state.get(
+                                      "_roulette_dealers", []),
                                   "dealer_name": st.session_state.get(
                                       "_roulette_dealer", "")},
                                  ensure_ascii=False),
@@ -146,8 +156,24 @@ def save_history(loader, draws, pending=None):
 # ============================================================
 def segment_start():
     """当前荷官从第几期开始（索引）"""
+    dl = st.session_state.get("_roulette_dealers", []) or []
+    if dl:
+        return int(dl[-1].get("start", 0))
     marks = st.session_state.get("_roulette_marks", []) or []
     return int(marks[-1]) if marks else 0
+
+
+def dealer_segments(draws):
+    """返回 [(名称, 起始索引, 号码列表)]"""
+    dl = st.session_state.get("_roulette_dealers", []) or []
+    if not dl:
+        return [("（未记录）", 0, list(draws))] if draws else []
+    out = []
+    for i, d0 in enumerate(dl):
+        s0 = int(d0.get("start", 0))
+        e0 = int(dl[i + 1]["start"]) if i + 1 < len(dl) else len(draws)
+        out.append((d0.get("name") or f"荷官{i+1}", s0, list(draws[s0:e0])))
+    return out
 
 
 def current_segment(draws):
@@ -983,6 +1009,10 @@ def render(df_data, H):
             _marks = list(st.session_state.get("_roulette_marks", []))
             _marks.append(len(draws))
             st.session_state["_roulette_marks"] = _marks
+            _dl2 = list(st.session_state.get("_roulette_dealers", []))
+            _dl2.append({"start": len(draws),
+                         "name": st.session_state.get("_roulette_dealer", "")})
+            st.session_state["_roulette_dealers"] = _dl2
             save_history(H, draws)
             st.success("已标记换荷官，统计从本期重新开始")
             st.rerun()
@@ -1149,3 +1179,31 @@ def render(df_data, H):
         st.caption(f"共 {len(_rules)} 条规则通过验证（50 期起开始学习，"
                    f"样本门槛随期数自动调整，提升≥{RULE_MIN_LIFT*100:.0f}pp）")
 
+    # ---------- 各荷官对比 ----------
+    st.divider()
+    st.markdown("### 👤 各荷官历史表现对比")
+    _segs = dealer_segments(draws)
+    if len(_segs) <= 1:
+        st.caption("还没有换过荷官；点上方「🔄 换荷官」后可对比。")
+    else:
+        _cur_start = segment_start()
+        _rows_d = []
+        for _nm, _st0, _nums in _segs:
+            if not _nums:
+                continue
+            _c0 = Counter(_nums)
+            _top3 = "、".join(f"{v:02d}" for v, _ in _c0.most_common(3))
+            _seg_hot = Counter(x // 6 for x in _nums)
+            _sector = _seg_hot.most_common(1)[0][0] if _seg_hot else 0
+            _rows_d.append({
+                "荷官": _nm,
+                "期数": len(_nums),
+                "起始序号": _st0 + 1,
+                "最热号码": _top3,
+                "偏好扇区": f"第{_sector+1}段（{_sector*6}~{min(36,_sector*6+5)}）",
+                "是否当前": "✅" if _st0 == _cur_start else "",
+            })
+        st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
+                     hide_index=True)
+        st.caption("说明：分段按你点「换荷官」的位置划分；"
+                   "当前荷官段最热号码仅供参考。")
