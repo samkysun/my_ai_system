@@ -1551,6 +1551,15 @@ def render(df_data, H):
                 "最热号码": _top3,
                 "当前": "✅" if _nm == _cur_name0 else "",
             })
+        # 最后一道保险：同名只保留一行（合并期数）
+        _final = {}
+        for _r0 in _rows_d:
+            _nmk = _norm_name(_r0["荷官"])
+            if _nmk in _final and _final[_nmk]["期数"] >= _r0["期数"]:
+                continue
+            _final[_nmk] = _r0
+        _rows_d = list(_final.values())
+        st.caption(f"共 {len(_rows_d)} 位荷官（同名已合并）")
         st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
                      hide_index=True)
 
