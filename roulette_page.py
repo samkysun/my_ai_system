@@ -1538,7 +1538,8 @@ def render(df_data, H):
     if not draws:
         st.info("先输入并添加几期开奖号码")
         _dlr0 = st.session_state.get("_roulette_dealer", "")
-        _pf0 = (st.session_state.get("_roulette_profiles") or {}).get("官:" + _dlr0) \
+        _pf0 = (st.session_state.get("_roulette_profiles") or {}).get(
+            _pkey(_cur_venue(), _dlr0)) \
             if _dlr0 else None
         if _pf0 and int(_pf0.get("spins", 0)) >= 40:
             st.markdown(f"### ☁ 云端档案：{_dlr0}"
@@ -1672,7 +1673,8 @@ def render(df_data, H):
 
     if len(_calc) < 40:
         _pf_fb = (st.session_state.get("_roulette_profiles") or {}).get(
-            "官:" + _norm_name(st.session_state.get("_roulette_dealer")))
+            _pkey(_cur_venue(),
+                  _norm_name(st.session_state.get("_roulette_dealer"))))
         if _pf_fb and int(_pf_fb.get("spins", 0)) >= 40:
             _fr1 = frequency_candidates(_pf_fb)
             if _fr1:
@@ -1851,7 +1853,7 @@ def render(df_data, H):
         _profs_all = st.session_state.get("_roulette_profiles") or {}
         _rows_d = []
         for _nm, _nums in sorted(_by_name.items(), key=lambda x: -len(x[1])):
-            _pf = _profs_all.get("官:" + _nm) or {}
+            _pf = _profs_all.get(_pkey(_cur_venue(), _nm)) or {}
             _sp_local = len(_nums)
             _sp_cloud = int(_pf.get("spins", 0))
             _sp = max(_sp_local, _sp_cloud)
@@ -2020,7 +2022,7 @@ def render(df_data, H):
                     st.warning("请先勾选「确认删除」")
                 else:
                     _np = dict(_prof2)
-                    _np.pop("官:" + _del_pick, None)
+                    _np.pop(_pkey(_cur_venue(), _del_pick), None)
                     st.session_state["_roulette_profiles"] = _np
                     if save_profiles(H, _np):
                         # 1) 名单里删掉
