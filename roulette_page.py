@@ -1713,7 +1713,16 @@ def render(df_data, H):
         _prof = load_profiles(H)
         st.session_state["_roulette_profiles"] = _prof
     _dlr_now = st.session_state.get("_roulette_dealer", "")
-    _prof_use = _prof.get("官:" + _dlr_now) if _dlr_now else None
+    _prof_use = _prof.get(_pkey(_cur_venue(), _dlr_now)) if _dlr_now else None
+    if _dlr_now and not _prof_use:
+        for _pk2, _pv2 in (_prof or {}).items():
+            _vk2, _dk2 = _split_key(_pk2)
+            if _dk2 == _dlr_now and int(_pv2.get("spins", 0)) >= 40:
+                _prof_use = _pv2
+                st.warning(f"该荷官在「{_vk2}」场所有 "
+                           f"{int(_pv2.get('spins', 0))} 次记录，"
+                           f"当前场所暂无，先借用该档案出候选")
+                break
 
     _bonus = {}
     if _prof_use and int(_prof_use.get("spins", 0)) >= 30:
