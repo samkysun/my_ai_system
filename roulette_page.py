@@ -573,7 +573,27 @@ def rebuild_known_lists(loader):
 
 def load_profiles(loader):
     _sb = load_profiles_sb(loader)
-    if _sb:
+    _gh = {}
+    try:
+        fn0 = loader.get("gh_read")
+        _raw0 = fn0(PROFILE_FILE) if fn0 else ""
+        if _raw0:
+            _obj0 = json.loads(_raw0)
+            if isinstance(_obj0, dict):
+                _gh = _obj0
+    except Exception:
+        _gh = {}
+    if _sb or _gh:
+        _sb = _sb or {}
+        _gh = _gh or {}
+        for _k0, _v0 in _gh.items():
+            if _k0 in _sb:
+                try:
+                    _merge_profile(_sb[_k0], _v0)
+                except Exception:
+                    pass
+            else:
+                _sb[_k0] = _v0
         _sb, _d0 = normalize_profiles(_sb)
         return _sb
     try:
