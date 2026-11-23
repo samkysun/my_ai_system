@@ -1210,9 +1210,12 @@ def render(df_data, H):
                 _dlr = (st.session_state.get("_roulette_dealer", "") or "")
                 _dlr = _dlr.replace(" ", "").replace("\u3000", "").strip()
                 _keys = ["官:" + _dlr] if _dlr else []
+                if not _keys:
+                    st.warning("还没有选择荷官：本次只记录号码，不写档案")
                 record_spin(_prof, _keys, int(num), _prev)
-                save_profiles(H, _prof)
                 st.session_state["_roulette_profiles"] = _prof
+                if _keys and not save_profiles(H, _prof):
+                    st.warning("档案写入云端失败（稍后可点底部按钮重试）")
             except Exception:
                 pass
             st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
@@ -1590,11 +1593,11 @@ def render(df_data, H):
         if _prows:
             st.dataframe(pd.DataFrame(_prows), use_container_width=True,
                          hide_index=True)
-            if st.button("☁ 立即保存档案到云端", key="rou_save_prof"):
-                if save_profiles(H, _prof2):
-                    st.success("已保存到云端")
-                else:
-                    st.warning("保存失败（检查网络或权限）")
+        if st.button("☁ 立即保存档案到云端", key="rou_save_prof"):
+            if save_profiles(H, _prof2):
+                st.success(f"已保存到云端（{len(_prof2)} 个荷官）")
+            else:
+                st.warning("保存失败：检查 GITHUB_TOKEN 权限或网络")
             st.caption("档案只用于识别台/荷官的长期倾向，"
                        "当前推荐仍只看页面上录入的数据。")
         else:
