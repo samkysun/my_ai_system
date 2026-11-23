@@ -1,1 +1,1 @@
-{"draws": [1, 3], "pending": [], "dealer_marks": [1], "dealers": [{"start": 1, "name": "12"}], "dealer_name": "12"}
+{"draws": [1, 2, 3, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 12, 13, 17, 17, 17, 17, 17, 20, 22, 24, 25, 28, 30, 32, 34, 36, 33, 33, 33, 33, 36, 36, 36, 31, 1], "pending": [], "dealer_marks": [0, 40], "dealers": [{"start": 0, "name": "12"}, {"start": 40, "name": "1234"}], "dealer_name": "1234"}
