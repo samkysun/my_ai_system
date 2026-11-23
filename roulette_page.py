@@ -1205,6 +1205,13 @@ def render(df_data, H):
             _seg = _pref(lambda x: f"{x//10*10}-{x//10*10+9}" if x < 30 else "30-36")
             _tail = _pref(lambda x: f"{x%10}尾")
             _sector = _pref(lambda x: f"第{POS[x]//6+1}段")
+            _zod = _pref(lambda x: zodiac_of(x))
+            _sis = sum(1 for i2 in range(1, len(_nums))
+                       if _nums[i2] in sister(_nums[i2 - 1]))
+            _adj = sum(1 for i2 in range(1, len(_nums))
+                       if _nums[i2] in wheel_neighbors(_nums[i2 - 1]))
+            _sis_pct = _sis / max(1, len(_nums) - 1)
+            _adj_pct = _adj / max(1, len(_nums) - 1)
             _top3 = "、".join(f"{v:02d}" for v, _ in _c0.most_common(3))
             _rows_d.append({
                 "荷官": _nm,
@@ -1215,6 +1222,9 @@ def render(df_data, H):
                 "号码段": _seg,
                 "尾数": _tail,
                 "轮盘扇区": _sector,
+                "生肖偏好": _zod,
+                "姐妹码": f"{_sis_pct*100:.0f}%",
+                "轮盘相邻": f"{_adj_pct*100:.0f}%",
                 "最热号码": _top3,
                 "当前": "✅" if _st0 == _cur_start else "",
             })
@@ -1236,9 +1246,16 @@ def render(df_data, H):
             _c4d = Counter(f"{x%10}尾" for x in _cur_nums)
             _c5d = Counter(f"第{POS[x]//6+1}段" for x in _cur_nums)
             _dd = []
+            _c6d = Counter(zodiac_of(x) for x in _cur_nums)
+            _c7d = Counter("与上期姐妹" if _cur_nums[i2] in sister(_cur_nums[i2-1])
+                           else "非姐妹" for i2 in range(1, len(_cur_nums)))
+            _c8d = Counter("与上期轮盘相邻"
+                           if _cur_nums[i2] in wheel_neighbors(_cur_nums[i2-1])
+                           else "非相邻" for i2 in range(1, len(_cur_nums)))
             for _title, _cc in (("波色", _c1d), ("单双", _c2d),
                                 ("大小", _c3d), ("尾数", _c4d),
-                                ("轮盘扇区", _c5d)):
+                                ("轮盘扇区", _c5d), ("生肖", _c6d),
+                                ("姐妹码", _c7d), ("轮盘相邻", _c8d)):
                 _txt = "、".join(f"{v}{k/_n1*100:.0f}%"
                                 for v, k in _cc.most_common(3))
                 _dd.append({"维度": _title, "分布": _txt})
