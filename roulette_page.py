@@ -193,6 +193,74 @@ def current_segment(draws):
     return draws[s:] if s < len(draws) else []
 
 
+PROFILE_FILE = "roulette_profiles.json"
+
+
+def load_profiles(loader):
+    try:
+        fn = loader.get("gh_read")
+        if not fn:
+            return {}
+        raw = fn(PROFILE_FILE)
+        if raw:
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+    except Exception:
+        pass
+    return {}
+
+
+def save_profiles(loader, prof):
+    try:
+        fn = loader.get("gh_write")
+        if not fn:
+            return False
+        txt = json.dumps(prof, ensure_ascii=False)
+
+        def _bg():
+            try:
+                fn(PROFILE_FILE, txt, "轮盘档案更新")
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+        return True
+    except Exception:
+        return False
+
+
+def _blank_profile():
+    return {"spins": 0, "nums": {}, "sister": 0, "adj": 0,
+            "big": 0, "odd": 0, "red": 0, "zod": {}}
+
+
+def record_spin(prof, keys, num, prev=None):
+    for k in keys:
+        if not k:
+            continue
+        p0 = prof.setdefault(k, _blank_profile())
+        p0["spins"] = int(p0.get("spins", 0)) + 1
+        nm = p0.setdefault("nums", {})
+        nm[str(num)] = int(nm.get(str(num), 0)) + 1
+        if int(num) >= 19:
+            p0["big"] = int(p0.get("big", 0)) + 1
+        if int(num) % 2 == 1:
+            p0["odd"] = int(p0.get("odd", 0)) + 1
+        if int(num) != 0 and int(num) in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}:
+            p0["red"] = int(p0.get("red", 0)) + 1
+        zd = p0.setdefault("zod", {})
+        z = zodiac_of(int(num))
+        zd[z] = int(zd.get(z, 0)) + 1
+        if prev is not None:
+            if int(num) in sister(int(prev)):
+                p0["sister"] = int(p0.get("sister", 0)) + 1
+            if int(num) in wheel_neighbors(int(prev)):
+                p0["adj"] = int(p0.get("adj", 0)) + 1
+    return prof
+
+
 def omissions(draws):
     """各维度遗漏期数（都按「上一次出现到现在」计算）"""
     n = len(draws)
@@ -1073,6 +1141,28 @@ def render(df_data, H):
                    + (f"｜换过 {len(st.session_state.get('_roulette_marks', []))} 次"
                       if st.session_state.get("_roulette_marks") else ""))
 
+    _t1, _t2, _t3 = st.columns([1, 1, 2])
+    with _t1:
+        _tables = st.session_state.get("_roulette_tables", []) or []
+        _tcur = st.session_state.get("_roulette_table", "") or ""
+        _topt = _tables + ["（手动输入）"]
+        _tidx = _topt.index(_tcur) if _tcur in _topt else len(_topt) - 1
+        _tsel = st.selectbox("台号", _topt, index=_tidx, key="rou_table_sel")
+        if _tsel == "（手动输入）":
+            _table = st.text_input("输入台号", value=_tcur, key="rou_table_name")
+        else:
+            _table = _tsel
+        if _table != _tcur:
+            st.session_state["_roulette_table"] = _table
+            if _table and _table not in _tables:
+                st.session_state["_roulette_tables"] = _tables + [_table]
+    with _t2:
+        st.write("")
+        st.caption("换台后档案会按台号分开累积")
+    with _t3:
+        if _table:
+            st.caption(f"当前台号：{_table}（档案永久保存在云端）")
+
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         num = st.number_input("本期开奖号码", 0, 36, 0, 1, key="rou_num")
@@ -1089,6 +1179,23 @@ def render(df_data, H):
                 _mem2 = merge_rule_memory(_mem2, _rules2)
                 st.session_state["_roulette_rules_mem"] = _mem2
                 save_rule_memory(H, _mem2)
+            except Exception:
+                pass
+            try:
+                _prof = load_profiles(H)
+                _prev = draws[-2] if len(draws) >= 2 else None
+                _tbl = st.session_state.get("_roulette_table", "")
+                _dlr = st.session_state.get("_roulette_dealer", "")
+                _keys = []
+                if _tbl:
+                    _keys.append("台:" + _tbl)
+                if _dlr:
+                    _keys.append("官:" + _dlr)
+                if _tbl and _dlr:
+                    _keys.append(f"台:{_tbl}|官:{_dlr}")
+                record_spin(_prof, _keys, int(num), _prev)
+                save_profiles(H, _prof)
+                st.session_state["_roulette_profiles"] = _prof
             except Exception:
                 pass
             st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
@@ -1326,3 +1433,40 @@ def render(df_data, H):
                          hide_index=True)
         st.caption("说明：百分比 = 该类型在本荷官全部开奖中的占比；"
                    "样本少时仅供参考。")
+
+    # ---------- 云端记忆档案 ----------
+    st.divider()
+    st.markdown("### ☁ 云端记忆档案（不参与推荐，仅用于识别）")
+    _prof2 = st.session_state.get("_roulette_profiles")
+    if not _prof2:
+        _prof2 = load_profiles(H)
+        st.session_state["_roulette_profiles"] = _prof2
+    if not _prof2:
+        st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
+    else:
+        _prows = []
+        for _k, _v in _prof2.items():
+            _sp = int(_v.get("spins", 0))
+            if not _sp:
+                continue
+            _nm2 = sorted(((int(a), b) for a, b in _v.get("nums", {}).items()),
+                          key=lambda x: -x[1])[:3]
+            _zod2 = sorted(_v.get("zod", {}).items(), key=lambda x: -x[1])[:2]
+            _prows.append({
+                "对象": _k,
+                "累计期数": _sp,
+                "最热号码": "、".join(f"{a:02d}" for a, _ in _nm2),
+                "最热生肖": "、".join(f"{a}{b/_sp*100:.0f}%" for a, b in _zod2),
+                "大号%": f"{_v.get('big',0)/_sp*100:.0f}%",
+                "单数%": f"{_v.get('odd',0)/_sp*100:.0f}%",
+                "红波%": f"{_v.get('red',0)/_sp*100:.0f}%",
+                "姐妹%": f"{_v.get('sister',0)/max(1,_sp-1)*100:.0f}%",
+                "相邻%": f"{_v.get('adj',0)/max(1,_sp-1)*100:.0f}%",
+            })
+        if _prows:
+            st.dataframe(pd.DataFrame(_prows), use_container_width=True,
+                         hide_index=True)
+            st.caption("档案只用于识别台/荷官的长期倾向，"
+                       "当前推荐仍只看页面上录入的数据。")
+        else:
+            st.caption("档案为空")
