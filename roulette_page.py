@@ -1253,7 +1253,18 @@ def render(df_data, H):
                          "name": st.session_state.get("_roulette_dealer", "")})
             st.session_state["_roulette_dealers"] = _dl2
             save_history(H, draws)
-            st.success("已标记换荷官，统计从本期重新开始")
+            _okp = False
+            try:
+                _prof3 = st.session_state.get("_roulette_profiles") or load_profiles(H)
+                st.session_state["_roulette_profiles"] = _prof3
+                _okp = save_profiles(H, _prof3)
+                save_known_names(H, st.session_state.get(
+                    "_roulette_known_names", []) or [])
+            except Exception:
+                _okp = False
+            st.success("已标记换荷官，统计从本期重新开始" +
+                       ("｜档案已自动保存到云端" if _okp
+                        else "｜档案保存失败（网络或权限）"))
             st.rerun()
     with _d3:
         _seg = current_segment(draws)
@@ -1747,11 +1758,7 @@ def render(df_data, H):
         if _prows:
             st.dataframe(pd.DataFrame(_prows), use_container_width=True,
                          hide_index=True)
-        if st.button("☁ 立即保存档案到云端", key="rou_save_prof"):
-            if save_profiles(H, _prof2):
-                st.success(f"已保存到云端（{len(_prof2)} 个荷官）")
-            else:
-                st.warning("保存失败：检查 GITHUB_TOKEN 权限或网络")
+
             st.caption("档案只用于识别台/荷官的长期倾向，"
                        "当前推荐仍只看页面上录入的数据。")
         else:
