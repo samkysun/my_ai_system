@@ -1337,6 +1337,21 @@ def frequency_candidates(profile, top_n=MAX_PICK):
     return out
 
 
+def find_profile(prof, venue, dealer):
+    """返回 (档案, 档案所在场所)；优先当前场所"""
+    if not dealer:
+        return None, ""
+    prof = prof or {}
+    k1 = _pkey(venue, dealer)
+    if k1 in prof:
+        return prof[k1], _norm_name(venue) or DEFAULT_VENUE
+    for k, v in prof.items():
+        vk, dk = _split_key(k)
+        if dk == dealer:
+            return v, vk
+    return None, ""
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -1741,8 +1756,8 @@ def render(df_data, H):
     _slot = st.empty()
     _dlr_s = _norm_name(st.session_state.get("_roulette_dealer"))
     if _dlr_s:
-        _pf_s = (st.session_state.get("_roulette_profiles") or {}).get(
-            _pkey(_cur_venue(), _dlr_s))
+        _pf_s, _pf_venue = find_profile(
+            st.session_state.get("_roulette_profiles"), _cur_venue(), _dlr_s)
         _seq_s = [int(x) for x in ((_pf_s or {}).get("seq") or [])]
         if _seq_s and len(_seq_s) >= 40:
             _tot_s = int((_pf_s or {}).get("spins", 0))
