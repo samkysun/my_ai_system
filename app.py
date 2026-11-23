@@ -5123,6 +5123,21 @@ def render_admin_panel():
                 _venue_map[_r["title"]] = json.loads(_r["content"] or "[]")
             except Exception:
                 _venue_map[_r["title"]] = []
+        # 合并档案里的荷官（保证云端有档案的人一定出现在名单中）
+        try:
+            if _c_rd:
+                _pr_rows = (_c_rd.table("ai_board").select("title")
+                            .eq("source", "__roulette_profile__")
+                            .execute().data) or []
+                for _pr in _pr_rows:
+                    _ti = str(_pr.get("title") or "")
+                    if _ti.startswith("地:") and "|官:" in _ti:
+                        _vv, _dd = _ti[2:].split("|官:", 1)
+                        _venue_map.setdefault(_vv, [])
+                        if _dd and _dd not in _venue_map[_vv]:
+                            _venue_map[_vv].append(_dd)
+        except Exception:
+            pass
         if not _venue_map:
             st.info("还没有场所名单；请先在轮盘页新建场所。")
         else:
