@@ -211,15 +211,7 @@ def save_profiles(loader, prof):
         if not fn:
             return False
         txt = json.dumps(prof, ensure_ascii=False)
-
-        def _bg():
-            try:
-                fn(PROFILE_FILE, txt, "轮盘档案更新")
-            except Exception:
-                pass
-
-        import threading
-        threading.Thread(target=_bg, daemon=True).start()
+        fn(PROFILE_FILE, txt, "轮盘档案更新")
         return True
     except Exception:
         return False
@@ -1598,6 +1590,11 @@ def render(df_data, H):
         if _prows:
             st.dataframe(pd.DataFrame(_prows), use_container_width=True,
                          hide_index=True)
+            if st.button("☁ 立即保存档案到云端", key="rou_save_prof"):
+                if save_profiles(H, _prof2):
+                    st.success("已保存到云端")
+                else:
+                    st.warning("保存失败（检查网络或权限）")
             st.caption("档案只用于识别台/荷官的长期倾向，"
                        "当前推荐仍只看页面上录入的数据。")
         else:
