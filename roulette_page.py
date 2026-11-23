@@ -97,21 +97,53 @@ def _gh(loader):
 
 
 def load_history(loader):
-    """页面数据每次访问从 0 开始，不读取上次会话的历史"""
-    if "_roulette_hist" not in st.session_state:
-        st.session_state["_roulette_hist"] = []
-        st.session_state.setdefault("_roulette_pending", [])
-        st.session_state.setdefault("_roulette_marks", [])
-        st.session_state.setdefault("_roulette_dealers", [])
-    return st.session_state["_roulette_hist"]
+    """本场录入数据从云端读回：刷新、掉选都不丢"""
+    if "_roulette_hist" in st.session_state:
+        return st.session_state["_roulette_hist"]
+    data = []
+    fn = loader.get("gh_read")
+    if fn:
+        try:
+            raw = fn(HIST_FILE)
+            if raw:
+                obj = json.loads(raw)
+                data = [int(x) for x in obj.get("draws", []) if 0 <= int(x) <= 36]
+                st.session_state["_roulette_pending"] = [
+                    int(x) for x in obj.get("pending", []) if 0 <= int(x) <= 36]
+                st.session_state["_roulette_marks"] = [
+                    int(x) for x in obj.get("dealer_marks", [])]
+                _dl = obj.get("dealers", []) or []
+                st.session_state["_roulette_dealers"] = [
+                    {"start": int(d0.get("start", 0)),
+                     "name": str(d0.get("name", "") or "")}
+                    for d0 in _dl if isinstance(d0, dict)]
+                st.session_state["_roulette_dealer"] = str(
+                    obj.get("dealer_name", "") or "")
+        except Exception:
+            data = []
+    st.session_state["_roulette_hist"] = data
+    return data
 
 
 def save_history(loader, draws, pending=None):
-    """只更新页面（会话内），不再上传到云端"""
+    """同步写回云端，保证刷新后还在"""
     st.session_state["_roulette_hist"] = list(draws)
     if pending is not None:
         st.session_state["_roulette_pending"] = list(pending)
-    return True
+    fn = loader.get("gh_write")
+    if not fn:
+        return False
+    try:
+        fn(HIST_FILE, json.dumps({
+            "draws": draws,
+            "pending": st.session_state.get("_roulette_pending", []),
+            "dealer_marks": st.session_state.get("_roulette_marks", []),
+            "dealers": st.session_state.get("_roulette_dealers", []),
+            "dealer_name": st.session_state.get("_roulette_dealer", ""),
+        }, ensure_ascii=False), "轮盘本场记录更新")
+        return True
+    except Exception:
+        return False
 
 
 # ============================================================
