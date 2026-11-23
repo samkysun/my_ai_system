@@ -5057,6 +5057,50 @@ def render_admin_panel():
             render_upgrade_tab()
         else:
             st.warning("缺少 auto_upgrade.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
+    st.divider()
+    st.markdown("### 🎡 轮盘数据清理")
+    st.caption("清理轮盘页面记录与全部云端荷官档案（场所、荷官名单、档案、"
+               "规则记忆）。不可恢复。")
+    _rp_files = ["roulette_history.json", "roulette_profiles.json",
+                 "roulette_dealers.json", "roulette_venues.json",
+                 "roulette_rules_memory.json"]
+    st.markdown("**将清空的云端文件：**")
+    for _f in _rp_files:
+        st.markdown(f"- `{_f}`")
+    if st.button("🗑 清空轮盘全部数据", key="adm_rp_clear"):
+        st.session_state["_adm_rp_step"] = 1
+    if int(st.session_state.get("_adm_rp_step", 0)) == 1:
+        st.error("⚠️ 一旦删除就无法恢复，是否确定清空轮盘全部数据？")
+        _a1, _a2 = st.columns(2)
+        with _a1:
+            if st.button("✅ 确定清空（不可恢复）", key="adm_rp_yes"):
+                _okc = 0
+                for _f in _rp_files:
+                    _txt = "[]" if _f.endswith("venues.json") else "{}"
+                    try:
+                        if _gh_write_text(_f, _txt, "清空轮盘数据"):
+                            _okc += 1
+                    except Exception:
+                        pass
+                for _k in ("_roulette_hist", "_roulette_profiles",
+                           "_roulette_known_names", "_roulette_dealers",
+                           "_roulette_marks", "_roulette_venue",
+                           "_roulette_venues", "_roulette_rules_mem",
+                           "_roulette_rhit", "_roulette_pending",
+                           "_roulette_dealer", "_roulette_known_venue",
+                           "_rou_pending_save", "_rou_prof_msg",
+                           "rou_dealer_one", "rou_dealer_sel",
+                           "rou_dealer_name", "rou_venue_switch",
+                           "rou_venue_sel", "rou_venue_add2",
+                           "rou_view_dealer", "rou_dealer_match"):
+                    st.session_state.pop(_k, None)
+                st.session_state["_adm_rp_step"] = 0
+                st.success(f"已清空 {_okc}/{len(_rp_files)} 个云端文件")
+                st.rerun()
+        with _a2:
+            if st.button("✖ 取消", key="adm_rp_no"):
+                st.session_state["_adm_rp_step"] = 0
+                st.rerun()
 
 # ==========================================
 # 8.5 遗漏核算（原 omission_page.py 内嵌 + 累积框）
