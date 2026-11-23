@@ -167,17 +167,34 @@ def _norm_name(s):
 
 
 def _merge_profile(dst, src):
-    dst["spins"] = int(dst.get("spins", 0)) + int(src.get("spins", 0))
+    """旧版同一期被写进多个键，合并时取最大值而不是相加，避免重复计数"""
     for f in ("sister", "adj", "big", "odd", "red"):
-        dst[f] = int(dst.get(f, 0)) + int(src.get(f, 0))
+        dst[f] = max(int(dst.get(f, 0)), int(src.get(f, 0)))
     for f in ("nums", "zod"):
         d0 = dst.setdefault(f, {})
         for k2, v2 in (src.get(f) or {}).items():
-            d0[k2] = int(d0.get(k2, 0)) + int(v2)
-    seq = dst.setdefault("seq", [])
-    seq.extend(int(x) for x in (src.get("seq") or []))
-    del seq[:-300]
+            d0[k2] = max(int(d0.get(k2, 0)), int(v2))
+    s1 = dst.setdefault("seq", [])
+    s2 = [int(x) for x in (src.get("seq") or [])]
+    if len(s2) > len(s1):
+        dst["seq"] = s2
+    dst["spins"] = max(int(dst.get("spins", 0)), int(src.get("spins", 0)))
     return dst
+
+
+def _fix_spins(p0):
+    """用号码计数重算真实摇珠次数"""
+    nums = p0.get("nums") or {}
+    try:
+        real = sum(int(v) for v in nums.values())
+    except Exception:
+        real = 0
+    if real > 0:
+        p0["spins"] = real
+    seq = p0.get("seq") or []
+    if len(seq) > int(p0.get("spins", 0)):
+        p0["spins"] = len(seq)
+    return p0
 
 
 def normalize_profiles(prof, changed=None):
@@ -211,6 +228,11 @@ def normalize_profiles(prof, changed=None):
             dirty = True
         else:
             out[nk] = v
+    for _k3, _v3 in out.items():
+        _before = int(_v3.get("spins", 0))
+        _fix_spins(_v3)
+        if int(_v3.get("spins", 0)) != _before:
+            dirty = True
     return out, dirty
 
 
