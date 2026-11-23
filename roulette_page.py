@@ -1337,7 +1337,7 @@ def render(df_data, H):
                 f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
             _seq0 = [int(x) for x in (_pf0.get("seq") or [])][-300:]
             st.markdown("### 🎯 候选号码（依据该荷官的云端规则）")
-            if len(_seq0) >= 20:
+            if len(_seq0) >= 40:
                 st.caption(f"用云端保存的 {len(_seq0)} 期开奖序列，"
                            f"重新学习该荷官的规则后给出候选。")
                 _top0, _ = smart_top3(_seq0)
@@ -1369,7 +1369,7 @@ def render(df_data, H):
             else:
                 _fr0 = frequency_candidates(_pf0)
                 if _fr0:
-                    st.caption("该荷官云端序列还不足 20 期，先按长期频率参考：")
+                    st.caption("该荷官云端序列还不足 40 期，暂不出候选：")
                     st.dataframe(pd.DataFrame(
                         [{"号码": _n0, "判断": _lv0,
                           "偏离": f"{_dev0*100:+.0f}%", "说明": _why0}
@@ -1423,10 +1423,10 @@ def render(df_data, H):
     _cloud_seq = []
     if _prof_use:
         _cloud_seq = [int(x) for x in (_prof_use.get("seq") or [])][-300:]
-    if len(_cloud_seq) >= 20:
+    if len(_cloud_seq) >= 40:
         # 有档案时：用云端序列（含历史）作为主统计源
         _calc = _cloud_seq
-        _cold = len(draws) < 20
+        _cold = len(draws) < 40
         if not _cold:
             st.caption(f"☁ 参考云端「{_dlr_now}」档案 {len(_cloud_seq)} 期"
                        f"（本地 {len(draws)} 期已包含在内）")
@@ -1445,6 +1445,11 @@ def render(df_data, H):
             st.warning(f"该荷官姐妹码偏高（{_sis_rate*100:.0f}%，理论 5.4%）")
         if _adj_rate >= 0.08:
             st.warning(f"该荷官轮盘相邻偏高（{_adj_rate*100:.0f}%，理论 5.4%）")
+
+    if len(_calc) < 40:
+        st.warning(f"📉 当前可用数据仅 {len(_calc)} 期（不足 40 期），"
+                   f"暂不给出候选号码。请继续录入或换一位有档案的荷官。")
+        return
 
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
@@ -1474,15 +1479,15 @@ def render(df_data, H):
         _pf_s = (st.session_state.get("_roulette_profiles") or {}).get(
             "官:" + _dlr_s)
         _seq_s = [int(x) for x in ((_pf_s or {}).get("seq") or [])]
-        if _seq_s and len(_seq_s) >= 20:
+        if _seq_s and len(_seq_s) >= 40:
             st.success(f"✅ 已更换为「{_dlr_s}」荷官｜云端有 {len(_seq_s)} 期档案"
                        f" → 即刻按他的规则出候选")
         elif _seq_s:
-            st.warning(f"🆕「{_dlr_s}」荷官云端仅 {len(_seq_s)} 期，"
+            st.warning(f"🆕「{_dlr_s}」荷官云端仅 {len(_seq_s)} 期（不足 40），"
                        f"样本偏少，候选仅供参考")
         else:
             st.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，"
-                       f"需在本页积累（满 20 期开始出规则候选）")
+                       f"满 40 期才出规则候选")
     else:
         st.info("尚未选择荷官：候选只按本页数据计算")
 
