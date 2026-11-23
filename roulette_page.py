@@ -1134,6 +1134,8 @@ def render(df_data, H):
     draws = load_history(H)
     if "_roulette_rules_mem" not in st.session_state:
         st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
+    if "_roulette_profiles" not in st.session_state:
+        st.session_state["_roulette_profiles"] = load_profiles(H)
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
@@ -1260,18 +1262,48 @@ def render(df_data, H):
                 f"红波 {_pf0.get('red',0)/_sp0*100:.0f}%｜"
                 f"姐妹 {_pf0.get('sister',0)/max(1,_sp0-1)*100:.0f}%｜"
                 f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
-            _fr0 = frequency_candidates(_pf0)
-            if _fr0:
-                st.markdown("### 🎯 候选号码（只看该荷官长期频率）")
-                st.caption("离场期间的开奖情况未知，因此不计遗漏、不套规则；"
-                           "只按百分比偏离给出参考。")
-                _rows0 = [{"号码": _n0, "判断": _lv0,
-                           "偏离": f"{_dev0*100:+.0f}%",
-                           "说明": _why0} for _n0, _dev0, _lv0, _why0 in _fr0]
+            _seq0 = [int(x) for x in (_pf0.get("seq") or [])][-300:]
+            st.markdown("### 🎯 候选号码（依据该荷官的云端规则）")
+            if len(_seq0) >= 20:
+                st.caption(f"用云端保存的 {len(_seq0)} 期开奖序列，"
+                           f"重新学习该荷官的规则后给出候选。")
+                _top0, _ = smart_top3(_seq0)
+                _rec0 = [n for n, _, _ in _top0] if _top0 else []
+                _om0, _al0, _lv0 = build_candidates(_seq0, _rec0)
+                if _al0:
+                    st.markdown("**该荷官的达标项（基于其历史序列）**")
+                    for _k1, _v1 in _al0:
+                        st.warning(f"{_k1}：{'、'.join(_v1)}")
+                _rows0 = []
+                _rhit0 = st.session_state.get("_roulette_rhit") or {}
+                for _n0, _s0, _lv0b, _wh0 in _lv0:
+                    _a0 = attrs_of(_n0)
+                    _rc0 = int(_rhit0.get(_n0, 0))
+                    _j0 = ("🔥 极可能开" if _rc0 >= 3 else
+                           "⭐ 较可能" if _rc0 == 2 else
+                           "○ 留意" if _rc0 == 1 else "")
+                    _rows0.append({"等级": _lv0b, "号码": _n0, "判断": _j0,
+                                   "得分": round(_s0, 2),
+                                   "命中条件": "、".join(sorted(set(_wh0))),
+                                   "尾数": _a0["尾数"], "生肖": _a0["生肖"]})
                 st.dataframe(pd.DataFrame(_rows0), use_container_width=True,
                              hide_index=True)
+                if _lv0:
+                    _hot0 = [r0["号码"] for r0 in _rows0 if "极可能" in str(r0["判断"])]
+                    if _hot0:
+                        st.success("🔥 极可能开出：" +
+                                   "、".join(f"{v0:02d}" for v in _hot0))
             else:
-                st.info("该荷官档案样本还太少，继续录入即可。")
+                _fr0 = frequency_candidates(_pf0)
+                if _fr0:
+                    st.caption("该荷官云端序列还不足 20 期，先按长期频率参考：")
+                    st.dataframe(pd.DataFrame(
+                        [{"号码": _n0, "判断": _lv0,
+                          "偏离": f"{_dev0*100:+.0f}%", "说明": _why0}
+                         for _n0, _dev0, _lv0, _why0 in _fr0]),
+                        use_container_width=True, hide_index=True)
+                else:
+                    st.info("该荷官档案样本还太少，继续录入即可。")
         return
 
     _seg_draws = current_segment(draws)
