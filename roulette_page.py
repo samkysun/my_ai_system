@@ -273,13 +273,21 @@ def load_rule_memory(loader):
 def save_rule_memory(loader, mem):
     try:
         fn = loader.get("gh_write")
-        if fn:
-            fn(RULE_MEM_FILE, json.dumps(mem, ensure_ascii=False),
-               "轮盘规则记忆更新")
-            return True
+        if not fn:
+            return False
+        _txt = json.dumps(mem, ensure_ascii=False)
+
+        def _bg():
+            try:
+                fn(RULE_MEM_FILE, _txt, "轮盘规则记忆更新")
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+        return True
     except Exception:
-        pass
-    return False
+        return False
 
 
 def merge_rule_memory(mem, rules):
