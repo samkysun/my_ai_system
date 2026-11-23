@@ -497,8 +497,13 @@ def load_profiles(loader):
 
 
 def save_profiles(loader, prof):
-    if save_profiles_sb(loader, prof):
+    if _sb_client(loader) is None:
+        _LAST_WRITE_ERR["msg"] = "未注入 supabase 客户端"
+    elif save_profiles_sb(loader, prof):
+        _LAST_WRITE_ERR["msg"] = "supabase 写入成功"
         return True
+    else:
+        _LAST_WRITE_ERR["msg"] = "supabase 写入失败"
     try:
         fn = loader.get("gh_write")
         if not fn:
