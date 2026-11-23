@@ -131,12 +131,17 @@ def dealer_segments(draws):
     dl = st.session_state.get("_roulette_dealers", []) or []
     if not dl:
         return [("（未记录）", 0, list(draws))] if draws else []
-    out = []
+    merged = {}
+    order = []
     for i, d0 in enumerate(dl):
         s0 = int(d0.get("start", 0))
         e0 = int(dl[i + 1]["start"]) if i + 1 < len(dl) else len(draws)
-        out.append((d0.get("name") or f"荷官{i+1}", s0, list(draws[s0:e0])))
-    return out
+        nm = _norm_name(d0.get("name")) or f"荷官{i+1}"
+        if nm not in merged:
+            merged[nm] = {"start": s0, "nums": []}
+            order.append(nm)
+        merged[nm]["nums"].extend(draws[s0:e0])
+    return [(nm, merged[nm]["start"], merged[nm]["nums"]) for nm in order]
 
 
 def current_segment(draws):
