@@ -1373,7 +1373,10 @@ def render(df_data, H):
                 st.dataframe(pd.DataFrame(_rows0), use_container_width=True,
                              hide_index=True)
                 if _lv0:
-                    _hot0 = [r0["号码"] for r0 in _rows0 if "极可能" in str(r0["判断"])]
+                    _rc0m = {r0["号码"]: int(_rhit0.get(r0["号码"], 0))
+                             for r0 in _rows0}
+                    _hot0 = sorted([v0 for v0 in _rc0m if _rc0m[v0] >= 3],
+                                   key=lambda v0: -_rc0m[v0])[:3]
                     if _hot0:
                         st.success("🔥 极可能开出：" +
                                    "、".join(f"{v0}" for v in _hot0))
