@@ -2067,6 +2067,134 @@ def _exp_simple(loader):
         st.info(f"{pick} 是最新一期，下一期还没开奖")
 
 # =====================================================================
+# 实验 M：跨球联动（用 A 球排列预测 B 球）
+# =====================================================================
+def _exp_cross_ball(loader):
+    from collections import Counter as _C
+    st.markdown("#### 实验 M：跨球联动（用 A 球的排列，预测 B 球）")
+    st.info("看 A 球最近 N 期的属性排列 → 找历史上排列相同的期 → "
+            "统计这些期的下一期 B 球开什么 → 最多的热、最少的是冷。")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿",
+             "生肖五行", "阴阳天地", "3模", "波色"]
+
+    def val_of(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        return amap.get(num, {}).get(key, "")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        pick = st.selectbox("选择期号", list(reversed(periods)), index=0,
+                            key="lab_m_period")
+    with c2:
+        b_src = st.selectbox("A 球（提供排列）", [1, 2, 3, 4, 5, 6],
+                             index=0, key="lab_m_src")
+    with c3:
+        b_tgt = st.selectbox("B 球（被预测）", [1, 2, 3, 4, 5, 6],
+                             index=5, key="lab_m_tgt")
+    c4, c5 = st.columns(2)
+    with c4:
+        attr_s = st.selectbox("A 球属性", ATTRS, index=0, key="lab_m_as")
+    with c5:
+        attr_t = st.selectbox("B 球属性", ATTRS, index=0, key="lab_m_at")
+    depth = st.number_input("联动行数（连续几期）", 1, 8, 2, 1,
+                            key="lab_m_depth")
+
+    idx = periods.index(pick)
+    d = int(depth)
+    seq_s = [val_of(x[1][b_src - 1], attr_s) for x in data]
+    seq_t = [val_of(x[1][b_tgt - 1], attr_t) for x in data]
+    pat = seq_s[idx - d + 1: idx + 1]
+
+    cnt = _C()
+    rows_n = 0
+    detail = []
+    for j in range(d - 1, idx):
+        if seq_s[j - d + 1: j + 1] == pat:
+            rows_n += 1
+            cnt[seq_t[j + 1]] += 1
+            detail.append({
+                "起 ~ 止": f"{periods[j - d + 1]} ~ {periods[j]}",
+                "A球排列": " → ".join(seq_s[j - d + 1: j + 1]),
+                f"B球下一期({periods[j + 1]})": seq_t[j + 1],
+            })
+
+    st.markdown("### A 球排列：" + " → ".join(pat)
+                + f"（{attr_s}，共 {d} 期）")
+    st.markdown(f"历史相同排列共 **{rows_n}** 期")
+    if not cnt:
+        st.warning("历史上没有相同排列，无法预测 B 球")
+        return
+
+    hot, hot_n = cnt.most_common(1)[0]
+    uni = sorted({x for x in seq_t if x})
+    cold = min(uni, key=lambda u: cnt.get(u, 0))
+    lo, hi = int(b_tgt), 43 + int(b_tgt)
+    nums_hot = [x for x in range(lo, hi + 1) if val_of(x, attr_t) == hot]
+    nums_cold = [x for x in range(lo, hi + 1) if val_of(x, attr_t) == cold]
+
+    st.markdown("这些期的下一期，B 球分别开了："
+                + "、".join(f"{k}（{v}次）" for k, v in cnt.most_common()))
+    st.success(f"🔥 热：{hot}（{hot_n} 次）→ B 球号码 "
+               + "、".join(str(x) for x in nums_hot))
+    st.warning(f"❄ 冷：{cold}（0 次）→ B 球号码 "
+               + "、".join(str(x) for x in nums_cold))
+
+    if idx + 1 < n:
+        actual = seq_t[idx + 1]
+        st.markdown(f"### 实际：{periods[idx + 1]} 期，B 球 {attr_t} = "
+                    f"**{actual}**")
+        m1, m2 = st.columns(2)
+        m1.metric("热是否命中", "✅ 命中" if actual == hot else "❌ 未中")
+        m2.metric("冷是否命中", "✅ 命中" if actual == cold else "❌ 未中")
+    else:
+        st.info(f"{pick} 是最新一期，下一期还没开")
+
+    with st.expander(f"查看这 {rows_n} 期的明细", expanded=False):
+        st.dataframe(pd.DataFrame(detail), use_container_width=True,
+                     hide_index=True)
+
+    st.markdown("**6×6 组合命中率（最近 300 期）**")
+    if st.button("▶ 计算 6×6", key="lab_m_all"):
+        ss = {q: [val_of(x[1][q - 1], attr_s) for x in data]
+              for q in range(1, 7)}
+        tt = {q: [val_of(x[1][q - 1], attr_t) for x in data]
+              for q in range(1, 7)}
+        start = max(d, n - 300)
+        mat = []
+        for _a in range(1, 7):
+            row = {"A 球": f"第{_a}球"}
+            for _b in range(1, 7):
+                s_a, s_b = ss[_a], tt[_b]
+                ok = tot = 0
+                for i in range(start, n - 1):
+                    pat2 = s_a[i - d + 1: i + 1]
+                    c2 = _C()
+                    for j in range(d - 1, i):
+                        if s_a[j - d + 1: j + 1] == pat2:
+                            c2[s_b[j + 1]] += 1
+                    if not c2:
+                        continue
+                    tot += 1
+                    if s_b[i + 1] == c2.most_common(1)[0][0]:
+                        ok += 1
+                row[f"→第{_b}球"] = f"{ok/tot*100:.0f}%" if tot else "—"
+            mat.append(row)
+        st.dataframe(pd.DataFrame(mat), use_container_width=True,
+                     hide_index=True)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -2265,9 +2393,10 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabh, tabi, tabj, tabk, tabl, tab4, tab3 = st.tabs(
+    tab2, tabh, tabi, tabj, tabk, tabl, tabm, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
-         "实验J 属性杀号", "实验K 追热追冷", "实验L 简单版", "结论档案", "清理"])
+         "实验J 属性杀号", "实验K 追热追冷", "实验L 简单版",
+         "实验M 跨球联动", "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabh:
@@ -2280,6 +2409,8 @@ def render(df_data, H):
         _exp_hot_cold(H)
     with tabl:
         _exp_simple(H)
+    with tabm:
+        _exp_cross_ball(H)
     with tab4:
         _archive()
     with tab3:
