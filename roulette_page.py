@@ -1937,25 +1937,24 @@ def render(df_data, H):
         st.warning(f"{kind} 遗漏达标：{'、'.join(vals)}")
 
     # ---- 荷官状态说明 ----
+    _slot = st.empty()
     _dlr_s = _norm_name(st.session_state.get("_roulette_dealer"))
     if _dlr_s:
         _pf_s = (st.session_state.get("_roulette_profiles") or {}).get(
-            "官:" + _dlr_s)
+            _pkey(_cur_venue(), _dlr_s))
         _seq_s = [int(x) for x in ((_pf_s or {}).get("seq") or [])]
         if _seq_s and len(_seq_s) >= 40:
             _tot_s = int((_pf_s or {}).get("spins", 0))
-            st.success(f"✅ 已更换为「{_dlr_s}」荷官｜累计摇珠 {_tot_s} 次"
-                       f"（可用序列 {len(_seq_s)} 期）→ 即刻按他的规则出候选")
+            _slot.success(f"✅ 已更换为「{_dlr_s}」荷官｜累计摇珠 {_tot_s} 次"
+                          f"（可用序列 {len(_seq_s)} 期）→ 即刻按他的规则出候选")
         elif _seq_s:
-            st.warning(f"🆕「{_dlr_s}」荷官累计 {int((_pf_s or {}).get('spins',0))} 次"
-                       f"（序列 {len(_seq_s)} 期，不足 40），"
-                       f"样本偏少，候选仅供参考")
+            _slot.warning(f"🆕「{_dlr_s}」荷官累计 "
+                          f"{int((_pf_s or {}).get('spins',0))} 次"
+                          f"（序列 {len(_seq_s)} 期，不足 40），样本偏少")
         else:
-            st.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，"
-                       f"满 40 期才出规则候选")
+            _slot.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，满 40 期才出候选")
     else:
-        st.info("尚未选择荷官：候选只按本页数据计算")
-
+        _slot.info("尚未选择荷官：候选只按本页数据计算")
     st.markdown("### 🎯 候选号码（最多 10 个）")
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
