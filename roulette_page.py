@@ -862,15 +862,7 @@ def smart_top3(draws):
 
 
 def build_candidates(draws, rec_nums=None):
-    _seg_draws = current_segment(draws)
-    _use_seg = len(_seg_draws) >= 40
-    _calc = _seg_draws if _use_seg else draws
-    if _seg_draws and _use_seg:
-        st.caption(f"📊 统计范围：本荷官 {len(_seg_draws)} 期"
-                   f"（换荷官后重新计算）")
-    elif _seg_draws:
-        st.caption(f"📊 本荷官仅 {len(_seg_draws)} 期（<40），暂用全场数据")
-    om = omissions(_calc)
+    om = omissions(draws)
     if not draws:
         return om, [], []
 
@@ -946,10 +938,14 @@ def build_candidates(draws, rec_nums=None):
     ranked = [(n, score.get(n, 0)) for n in _rec]
     # 0 号按出现次数权衡：超过 40 次开始推荐
     # 自学习规则得分
-    _rules = learn_rules(_calc)
+    _rules = learn_rules(draws)
     _rscore, _active, _rhit = apply_rules(
-        _calc, _rules, om,
+        draws, _rules, om,
         st.session_state.get("_roulette_rules_mem"))
+    try:
+        st.session_state["_roulette_rhit"] = dict(_rhit)
+    except Exception:
+        pass
     for _n, _s in _rscore.items():
         if _s > 0:
             add(int(_n), "规则", int(round(_s)))
@@ -1066,9 +1062,20 @@ def render(df_data, H):
         st.info("先输入并添加几期开奖号码")
         return
 
-    _top3, _w = smart_top3(draws)
+    _seg_draws = current_segment(draws)
+    _use_seg = len(_seg_draws) >= 40
+    _calc = _seg_draws if _use_seg else draws
+    if _seg_draws:
+        if _use_seg:
+            st.caption(f"📊 统计范围：本荷官 {len(_seg_draws)} 期"
+                       f"（换荷官后重新计算）")
+        else:
+            st.caption(f"📊 本荷官仅 {len(_seg_draws)} 期（<40），暂用全场数据")
+
+    _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
-    om, alerts, levels = build_candidates(draws, _rec)
+    om, alerts, levels = build_candidates(_calc, _rec)
+    _rhit = st.session_state.get("_roulette_rhit", {}) or {}
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
     _zgap2 = om["号码"].get(0, 0)
