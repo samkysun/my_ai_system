@@ -1989,7 +1989,7 @@ def _exp_simple(loader):
     with c4:
         depth = st.number_input("联动行数（连续几期）", 1, 8, 3, 1,
                                 key="lab_l_depth")
-    need = st.number_input("最少匹配几期", 1, 20, 3, 1, key="lab_l_need")
+    need = 1
 
     idx = periods.index(pick)
     seq = [val_of(d[1][ball - 1], attr) for d in data]
@@ -2021,8 +2021,6 @@ def _exp_simple(loader):
     st.caption("本期排列：" + " → ".join(str(x) for x in _cur_nums)
                + f"（{attr}：" + " → ".join(pat) + f"，共 {d} 期）")
     st.markdown(f"历史上连续相同的有 **{rows_n}** 期（要求 ≥{int(need)} 期）")
-    if rows_n < int(need):
-        st.warning(f"匹配只有 {rows_n} 期，不足 {int(need)} 期，仅供参考")
 
     if not cnt:
         st.warning("历史上没有可比对的期，无法判断冷热")
