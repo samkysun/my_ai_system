@@ -1909,3 +1909,40 @@ def render(df_data, H):
                        "当前推荐仍只看页面上录入的数据。")
         else:
             st.caption("档案为空")
+
+    # ---------- 清空所有荷官资料（换场所用） ----------
+    st.divider()
+    st.markdown("### 🧹 换场所：清空所有荷官资料")
+    st.caption("到新场所、荷官全换了时使用。会删除所有荷官名字、云端档案、"
+               "规则记忆与本场记录，不可恢复。")
+    _cf1 = st.checkbox("我确认：清空全部荷官资料（不可恢复）",
+                       key="rou_clear_all_ok")
+    if st.button("🗑 删除所有荷官资料", key="rou_clear_all_btn"):
+        if not _cf1:
+            st.warning("请先勾选确认")
+        else:
+            try:
+                save_profiles(H, {})
+            except Exception:
+                pass
+            try:
+                save_known_names(H, [])
+            except Exception:
+                pass
+            try:
+                _fn = H.get("gh_write")
+                if _fn:
+                    _fn(RULE_MEM_FILE, "{}", "清空规则记忆")
+            except Exception:
+                pass
+            for _k in ("_roulette_profiles", "_roulette_known_names",
+                       "_roulette_dealers", "_roulette_marks",
+                       "_roulette_rules_mem", "_roulette_rhit"):
+                st.session_state.pop(_k, None)
+            st.session_state["_roulette_dealer"] = ""
+            try:
+                save_history(H, [])
+            except Exception:
+                pass
+            st.success("已清空：荷官名单、云端档案、规则记忆、本场记录")
+            st.rerun()
