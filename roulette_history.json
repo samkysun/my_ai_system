@@ -1,1 +1,1 @@
-{"draws": [10, 7, 23, 24], "pending": [], "dealer_marks": [0, 0, 2, 4], "dealers": [{"start": 0, "name": "黄金"}, {"start": 0, "name": "黄金"}, {"start": 2, "name": "陈"}, {"start": 4, "name": "黄金"}], "dealer_name": "黄金", "venue": "新豪"}
+{"draws": [10, 7, 23, 24], "pending": [], "dealer_marks": [0, 0, 2, 4, 4], "dealers": [{"start": 0, "name": "黄金"}, {"start": 0, "name": "黄金"}, {"start": 2, "name": "陈"}, {"start": 4, "name": "黄金"}, {"start": 4, "name": "黄生"}], "dealer_name": "黄生", "venue": "新豪"}
