@@ -119,6 +119,9 @@ def load_history(loader):
                     for d0 in _dl if isinstance(d0, dict)]
                 st.session_state["_roulette_dealer"] = str(
                     obj.get("dealer_name", "") or "")
+                _ven_saved = _norm_name(obj.get("venue", ""))
+                if _ven_saved:
+                    st.session_state["_roulette_venue"] = _ven_saved
         except Exception:
             data = []
     st.session_state["_roulette_hist"] = data
@@ -140,6 +143,7 @@ def save_history(loader, draws, pending=None):
             "dealer_marks": st.session_state.get("_roulette_marks", []),
             "dealers": st.session_state.get("_roulette_dealers", []),
             "dealer_name": st.session_state.get("_roulette_dealer", ""),
+            "venue": st.session_state.get("_roulette_venue", ""),
         }, ensure_ascii=False), "轮盘本场记录更新")
         return True
     except Exception:
@@ -290,25 +294,29 @@ def save_venues(loader, names):
         return False
 
 
+DEFAULT_VENUE = "默认场所"
+
+
 def _cur_venue():
-    return _norm_name(st.session_state.get("_roulette_venue", ""))
+    return _norm_name(st.session_state.get("_roulette_venue", "")) or DEFAULT_VENUE
 
 
 def _pkey(venue, dealer):
-    return f"地:{venue}|官:{dealer}" if venue else f"官:{dealer}"
+    v = _norm_name(venue) or DEFAULT_VENUE
+    return f"地:{v}|官:{dealer}"
 
 
 def _split_key(k):
-    """返回 (场所, 荷官)"""
+    """返回 (场所, 荷官)；老数据归入默认场所"""
     s = str(k)
     if s.startswith("地:") and "|官:" in s:
         v, d = s[2:].split("|官:", 1)
-        return _norm_name(v), _norm_name(d)
+        return _norm_name(v) or DEFAULT_VENUE, _norm_name(d)
     if s.startswith("官:"):
-        return "", _norm_name(s[2:])
+        return DEFAULT_VENUE, _norm_name(s[2:])
     if "官:" in s:
-        return "", _norm_name(s.split("官:", 1)[1])
-    return "", ""
+        return DEFAULT_VENUE, _norm_name(s.split("官:", 1)[1])
+    return DEFAULT_VENUE, ""
 
 
 def load_known_names(loader, venue=""):
@@ -1429,7 +1437,12 @@ def render(df_data, H):
     if "_roulette_profiles" not in st.session_state:
         st.session_state["_roulette_profiles"] = load_profiles(H)
     if "_roulette_venues" not in st.session_state:
-        st.session_state["_roulette_venues"] = load_venues(H)
+        _vl0 = load_venues(H)
+        if DEFAULT_VENUE not in _vl0:
+            _vl0 = [DEFAULT_VENUE] + _vl0
+        st.session_state["_roulette_venues"] = _vl0
+    if not _norm_name(st.session_state.get("_roulette_venue", "")):
+        st.session_state["_roulette_venue"] = DEFAULT_VENUE
     if "_roulette_known_names" not in st.session_state:
         st.session_state["_roulette_known_names"] = load_known_names(
             H, _cur_venue())
