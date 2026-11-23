@@ -1609,6 +1609,54 @@ def render(df_data, H):
         st.caption(f"已记录 {len(draws)} 期" +
                    (f"｜最新 {draws[-1]}" if draws else ""))
 
+    with st.expander("📥 批量导入历史开奖（重建荷官档案）", expanded=False):
+        st.caption("把之前记录过的号码一次粘进来，按顺序录入，"
+                   "自动累加到当前场所、当前荷官的档案。")
+        _blk = st.text_area("号码列表（逗号/空格/换行分隔，0~36）",
+                            height=120, key="rou_bulk_text",
+                            placeholder="例：12,5,31,0,17,8,...")
+        _bd = _norm_name(st.session_state.get("_roulette_dealer"))
+        st.caption(f"将计入：{_cur_venue()}｜荷官 {_bd or '（未选）'}")
+        if st.button("▶ 开始导入", key="rou_bulk_run"):
+            _nums = []
+            _txt = (_blk or "").replace("，", ",").replace("\n", ",") \
+                .replace("\t", ",").replace(";", ",").replace(" ", ",")
+            for _tok in _txt.split(","):
+                _tok = _tok.strip()
+                if not _tok:
+                    continue
+                try:
+                    _v = int(float(_tok))
+                except Exception:
+                    continue
+                if 0 <= _v <= 36:
+                    _nums.append(_v)
+            if not _nums:
+                st.warning("没解析到有效号码")
+            elif not _bd:
+                st.warning("请先选择荷官")
+            else:
+                _cur0 = list(st.session_state.get("_roulette_hist", []))
+                _prev0 = _cur0[-1] if _cur0 else None
+                _pf6 = load_profiles(H)
+                for _vv in _nums:
+                    record_spin(_pf6, [_pkey(_cur_venue(), _bd)], _vv, _prev0)
+                    _prev0 = _vv
+                _cur0.extend(_nums)
+                st.session_state["_roulette_hist"] = _cur0
+                st.session_state["_roulette_profiles"] = _pf6
+                save_history(H, _cur0)
+                _ok6 = save_profiles(H, _pf6)
+                _kn6 = set(st.session_state.get("_roulette_known_names", []) or [])
+                _kn6.add(_bd)
+                st.session_state["_roulette_known_names"] = sorted(_kn6)
+                save_known_names(H, sorted(_kn6), _cur_venue())
+                _sp6 = int(_pf6.get(_pkey(_cur_venue(), _bd), {}).get("spins", 0))
+                if _ok6:
+                    st.success(f"已导入 {len(_nums)} 期｜「{_bd}」累计 {_sp6} 次")
+                else:
+                    st.warning(f"已导入 {len(_nums)} 期｜云端保存失败")
+                st.rerun()
     if draws:
         with st.expander("📜 历史记录", expanded=False):
             df = pd.DataFrame({"序号": list(range(1, len(draws) + 1)),
