@@ -193,6 +193,10 @@ def record_spin(prof, keys, num, prev=None):
             continue
         p0 = prof.setdefault(k, _blank_profile())
         p0["spins"] = int(p0.get("spins", 0)) + 1
+        _seq = p0.setdefault("seq", [])
+        _seq.append(int(num))
+        if len(_seq) > 300:
+            del _seq[:-300]
         nm = p0.setdefault("nums", {})
         nm[str(num)] = int(nm.get(str(num), 0)) + 1
         if int(num) >= 19:
@@ -1213,7 +1217,14 @@ def render(df_data, H):
 
     # ---- 冷启动：本地不足 40 期但云端有该荷官档案 ----
     _cold = False
-    if len(_calc) < 40 and _prof_use and int(_prof_use.get("spins", 0)) >= 40:
+    _cloud_seq = []
+    if len(_calc) < 40 and _prof_use:
+        _cloud_seq = [int(x) for x in (_prof_use.get("seq") or [])][-300:]
+        if len(_cloud_seq) >= 40:
+            _calc = _cloud_seq
+    if len(_cloud_seq) >= 40 and not draws:
+        pass
+    if len(_cloud_seq) >= 40 and len(draws) < 40 and _prof_use:
         _cold = True
         _sp = int(_prof_use["spins"])
         _cnt = {int(k): v for k, v in _prof_use.get("nums", {}).items()}
@@ -1221,8 +1232,9 @@ def render(df_data, H):
         _hot = sorted(_cnt.items(), key=lambda x: -x[1])[:10]
         for _n, _c in _hot:
             _bonus[_n] = round(min(3.0, max(0.3, (_c / _expect - 1) * 1.5)), 2)
-        st.success(f"☁ 冷启动：使用云端「{_dlr_now}」档案（{_sp} 期）"
-                   f"直接给出候选，不必等本地攒满 40 期")
+        st.success(f"☁ 冷启动：使用云端「{_dlr_now}」档案"
+                   f"（累计 {_sp} 期，最近序列 {len(_cloud_seq)} 期）"
+                   f"——系统已用它的历史序列学习规则")
         _sis_rate = _prof_use.get("sister", 0) / max(1, _sp - 1)
         _adj_rate = _prof_use.get("adj", 0) / max(1, _sp - 1)
         if _sis_rate >= 0.08:
@@ -1454,6 +1466,7 @@ def render(df_data, H):
             _prows.append({
                 "对象": _k,
                 "累计期数": _sp,
+                "可用序列": len(_v.get("seq", []) or []),
                 "最热号码": "、".join(f"{a:02d}" for a, _ in _nm2),
                 "最热生肖": "、".join(f"{a}{b/_sp*100:.0f}%" for a, b in _zod2),
                 "大号%": f"{_v.get('big',0)/_sp*100:.0f}%",
