@@ -147,6 +147,46 @@ def current_segment(draws):
 PROFILE_FILE = "roulette_profiles.json"
 
 
+def _merge_profile(dst, src):
+    dst["spins"] = int(dst.get("spins", 0)) + int(src.get("spins", 0))
+    for f in ("sister", "adj", "big", "odd", "red"):
+        dst[f] = int(dst.get(f, 0)) + int(src.get(f, 0))
+    for f in ("nums", "zod"):
+        d0 = dst.setdefault(f, {})
+        for k2, v2 in (src.get(f) or {}).items():
+            d0[k2] = int(d0.get(k2, 0)) + int(v2)
+    seq = dst.setdefault("seq", [])
+    seq.extend(int(x) for x in (src.get("seq") or []))
+    del seq[:-300]
+    return dst
+
+
+def normalize_profiles(prof, changed=None):
+    """统一为「官:名字」，合并同名（去空格），丢弃旧台号键"""
+    if not isinstance(prof, dict):
+        return {}, True
+    out = {}
+    dirty = False
+    for k, v in prof.items():
+        if not isinstance(v, dict):
+            dirty = True
+            continue
+        if not str(k).startswith("官:"):
+            dirty = True          # 旧台号/组合键，直接丢弃
+            continue
+        name = str(k)[2:].replace(" ", "").replace("\u3000", "").strip()
+        if not name:
+            dirty = True
+            continue
+        nk = "官:" + name
+        if nk in out:
+            _merge_profile(out[nk], v)
+            dirty = True
+        else:
+            out[nk] = v
+    return out, dirty
+
+
 def load_profiles(loader):
     try:
         fn = loader.get("gh_read")
@@ -156,6 +196,9 @@ def load_profiles(loader):
         if raw:
             obj = json.loads(raw)
             if isinstance(obj, dict):
+                obj, _dirty = normalize_profiles(obj)
+                if _dirty:
+                    save_profiles(loader, obj)
                 return obj
     except Exception:
         pass
@@ -1172,7 +1215,8 @@ def render(df_data, H):
             try:
                 _prof = load_profiles(H)
                 _prev = draws[-2] if len(draws) >= 2 else None
-                _dlr = st.session_state.get("_roulette_dealer", "")
+                _dlr = (st.session_state.get("_roulette_dealer", "") or "")
+                _dlr = _dlr.replace(" ", "").replace("\u3000", "").strip()
                 _keys = ["官:" + _dlr] if _dlr else []
                 record_spin(_prof, _keys, int(num), _prev)
                 save_profiles(H, _prof)
