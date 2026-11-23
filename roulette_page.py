@@ -1461,26 +1461,33 @@ def render(df_data, H):
     st.divider()
     st.markdown("### 👤 各荷官偏好分析")
     _segs = dealer_segments(draws)
-    if len(_segs) <= 1:
-        st.caption("还没有换过荷官；点上方「🔄 换荷官」后可对比。")
+
+    # 按名字合并（同一荷官多次上钟也合成一行）
+    _by_name = {}
+    for _nm, _st0, _nums in _segs:
+        if not _nums:
+            continue
+        _k0 = (_nm or "未命名").replace(" ", "").strip()
+        _by_name.setdefault(_k0, []).extend(_nums)
+
+    if not _by_name:
+        st.caption("还没有录满一期的荷官记录。")
     else:
-        _cur_start = segment_start()
+        _cur_name0 = (st.session_state.get("_roulette_dealer") or "").strip()
         _rows_d = []
-        for _nm, _st0, _nums in _segs:
-            if not _nums:
-                continue
+        for _nm, _nums in sorted(_by_name.items(), key=lambda x: -len(x[1])):
             _n0 = len(_nums)
             _c0 = Counter(_nums)
 
-            def _pref(fn):
+            def _pref(fn, _nums=_nums, _n0=_n0):
                 c = Counter(fn(x) for x in _nums)
                 v, k = c.most_common(1)[0]
                 return f"{v} {k/_n0*100:.0f}%"
 
-            _bal = _pref(lambda x: "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36} else ("绿" if x == 0 else "蓝波"))
+            _bal = _pref(lambda x: "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36} else ("绿(0)" if x == 0 else "蓝波"))
             _oddeven = _pref(lambda x: "双" if x % 2 == 0 else "单")
             _big = _pref(lambda x: "大(19-36)" if x >= 19 else "小(0-18)")
-            _seg = _pref(lambda x: f"{x//10*10}-{x//10*10+9}" if x < 30 else "30-36")
+            _segp = _pref(lambda x: f"{x//10*10}-{x//10*10+9}" if x < 30 else "30-36")
             _tail = _pref(lambda x: f"{x%10}尾")
             _sector = _pref(lambda x: f"第{POS[x]//6+1}段")
             _zod = _pref(lambda x: zodiac_of(x))
@@ -1488,8 +1495,6 @@ def render(df_data, H):
                        if _nums[i2] in sister(_nums[i2 - 1]))
             _adj = sum(1 for i2 in range(1, len(_nums))
                        if _nums[i2] in wheel_neighbors(_nums[i2 - 1]))
-            _sis_pct = _sis / max(1, len(_nums) - 1)
-            _adj_pct = _adj / max(1, len(_nums) - 1)
             _top3 = "、".join(f"{v:02d}" for v, _ in _c0.most_common(3))
             _rows_d.append({
                 "荷官": _nm,
@@ -1497,23 +1502,23 @@ def render(df_data, H):
                 "波色偏好": _bal,
                 "单双": _oddeven,
                 "大小": _big,
-                "号码段": _seg,
+                "号码段": _segp,
                 "尾数": _tail,
                 "轮盘扇区": _sector,
                 "生肖偏好": _zod,
-                "姐妹码": f"{_sis_pct*100:.0f}%",
-                "轮盘相邻": f"{_adj_pct*100:.0f}%",
+                "姐妹码": f"{_sis/max(1,_n0-1)*100:.0f}%",
+                "轮盘相邻": f"{_adj/max(1,_n0-1)*100:.0f}%",
                 "最热号码": _top3,
-                "当前": "✅" if _st0 == _cur_start else "",
+                "当前": "✅" if _nm == _cur_name0 else "",
             })
         st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
                      hide_index=True)
 
-        # 选择查看哪位荷官
-        _names = [n0 for n0, _s0, _v0 in _segs if _v0]
-        _view = st.selectbox("查看荷官详情", _names,
-                             index=len(_names) - 1, key="rou_view_dealer")
-        _vnums = next((v0 for n0, _s0, v0 in _segs if n0 == _view), [])
+        # 选择查看某位荷官（去重）
+        _names = sorted(_by_name.keys())
+        _view = st.selectbox("查看荷官详情", _names, index=0,
+                             key="rou_view_dealer")
+        _vnums = _by_name.get(_view, [])
         if len(_vnums) >= 10:
             st.markdown(f"**{_view} 的偏好明细（{len(_vnums)} 期）**")
             _n1 = len(_vnums)
@@ -1525,13 +1530,13 @@ def render(df_data, H):
                            for x in _vnums)
             _c4d = Counter(f"{x%10}尾" for x in _vnums)
             _c5d = Counter(f"第{POS[x]//6+1}段" for x in _vnums)
-            _dd = []
             _c6d = Counter(zodiac_of(x) for x in _vnums)
             _c7d = Counter("与上期姐妹" if _vnums[i2] in sister(_vnums[i2-1])
                            else "非姐妹" for i2 in range(1, len(_vnums)))
             _c8d = Counter("与上期轮盘相邻"
                            if _vnums[i2] in wheel_neighbors(_vnums[i2-1])
                            else "非相邻" for i2 in range(1, len(_vnums)))
+            _dd = []
             for _title, _cc in (("波色", _c1d), ("单双", _c2d),
                                 ("大小", _c3d), ("尾数", _c4d),
                                 ("轮盘扇区", _c5d), ("生肖", _c6d),
@@ -1541,8 +1546,7 @@ def render(df_data, H):
                 _dd.append({"维度": _title, "分布": _txt})
             st.dataframe(pd.DataFrame(_dd), use_container_width=True,
                          hide_index=True)
-        st.caption("说明：百分比 = 该类型在本荷官全部开奖中的占比；"
-                   "样本少时仅供参考。")
+        st.caption("说明：同一荷官多次上钟已合并为一行；样本少时仅供参考。")
 
     # ---------- 云端记忆档案 ----------
     st.divider()
