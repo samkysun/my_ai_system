@@ -5993,7 +5993,8 @@ def main_app():
     elif page == "🎡 轮盘系统":
         if render_roulette:
             render_roulette(df_data, {"gh_read": _gh_read_text,
-                                       "gh_write": _gh_write_text})
+                                       "gh_write": _gh_write_text,
+                                       "supabase": get_supabase_client})
         else:
             st.error("roulette_page.py 未找到")
     elif page == "🔬 研究中心":
