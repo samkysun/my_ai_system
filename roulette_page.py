@@ -1462,6 +1462,37 @@ def find_profile(prof, venue, dealer):
     return None, ""
 
 
+def strategy_mode(loader, venue, dealer):
+    """根据最近命中表现决定策略：stable / adapt"""
+    log = st.session_state.get("_rou_pred_log")
+    if log is None:
+        log = load_pred_log(loader)
+        st.session_state["_rou_pred_log"] = log
+    rel = [r for r in (log or [])
+           if (r.get("场所") == venue and r.get("荷官") == dealer)]
+    if len(rel) < 12:
+        return "stable", None, 0
+    last = rel[-20:]
+    rate = sum(int(r.get("命中", 0)) for r in last) / max(1, len(last))
+    mode = "adapt" if rate < 0.25 else "stable"
+    return mode, rate, len(last)
+
+
+def recent_tendency(seq, k=20):
+    """最近 k 期的倾向（比例）"""
+    s = [int(x) for x in (seq or [])][-k:]
+    n = len(s)
+    if n < 8:
+        return None
+    big = sum(1 for x in s if x >= 19) / n
+    odd = sum(1 for x in s if x % 2 == 1) / n
+    red = sum(1 for x in s if x in
+              {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}) / n
+    sis = sum(1 for i in range(1, n) if s[i] in sister(s[i - 1])) / max(1, n - 1)
+    adj = sum(1 for i in range(1, n) if s[i] in wheel_neighbors(s[i - 1])) / max(1, n - 1)
+    return {"big": big, "odd": odd, "red": red, "sister": sis, "adj": adj}
+
+
 def dealer_habits(pf):
     """从档案里找出这个荷官的显著习惯，返回 [(名称, 实际率, 理论率, z)]"""
     out = []
@@ -2076,6 +2107,9 @@ def render(df_data, H):
         st.session_state.get("_roulette_profiles"), _cur_venue(),
         _norm_name(st.session_state.get("_roulette_dealer")))
     _bonus = {}
+    _mode, _rate20, _n20 = strategy_mode(
+        H, _cur_venue(), _norm_name(st.session_state.get("_roulette_dealer")))
+    st.session_state["_rou_mode"] = (_mode, _rate20, _n20)
     _spw = int((_prof_use or {}).get("spins", 0))
     _nm3 = []
     _bigp = 0.5
@@ -2100,6 +2134,32 @@ def render(df_data, H):
         elif _redp <= 0.44:
             for _n2 in (2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35):
                 _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
+        if _mode == "adapt":
+            _tend = recent_tendency((_prof_use or {}).get("seq") or [], 20)
+            if _tend:
+                _bonus = {}
+                if _tend["big"] >= 0.6:
+                    for _n2 in range(19, 37):
+                        _bonus[_n2] = 0.5
+                elif _tend["big"] <= 0.4:
+                    for _n2 in range(0, 19):
+                        _bonus[_n2] = 0.5
+                if _tend["red"] >= 0.6:
+                    for _n2 in (1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36):
+                        _bonus[_n2] = _bonus.get(_n2, 0) + 0.4
+                elif _tend["red"] <= 0.4:
+                    for _n2 in (2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35):
+                        _bonus[_n2] = _bonus.get(_n2, 0) + 0.4
+                if _tend["sister"] >= 0.09 and draws:
+                    for _sn in sister(draws[-1]):
+                        _bonus[_sn] = _bonus.get(_sn, 0) + 0.6
+                if _tend["adj"] >= 0.09 and draws:
+                    for _wn in wheel_neighbors(draws[-1]):
+                        _bonus[_wn] = _bonus.get(_wn, 0) + 0.6
+                st.session_state["_rou_mode_note"] = (
+                    f"最近命中率 {(_rate20 or 0)*100:.0f}% 偏低 → 已切换近期跟随"
+                    f"（大{_tend['big']*100:.0f}% 红{_tend['red']*100:.0f}% "
+                    f"姐妹{_tend['sister']*100:.0f}%）")
         # 习惯加权（z≥2 才生效）
         _habits = dealer_habits(_prof_use)
         _hb_note = []
@@ -2521,6 +2581,14 @@ def render(df_data, H):
             _c3.metric("累计命中率", f"{_hit_all/max(1,_n_all)*100:.1f}%")
             _c4.metric("最近50期命中率",
                        f"{_hit50/max(1,len(_last50))*100:.1f}%")
+
+            _md = st.session_state.get("_rou_mode") or ("stable", None, 0)
+            _mnote = st.session_state.get("_rou_mode_note")
+            st.markdown(f"**当前策略：{'自适应近期跟随' if _md[0]=='adapt' else '稳定跟随长期规则'}**")
+            if _mnote:
+                st.caption(_mnote)
+            elif _md[1] is not None:
+                st.caption(f"最近 {_md[2]} 期命中率 {_md[1]*100:.0f}% → 保持现有规则不变")
 
             # 按场所统计
             _byv = {}
