@@ -1870,6 +1870,40 @@ def _exp_hot_cold(loader):
                            _df.to_csv(index=False).encode("utf-8-sig"),
                            file_name=f"实验K_{attr}_第{ball0}球.csv",
                            mime="text/csv", key="lab_k_dl")
+    st.markdown("---")
+    st.markdown(f"**下一期预测（基于 {periods[-1]} 期，第{ball0}球基准）**")
+    _last = len(periods) - 1
+    _pred_rows = []
+    for _b in range(1, 7):
+        _seq = vals[_b]
+        _v = _seq[_last]
+        _mc = _dd(_C)
+        _cnt = 0
+        for _i in range(_last):
+            if _seq[_i] == _v:
+                _cnt += 1
+                if _i + 1 <= _last:
+                    _mc[_seq[_i + 1]] += 1
+        if _cnt < 1 or not _mc:
+            _pred_rows.append({"球位": f"第{_b}球", "本期值": _v,
+                               "匹配行": _cnt, "追热": "—", "追冷": "—",
+                               "热对应号码": "—"})
+            continue
+        _hot = _mc.most_common(1)[0][0]
+        _uni = sorted({x for x in _seq if x})
+        _cold = min(_uni, key=lambda u: _mc.get(u, 0))
+        _lo, _hi = _b, 43 + _b
+        _nums_hot = [x for x in range(_lo, _hi + 1)
+                     if amap.get(x, {}).get(attr, "") == _hot]
+        _pred_rows.append({
+            "球位": f"第{_b}球", "本期值": _v, "匹配行": _cnt,
+            "追热": _hot, "追冷": _cold,
+            "热对应号码": " ".join(str(x) for x in _nums_hot) or "—"})
+    st.dataframe(pd.DataFrame(_pred_rows), use_container_width=True,
+                 hide_index=True)
+    st.caption("追热 = 下期最可能出现的属性值；追冷 = 最不可能出现的值。"
+               "「热对应号码」仅为该属性值覆盖的号码，需再与其他条件交叉。")
+
     st.caption("提示：命中率高不代表能盈利，还要看与「随机取值」基线比较；"
                "追热命中率若低于 1/取值数，说明该属性无规律。")
     st.markdown("**跨球位对照（用 A 球的匹配规律预测 B 球）**")
