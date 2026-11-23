@@ -1199,6 +1199,26 @@ def render(df_data, H):
 
     if not draws:
         st.info("先输入并添加几期开奖号码")
+        _dlr0 = st.session_state.get("_roulette_dealer", "")
+        _pf0 = (st.session_state.get("_roulette_profiles") or {}).get("官:" + _dlr0) \
+            if _dlr0 else None
+        if _pf0 and int(_pf0.get("spins", 0)) >= 40:
+            st.markdown(f"### ☁ 云端档案：{_dlr0}"
+                        f"（{int(_pf0.get('spins', 0))} 期）")
+            _sp0 = int(_pf0["spins"])
+            _nm0 = sorted(((int(a), b) for a, b in _pf0.get("nums", {}).items()),
+                          key=lambda x: -x[1])[:10]
+            st.dataframe(pd.DataFrame(
+                [{"排名": i + 1, "号码": f"{a:02d}", "出现": b,
+                  "占比": f"{b/_sp0*100:.1f}%"} for i, (a, b) in enumerate(_nm0)]),
+                use_container_width=True, hide_index=True)
+            st.caption(
+                f"大号 {_pf0.get('big',0)/_sp0*100:.0f}%｜"
+                f"单数 {_pf0.get('odd',0)/_sp0*100:.0f}%｜"
+                f"红波 {_pf0.get('red',0)/_sp0*100:.0f}%｜"
+                f"姐妹 {_pf0.get('sister',0)/max(1,_sp0-1)*100:.0f}%｜"
+                f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
+            st.info("录入本期号码后，系统会自动结合这份档案给出候选。")
         return
 
     _seg_draws = current_segment(draws)
@@ -1240,8 +1260,29 @@ def render(df_data, H):
             for _a, _b2 in _nm3:
                 _bonus[_a] = 0.5
 
+    # ---- 冷启动：本地不足 40 期但云端有该荷官档案 ----
+    _cold = False
+    if len(_calc) < 40 and _prof_use and int(_prof_use.get("spins", 0)) >= 40:
+        _cold = True
+        _sp = int(_prof_use["spins"])
+        _cnt = {int(k): v for k, v in _prof_use.get("nums", {}).items()}
+        _expect = _sp / 37.0
+        _hot = sorted(_cnt.items(), key=lambda x: -x[1])[:10]
+        for _n, _c in _hot:
+            _bonus[_n] = round(min(3.0, max(0.3, (_c / _expect - 1) * 1.5)), 2)
+        st.success(f"☁ 冷启动：使用云端「{_dlr_now}」档案（{_sp} 期）"
+                   f"直接给出候选，不必等本地攒满 40 期")
+        _sis_rate = _prof_use.get("sister", 0) / max(1, _sp - 1)
+        _adj_rate = _prof_use.get("adj", 0) / max(1, _sp - 1)
+        if _sis_rate >= 0.08:
+            st.warning(f"该荷官姐妹码偏高（{_sis_rate*100:.0f}%，理论 5.4%）")
+        if _adj_rate >= 0.08:
+            st.warning(f"该荷官轮盘相邻偏高（{_adj_rate*100:.0f}%，理论 5.4%）")
+
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
+    if _cold and not _rec:
+        _rec = [n for n, _ in sorted(_bonus.items(), key=lambda x: -x[1])[:REC_N]]
     om, alerts, levels = build_candidates(_calc, _rec, extra_bonus=_bonus)
     _rhit = st.session_state.get("_roulette_rhit", {}) or {}
     last_no = draws[-1]
