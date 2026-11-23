@@ -2302,7 +2302,13 @@ def render(df_data, H):
                 _seqv = [int(x) for x in (_pfv.get("seq") or [])]
                 if len(_seqv) > len(_vnums):
                     _vnums = _seqv
-        if len(_vnums) >= 10:
+        _pfv0, _ = find_profile(st.session_state.get("_roulette_profiles"),
+                                _cur_venue(), _view)
+        st.caption(f"诊断：{_view} 本场 {len(_by_name.get(_view, []))} 期｜"
+                   f"云端档案 {int((_pfv0 or {}).get('spins', 0))} 次｜"
+                   f"可用序列 {len(((_pfv0 or {}).get('seq') or []))} 期｜"
+                   f"当前场所 {_cur_venue()}")
+        if len(_vnums) >= 5:
             st.markdown(f"**{_view} 的偏好明细（{len(_vnums)} 期）**")
             _n1 = len(_vnums)
             _c1d = Counter(
