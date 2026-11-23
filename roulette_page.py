@@ -1914,35 +1914,45 @@ def render(df_data, H):
     st.divider()
     st.markdown("### 🧹 换场所：清空所有荷官资料")
     st.caption("到新场所、荷官全换了时使用。会删除所有荷官名字、云端档案、"
-               "规则记忆与本场记录，不可恢复。")
-    _cf1 = st.checkbox("我确认：清空全部荷官资料（不可恢复）",
-                       key="rou_clear_all_ok")
+               "规则记忆与本场记录。")
+
     if st.button("🗑 删除所有荷官资料", key="rou_clear_all_btn"):
-        if not _cf1:
-            st.warning("请先勾选确认")
-        else:
-            try:
-                save_profiles(H, {})
-            except Exception:
-                pass
-            try:
-                save_known_names(H, [])
-            except Exception:
-                pass
-            try:
-                _fn = H.get("gh_write")
-                if _fn:
-                    _fn(RULE_MEM_FILE, "{}", "清空规则记忆")
-            except Exception:
-                pass
-            for _k in ("_roulette_profiles", "_roulette_known_names",
-                       "_roulette_dealers", "_roulette_marks",
-                       "_roulette_rules_mem", "_roulette_rhit"):
-                st.session_state.pop(_k, None)
-            st.session_state["_roulette_dealer"] = ""
-            try:
-                save_history(H, [])
-            except Exception:
-                pass
-            st.success("已清空：荷官名单、云端档案、规则记忆、本场记录")
-            st.rerun()
+        st.session_state["_rou_del_step"] = 1
+
+    _step = int(st.session_state.get("_rou_del_step", 0))
+    if _step == 1:
+        st.error("⚠️ 一旦删除就无法恢复，是否确定删除？")
+        st.markdown("**将删除：荷官名单、云端档案、规则记忆、本场记录**")
+        _q1, _q2 = st.columns(2)
+        with _q1:
+            if st.button("✅ 确定删除（不可恢复）", key="rou_del_yes"):
+                try:
+                    save_profiles(H, {})
+                except Exception:
+                    pass
+                try:
+                    save_known_names(H, [])
+                except Exception:
+                    pass
+                try:
+                    _fn = H.get("gh_write")
+                    if _fn:
+                        _fn(RULE_MEM_FILE, "{}", "清空规则记忆")
+                except Exception:
+                    pass
+                for _k in ("_roulette_profiles", "_roulette_known_names",
+                           "_roulette_dealers", "_roulette_marks",
+                           "_roulette_rules_mem", "_roulette_rhit"):
+                    st.session_state.pop(_k, None)
+                st.session_state["_roulette_dealer"] = ""
+                try:
+                    save_history(H, [])
+                except Exception:
+                    pass
+                st.session_state["_rou_del_step"] = 0
+                st.success("已清空：荷官名单、云端档案、规则记忆、本场记录")
+                st.rerun()
+        with _q2:
+            if st.button("✖ 取消", key="rou_del_no"):
+                st.session_state["_rou_del_step"] = 0
+                st.rerun()
