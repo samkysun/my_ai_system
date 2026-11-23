@@ -1723,6 +1723,138 @@ def _exp_kill_rank(loader):
 
 
 # =====================================================================
+# 实验 K：追热 / 追冷 对比回测
+# =====================================================================
+def _exp_hot_cold(loader):
+    from collections import Counter as _C, defaultdict as _dd
+    st.markdown("#### 实验 K：追热 vs 追冷（分球位回测）")
+    st.caption("规则：取目标期该球属性值 → 找历史上同值的期（匹配行）→ "
+               "看这些期的下一期该球属性值分布 → 追热取最多、追冷取最少。")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿",
+             "生肖五行", "阴阳天地", "3模", "波色", "单双", "门数", "段数"]
+
+    def val_of(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        if key == "单双":
+            return "单" if num % 2 else "双"
+        return amap.get(num, {}).get(key, "")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        attr = st.selectbox("属性", ATTRS, index=0, key="lab_k_attr")
+    with c2:
+        need = st.number_input("最少匹配行数", 1, 20, 3, 1, key="lab_k_need")
+    with c3:
+        bt = st.number_input("回测期数", 50, 3000, 300, 50, key="lab_k_bt")
+    with c4:
+        ball0 = st.selectbox("基准球位", list(range(1, 7)), index=0,
+                             key="lab_k_ball")
+
+    if not st.button("▶ 运行实验 K", key="lab_k_run"):
+        return
+
+    vals = {}
+    for b in range(1, 7):
+        vals[b] = [val_of(d[1][b - 1], attr) for d in data]
+
+    start = max(50, n - int(bt))
+    rows = []
+    per_ball = {b: {"hot": [0, 0], "cold": [0, 0]} for b in range(1, 7)}
+    detail = []
+
+    # 逐球独立回测
+    for b in range(1, 7):
+        seq = vals[b]
+        universe = sorted({v for v in seq if v})
+        idx = _dd(_C)          # 值 -> 下一期值计数
+        seen = _C()            # 值 -> 匹配行数
+        for i in range(1, n - 1):
+            idx[seq[i - 1]][seq[i]] += 1
+            seen[seq[i - 1]] += 1
+            if i < start:
+                continue
+            v = seq[i]
+            cnt = seen.get(v, 0)
+            if cnt < int(need):
+                continue
+            mc = idx.get(v)
+            if not mc:
+                continue
+            hot = mc.most_common(1)[0][0]
+            cold = None
+            best = None
+            for u in universe:
+                c = mc.get(u, 0)
+                if best is None or c < best:
+                    best, cold = c, u
+            actual = seq[i + 1]
+            per_ball[b]["hot"][0] += 1
+            per_ball[b]["hot"][1] += 1 if actual == hot else 0
+            per_ball[b]["cold"][0] += 1
+            per_ball[b]["cold"][1] += 1 if actual == cold else 0
+            if b == int(ball0):
+                detail.append({"期号": periods[i + 1], "上期值": v,
+                               "匹配行": cnt, "追热": hot, "追冷": cold,
+                               "实开": actual,
+                               "热中": "★" if actual == hot else "",
+                               "冷中": "★" if actual == cold else ""})
+
+    st.markdown("**各球位命中率对比**")
+    trows = []
+    for b in range(1, 7):
+        h = per_ball[b]["hot"]
+        c = per_ball[b]["cold"]
+        trows.append({
+            "球位": f"第{b}球",
+            "追热期数": h[0], "追热命中": h[1],
+            "追热命中率": f"{h[1]/max(1,h[0])*100:.1f}%",
+            "追冷期数": c[0], "追冷命中": c[1],
+            "追冷命中率": f"{c[1]/max(1,c[0])*100:.1f}%",
+        })
+    st.dataframe(pd.DataFrame(trows), use_container_width=True,
+                 hide_index=True)
+
+    _h = per_ball[int(ball0)]["hot"]
+    _c = per_ball[int(ball0)]["cold"]
+    st.markdown(f"**基准球位：第{ball0}球**")
+    _m1, _m2, _m3 = st.columns(3)
+    _m1.metric("追热命中率", f"{_h[1]/max(1,_h[0])*100:.1f}%",
+               f"{_h[1]}/{_h[0]} 期")
+    _m2.metric("追冷命中率", f"{_c[1]/max(1,_c[0])*100:.1f}%",
+               f"{_c[1]}/{_c[0]} 期")
+    _m3.metric("属性取值数", len({v for v in vals[int(ball0)] if v}))
+
+    if detail:
+        _df = pd.DataFrame(list(reversed(detail)))
+
+        def _hl(row):
+            if row["热中"] or row["冷中"]:
+                return ["background-color:#ffe08a"] * len(row)
+            return [""] * len(row)
+
+        st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
+                     hide_index=True, height=360)
+        st.download_button("📥 下载明细",
+                           _df.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"实验K_{attr}_第{ball0}球.csv",
+                           mime="text/csv", key="lab_k_dl")
+    st.caption("提示：命中率高不代表能盈利，还要看与「随机取值」基线比较；"
+               "追热命中率若低于 1/取值数，说明该属性无规律。")
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -1921,9 +2053,9 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabh, tabi, tabj, tab4, tab3 = st.tabs(
+    tab2, tabh, tabi, tabj, tabk, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
-         "实验J 属性杀号", "结论档案", "清理"])
+         "实验J 属性杀号", "实验K 追热追冷", "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabh:
@@ -1932,6 +2064,8 @@ def render(df_data, H):
         _exp_stake_plan(H)
     with tabj:
         _exp_kill_rank(H)
+    with tabk:
+        _exp_hot_cold(H)
     with tab4:
         _archive()
     with tab3:
