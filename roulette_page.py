@@ -1505,6 +1505,72 @@ def dealer_habits(pf):
     return out
 
 
+PRED_FILE = "roulette_pred_log.json"
+SRC_PRED = "__roulette_predlog__"
+
+
+def load_pred_log(loader):
+    c = _sb_client(loader)
+    if c:
+        try:
+            res = (c.table("ai_board").select("content")
+                   .eq("source", SRC_PRED).execute())
+            if res.data:
+                return json.loads(res.data[0].get("content") or "[]")
+        except Exception:
+            pass
+    try:
+        fn = loader.get("gh_read")
+        raw = fn(PRED_FILE) if fn else ""
+        if raw:
+            obj = json.loads(raw)
+            if isinstance(obj, list):
+                return obj
+    except Exception:
+        pass
+    return []
+
+
+def save_pred_log(loader, rows):
+    rows = rows[-800:]
+    txt = json.dumps(rows, ensure_ascii=False)
+    c = _sb_client(loader)
+    if c:
+        try:
+            c.table("ai_board").delete().eq("source", SRC_PRED).execute()
+            c.table("ai_board").insert({"source": SRC_PRED, "title": "log",
+                                        "content": txt}).execute()
+            return True
+        except Exception:
+            pass
+    try:
+        fn = loader.get("gh_write")
+        if fn:
+            return bool(fn(PRED_FILE, txt, "轮盘命中记录"))
+    except Exception:
+        pass
+    return False
+
+
+def record_prediction(loader, num, draws_before):
+    """把上一次给出的候选与本期开奖对比后记录"""
+    pred = st.session_state.get("_rou_last_pred") or []
+    if not pred:
+        return None
+    hit = int(num) in pred
+    rank = (pred.index(int(num)) + 1) if hit else None
+    row = {"期序": len(draws_before) + 1, "开奖": int(num),
+           "候选": ",".join(str(x) for x in pred),
+           "命中": 1 if hit else 0, "名次": rank}
+    rows = st.session_state.get("_rou_pred_log")
+    if rows is None:
+        rows = load_pred_log(loader)
+    rows.append(row)
+    st.session_state["_rou_pred_log"] = rows
+    save_pred_log(loader, rows)
+    return row
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -1886,6 +1952,10 @@ def render(df_data, H):
         num = st.number_input("本期开奖号码", 0, 36, 0, 1, key="rou_num")
     with c2:
         if st.button("➕ 添加", use_container_width=True, key="rou_add"):
+            try:
+                record_prediction(H, int(num), draws)
+            except Exception:
+                pass
             draws = draws + [int(num)]
             save_history(H, draws, [x for x in st.session_state.get(
                 "_roulette_pending", []) if x != int(num)])
@@ -2059,6 +2129,10 @@ def render(df_data, H):
     if _cold and not _rec:
         _rec = [n for n, _ in sorted(_bonus.items(), key=lambda x: -x[1])[:REC_N]]
     om, alerts, levels = build_candidates(_calc, _rec, extra_bonus=_bonus)
+    try:
+        st.session_state["_rou_last_pred"] = [x[0] for x in levels]
+    except Exception:
+        pass
     _rhit = st.session_state.get("_roulette_rhit", {}) or {}
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
@@ -2423,6 +2497,56 @@ def render(df_data, H):
         st.session_state["_roulette_profiles"] = load_profiles(H)
         st.success("已重新读取")
         st.rerun()
+    with st.expander("📊 候选命中记录（复盘用，平时收起）", expanded=False):
+        _log = st.session_state.get("_rou_pred_log")
+        if _log is None:
+            _log = load_pred_log(H)
+            st.session_state["_rou_pred_log"] = _log
+        if not _log:
+            st.caption("还没有记录。录入下一期后会自动记录：上期候选 vs 本期开奖。")
+        else:
+            _n_all = len(_log)
+            _hit_all = sum(int(r.get("命中", 0)) for r in _log)
+            _last50 = _log[-50:]
+            _hit50 = sum(int(r.get("命中", 0)) for r in _last50)
+            _c1, _c2, _c3, _c4 = st.columns(4)
+            _c1.metric("已记录期数", _n_all)
+            _c2.metric("累计命中", _hit_all)
+            _c3.metric("累计命中率", f"{_hit_all/max(1,_n_all)*100:.1f}%")
+            _c4.metric("最近50期命中率",
+                       f"{_hit50/max(1,len(_last50))*100:.1f}%")
+
+            st.markdown("**按每 20 期滚动的命中率**")
+            _roll = []
+            for _i in range(0, len(_log), 20):
+                _chunk = _log[_i:_i + 20]
+                _h = sum(int(r.get("命中", 0)) for r in _chunk)
+                _roll.append({"区间": f"{_i+1}-{_i+len(_chunk)}",
+                              "期数": len(_chunk), "命中": _h,
+                              "命中率": f"{_h/max(1,len(_chunk))*100:.0f}%"})
+            st.dataframe(pd.DataFrame(_roll), use_container_width=True,
+                         hide_index=True)
+
+            _dfp = pd.DataFrame(list(reversed(_log)))
+            _dfp = _dfp.rename(columns={"名次": "命中名次"})
+
+            def _hlp(row):
+                if int(row.get("命中", 0)):
+                    return ["background-color:#ffe08a;font-weight:bold"] * len(row)
+                return [""] * len(row)
+
+            try:
+                st.dataframe(_dfp.style.apply(_hlp, axis=1),
+                             use_container_width=True, hide_index=True,
+                             height=360)
+            except Exception:
+                st.dataframe(_dfp, use_container_width=True,
+                             hide_index=True, height=360)
+            st.download_button("📥 下载命中记录",
+                               _dfp.to_csv(index=False).encode("utf-8-sig"),
+                               file_name="轮盘候选命中记录.csv",
+                               mime="text/csv", key="rou_predlog_dl")
+
     _bn = st.session_state.get("_rou_bonus_note")
     if _bn:
         with st.expander("🧠 系统参考了哪些荷官档案参数（点击查看）", expanded=False):
