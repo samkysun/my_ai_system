@@ -2114,7 +2114,7 @@ def render(df_data, H):
                             "_roulette_known_names") or []) if x != _del_pick]
                         st.session_state["_roulette_known_names"] = _kn2
                         try:
-                            save_known_names(H, _kn2)
+                            save_known_names(H, _kn2, _cur_venue())
                         except Exception:
                             pass
                         # 2) 本场分段也删掉
