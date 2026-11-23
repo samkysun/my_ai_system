@@ -1158,31 +1158,28 @@ def render(df_data, H):
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
-        # 已知荷官：会话内换过的 + 云端档案里的
-        _known = {_norm_name(d0.get("name", ""))
-                  for d0 in st.session_state.get("_roulette_dealers", [])}
-        _prof0 = st.session_state.get("_roulette_profiles") or {}
-        for _k0 in _prof0.keys():
+        # 已知荷官（会话内 + 云端档案）
+        _known = set()
+        for _d0 in st.session_state.get("_roulette_dealers", []) or []:
+            _nmx = _norm_name(_d0.get("name"))
+            if _nmx:
+                _known.add(_nmx)
+        for _k0 in (st.session_state.get("_roulette_profiles") or {}).keys():
             if str(_k0).startswith("官:"):
-                _known.add(_norm_name(str(_k0)[2:]))
-        _known = sorted(x for x in _known if x)
-        _kw = st.text_input("搜索荷官（输入部分名字即可筛选）",
-                            value="", key="rou_dealer_kw",
-                            placeholder="例：输入 11 会列出 11278 等")
-        _match = [x for x in _known if _kw.strip() and _kw.strip() in x]
-        if _kw.strip() and not _match:
-            _opts = _known + ["（新荷官，直接录入）"] if _known else ["（新荷官，直接录入）"]
-        elif _kw.strip():
-            _opts = _match + ["（新荷官，直接录入）"]
-        else:
-            _opts = (_known + ["（新荷官，直接录入）"]) if _known else ["（新荷官，直接录入）"]
-        _cur_name = st.session_state.get("_roulette_dealer", "")
-        _idx = _opts.index(_cur_name) if _cur_name in _opts else 0
-        _sel = st.selectbox("选择荷官（已有档案可直接点选）", _opts,
-                            index=_idx, key="rou_dealer_sel")
-        if _sel == "（新荷官，直接录入）":
-            _dealer = st.text_input("输入荷官全名", value="",
-                                    key="rou_dealer_name")
+                _nmx = _norm_name(str(_k0)[2:])
+                if _nmx:
+                    _known.add(_nmx)
+        _known = sorted(_known)
+        _opts = _known + ["➕ 新增荷官"]
+        _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
+        _idx = _opts.index(_cur_name) if _cur_name in _opts else len(_opts) - 1
+        _sel = st.selectbox(
+            "选择荷官（点开可直接输入名字筛选）", _opts, index=_idx,
+            key="rou_dealer_sel",
+            help="下拉框内键入即可筛选；名单来自云端档案与本次已记录")
+        if _sel == "➕ 新增荷官":
+            _dealer = _norm_name(st.text_input("输入荷官全名",
+                                               value="", key="rou_dealer_name"))
         else:
             _dealer = _sel
         if _dealer and _dealer != _cur_name:
