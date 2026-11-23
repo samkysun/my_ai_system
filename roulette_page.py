@@ -2293,7 +2293,15 @@ def render(df_data, H):
         _names = sorted(_by_name.keys())
         _view = st.selectbox("查看荷官详情", _names, index=0,
                              key="rou_view_dealer")
-        _vnums = _by_name.get(_view, [])
+        _vnums = list(_by_name.get(_view, []))
+        if len(_vnums) < 10:
+            # 本场数据不足 → 用云端该荷官的序列
+            _pfv, _ = find_profile(st.session_state.get("_roulette_profiles"),
+                                   _cur_venue(), _view)
+            if _pfv:
+                _seqv = [int(x) for x in (_pfv.get("seq") or [])]
+                if len(_seqv) > len(_vnums):
+                    _vnums = _seqv
         if len(_vnums) >= 10:
             st.markdown(f"**{_view} 的偏好明细（{len(_vnums)} 期）**")
             _n1 = len(_vnums)
