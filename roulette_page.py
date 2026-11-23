@@ -134,8 +134,7 @@ def save_history(loader, draws, pending=None):
     fn = loader.get("gh_write")
     if not fn:
         return False
-    try:
-        fn(HIST_FILE, json.dumps({"draws": draws,
+    _payload = json.dumps({"draws": draws,
                                   "pending": st.session_state.get(
                                       "_roulette_pending", []),
                                   "dealer_marks": st.session_state.get(
@@ -144,11 +143,24 @@ def save_history(loader, draws, pending=None):
                                       "_roulette_dealers", []),
                                   "dealer_name": st.session_state.get(
                                       "_roulette_dealer", "")},
-                                 ensure_ascii=False),
-           "轮盘记录更新")
+                             ensure_ascii=False)
+
+    def _bg():
+        try:
+            fn(HIST_FILE, _payload, "轮盘记录更新")
+        except Exception:
+            pass
+
+    try:
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
         return True
     except Exception:
-        return False
+        try:
+            _bg()
+            return True
+        except Exception:
+            return False
 
 
 # ============================================================
@@ -626,6 +638,27 @@ def learn_rules(draws, lookback=800):
     return rules
 
 
+_RULE_CACHE = {}
+
+
+def learn_rules_cached(draws, lookback=800):
+    """按历史签名缓存，避免每次重算"""
+    try:
+        sig = (len(draws), lookback,
+               tuple(draws[-6:]) if len(draws) >= 6 else tuple(draws),
+               tuple(st.session_state.get("_roulette_dealers", [])))
+    except Exception:
+        return learn_rules(draws, lookback)
+    hit = _RULE_CACHE.get(sig)
+    if hit is not None:
+        return hit
+    rules = learn_rules(draws, lookback)
+    if len(_RULE_CACHE) > 32:
+        _RULE_CACHE.clear()
+    _RULE_CACHE[sig] = rules
+    return rules
+
+
 def apply_rules(draws, rules, om, mem=None):
     """按当前状态激活规则，给号码打分（可用记忆校正权重）"""
     from collections import Counter
@@ -938,7 +971,7 @@ def build_candidates(draws, rec_nums=None):
     ranked = [(n, score.get(n, 0)) for n in _rec]
     # 0 号按出现次数权衡：超过 40 次开始推荐
     # 自学习规则得分
-    _rules = learn_rules(draws)
+    _rules = learn_rules_cached(draws)
     _rscore, _active, _rhit = apply_rules(
         draws, _rules, om,
         st.session_state.get("_roulette_rules_mem"))
@@ -1030,7 +1063,7 @@ def render(df_data, H):
             st.session_state["_roulette_pending"] = _pend
             ok = save_history(H, draws, _pend)
             try:
-                _rules2 = learn_rules(draws)
+                _rules2 = learn_rules_cached(draws)
                 _mem2 = st.session_state.get("_roulette_rules_mem") or {}
                 _mem2 = merge_rule_memory(_mem2, _rules2)
                 st.session_state["_roulette_rules_mem"] = _mem2
