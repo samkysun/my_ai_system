@@ -147,6 +147,15 @@ def current_segment(draws):
 PROFILE_FILE = "roulette_profiles.json"
 
 
+def _norm_name(s):
+    """去掉所有空白与不可见字符，返回规范名字"""
+    import re as _re
+    if s is None:
+        return ""
+    s = str(s).replace("\u3000", "").replace("\xa0", "")
+    return _re.sub(r"\s+", "", s).strip()
+
+
 def _merge_profile(dst, src):
     dst["spins"] = int(dst.get("spins", 0)) + int(src.get("spins", 0))
     for f in ("sister", "adj", "big", "odd", "red"):
@@ -174,7 +183,7 @@ def normalize_profiles(prof, changed=None):
         if not str(k).startswith("官:"):
             dirty = True          # 旧台号/组合键，直接丢弃
             continue
-        name = str(k)[2:].replace(" ", "").replace("\u3000", "").strip()
+        name = _norm_name(str(k)[2:])
         if not name:
             dirty = True
             continue
@@ -1140,12 +1149,12 @@ def render(df_data, H):
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
         # 已知荷官：会话内换过的 + 云端档案里的
-        _known = {d0.get("name", "").strip()
+        _known = {_norm_name(d0.get("name", ""))
                   for d0 in st.session_state.get("_roulette_dealers", [])}
         _prof0 = st.session_state.get("_roulette_profiles") or {}
         for _k0 in _prof0.keys():
             if str(_k0).startswith("官:"):
-                _known.add(str(_k0)[2:])
+                _known.add(_norm_name(str(_k0)[2:]))
         _known = sorted(x for x in _known if x)
         _kw = st.text_input("搜索荷官（输入部分名字即可筛选）",
                             value="", key="rou_dealer_kw",
@@ -1209,8 +1218,7 @@ def render(df_data, H):
             try:
                 _prof = load_profiles(H)
                 _prev = draws[-2] if len(draws) >= 2 else None
-                _dlr = (st.session_state.get("_roulette_dealer", "") or "")
-                _dlr = _dlr.replace(" ", "").replace("\u3000", "").strip()
+                _dlr = _norm_name(st.session_state.get("_roulette_dealer", ""))
                 _keys = ["官:" + _dlr] if _dlr else []
                 if not _keys:
                     st.warning("还没有选择荷官：本次只记录号码，不写档案")
@@ -1499,13 +1507,13 @@ def render(df_data, H):
     for _nm, _st0, _nums in _segs:
         if not _nums:
             continue
-        _k0 = (_nm or "未命名").replace(" ", "").strip()
+        _k0 = _norm_name(_nm) or "未命名"
         _by_name.setdefault(_k0, []).extend(_nums)
 
     if not _by_name:
         st.caption("还没有录满一期的荷官记录。")
     else:
-        _cur_name0 = (st.session_state.get("_roulette_dealer") or "").strip()
+        _cur_name0 = _norm_name(st.session_state.get("_roulette_dealer"))
         _rows_d = []
         for _nm, _nums in sorted(_by_name.items(), key=lambda x: -len(x[1])):
             _n0 = len(_nums)
@@ -1592,7 +1600,7 @@ def render(df_data, H):
     for _k, _v in (_prof2 or {}).items():
         if not isinstance(_v, dict) or not str(_k).startswith("官:"):
             continue
-        _nmx = str(_k)[2:].replace(" ", "").replace("\u3000", "").strip()
+        _nmx = _norm_name(str(_k)[2:])
         if not _nmx:
             continue
         _nkx = "官:" + _nmx
