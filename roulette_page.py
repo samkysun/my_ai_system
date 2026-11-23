@@ -109,6 +109,10 @@ def load_history(loader):
                 data = [int(x) for x in obj.get("draws", []) if 0 <= int(x) <= 36]
                 st.session_state["_roulette_pending"] = [
                     int(x) for x in obj.get("pending", []) if 0 <= int(x) <= 36]
+                st.session_state["_roulette_marks"] = [
+                    int(x) for x in obj.get("dealer_marks", [])]
+                st.session_state["_roulette_dealer"] = str(
+                    obj.get("dealer_name", "") or "")
         except Exception:
             data = []
     st.session_state["_roulette_hist"] = data
@@ -125,7 +129,11 @@ def save_history(loader, draws, pending=None):
     try:
         fn(HIST_FILE, json.dumps({"draws": draws,
                                   "pending": st.session_state.get(
-                                      "_roulette_pending", [])},
+                                      "_roulette_pending", []),
+                                  "dealer_marks": st.session_state.get(
+                                      "_roulette_marks", []),
+                                  "dealer_name": st.session_state.get(
+                                      "_roulette_dealer", "")},
                                  ensure_ascii=False),
            "轮盘记录更新")
         return True
@@ -136,6 +144,17 @@ def save_history(loader, draws, pending=None):
 # ============================================================
 # 遗漏计算
 # ============================================================
+def segment_start():
+    """当前荷官从第几期开始（索引）"""
+    marks = st.session_state.get("_roulette_marks", []) or []
+    return int(marks[-1]) if marks else 0
+
+
+def current_segment(draws):
+    s = segment_start()
+    return draws[s:] if s < len(draws) else []
+
+
 def omissions(draws):
     """各维度遗漏期数（都按「上一次出现到现在」计算）"""
     n = len(draws)
@@ -817,7 +836,15 @@ def smart_top3(draws):
 
 
 def build_candidates(draws, rec_nums=None):
-    om = omissions(draws)
+    _seg_draws = current_segment(draws)
+    _use_seg = len(_seg_draws) >= 40
+    _calc = _seg_draws if _use_seg else draws
+    if _seg_draws and _use_seg:
+        st.caption(f"📊 统计范围：本荷官 {len(_seg_draws)} 期"
+                   f"（换荷官后重新计算）")
+    elif _seg_draws:
+        st.caption(f"📊 本荷官仅 {len(_seg_draws)} 期（<40），暂用全场数据")
+    om = omissions(_calc)
     if not draws:
         return om, [], []
 
@@ -893,9 +920,9 @@ def build_candidates(draws, rec_nums=None):
     ranked = [(n, score.get(n, 0)) for n in _rec]
     # 0 号按出现次数权衡：超过 40 次开始推荐
     # 自学习规则得分
-    _rules = learn_rules(draws)
+    _rules = learn_rules(_calc)
     _rscore, _active, _rhit = apply_rules(
-        draws, _rules, om,
+        _calc, _rules, om,
         st.session_state.get("_roulette_rules_mem"))
     for _n, _s in _rscore.items():
         if _s > 0:
@@ -944,6 +971,27 @@ def render(df_data, H):
     draws = load_history(H)
     if "_roulette_rules_mem" not in st.session_state:
         st.session_state["_roulette_rules_mem"] = load_rule_memory(H)
+
+    _d1, _d2, _d3 = st.columns([1, 1, 2])
+    with _d1:
+        _dealer = st.text_input("当前荷官", value=st.session_state.get(
+            "_roulette_dealer", ""), key="rou_dealer_name")
+        if _dealer != st.session_state.get("_roulette_dealer", ""):
+            st.session_state["_roulette_dealer"] = _dealer
+    with _d2:
+        if st.button("🔄 换荷官（重新统计）", key="rou_new_dealer"):
+            _marks = list(st.session_state.get("_roulette_marks", []))
+            _marks.append(len(draws))
+            st.session_state["_roulette_marks"] = _marks
+            save_history(H, draws)
+            st.success("已标记换荷官，统计从本期重新开始")
+            st.rerun()
+    with _d3:
+        _seg = current_segment(draws)
+        st.caption(f"全场 {len(draws)} 期｜"
+                   f"本荷官 {len(_seg)} 期"
+                   + (f"｜换过 {len(st.session_state.get('_roulette_marks', []))} 次"
+                      if st.session_state.get("_roulette_marks") else ""))
 
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
