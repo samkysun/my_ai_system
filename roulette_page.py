@@ -355,21 +355,6 @@ def _cache_drop(name=None):
 
 
 def load_known_names(loader, venue=""):
-    c = _sb_client(loader)
-    if c:
-        try:
-            res = (c.table("ai_board").select("title,content")
-                   .eq("source", SRC_PROF_NAMES).execute())
-            for row in (res.data or []):
-                if row.get("title") == venue:
-                    try:
-                        return [_norm_name(x) for x in
-                                json.loads(row.get("content") or "[]")]
-                    except Exception:
-                        return []
-            pass
-        except Exception:
-            pass
     try:
         fn = loader.get("gh_read")
         if not fn:
@@ -396,18 +381,6 @@ def save_known_names(loader, names, venue=""):
     except Exception:
         pass
     names = sorted(set(_norm_name(x) for x in (names or []) if _norm_name(x)) | _exist)
-    c = _sb_client(loader)
-    if c:
-        try:
-            c.table("ai_board").delete().eq("source", SRC_PROF_NAMES) \
-                .eq("title", venue).execute()
-            c.table("ai_board").insert({
-                "source": SRC_PROF_NAMES, "title": venue,
-                "content": json.dumps(sorted(set(names)), ensure_ascii=False)
-            }).execute()
-            return True
-        except Exception:
-            pass
     try:
         fn = loader.get("gh_write")
         if not fn:
@@ -600,7 +573,6 @@ def rebuild_known_lists(loader):
 
 
 def load_profiles(loader):
-    _sb = load_profiles_sb(loader)
     _gh = {}
     try:
         fn0 = loader.get("gh_read")
@@ -611,6 +583,15 @@ def load_profiles(loader):
                 _gh = _obj0
     except Exception:
         _gh = {}
+    if not _gh:
+        _sb = load_profiles_sb(loader)
+        if _sb:
+            _gh = _sb
+            try:
+                save_profiles(loader, _gh)
+            except Exception:
+                pass
+    _sb = _gh
     if _sb or _gh:
         _sb = _sb or {}
         _gh = _gh or {}
@@ -642,24 +623,10 @@ def load_profiles(loader):
 
 
 def save_profiles(loader, prof):
-    if _sb_client(loader) is None:
-        _LAST_WRITE_ERR["msg"] = "未注入 supabase 客户端"
-    elif save_profiles_sb(loader, prof):
-        _LAST_WRITE_ERR["msg"] = "supabase 写入成功"
-        # 同时备份到 GitHub（失败不影响主流程）
-        try:
-            _fn2 = loader.get("gh_write")
-            if _fn2:
-                _fn2(PROFILE_FILE, json.dumps(prof, ensure_ascii=False),
-                     "轮盘档案备份")
-        except Exception:
-            pass
-        return True
-    else:
-        _LAST_WRITE_ERR["msg"] = "supabase 写入失败"
     try:
         fn = loader.get("gh_write")
         if not fn:
+            _LAST_WRITE_ERR["msg"] = "无 gh_write"
             return False
         txt = json.dumps(prof, ensure_ascii=False)
         _ok = _write_cloud(loader, PROFILE_FILE, txt, "轮盘档案更新")
@@ -1541,15 +1508,6 @@ SRC_PRED = "__roulette_predlog__"
 
 
 def load_pred_log(loader):
-    c = _sb_client(loader)
-    if c:
-        try:
-            res = (c.table("ai_board").select("content")
-                   .eq("source", SRC_PRED).execute())
-            if res.data:
-                return json.loads(res.data[0].get("content") or "[]")
-        except Exception:
-            pass
     try:
         fn = loader.get("gh_read")
         raw = fn(PRED_FILE) if fn else ""
@@ -1565,15 +1523,6 @@ def load_pred_log(loader):
 def save_pred_log(loader, rows):
     rows = rows[-800:]
     txt = json.dumps(rows, ensure_ascii=False)
-    c = _sb_client(loader)
-    if c:
-        try:
-            c.table("ai_board").delete().eq("source", SRC_PRED).execute()
-            c.table("ai_board").insert({"source": SRC_PRED, "title": "log",
-                                        "content": txt}).execute()
-            return True
-        except Exception:
-            pass
     try:
         fn = loader.get("gh_write")
         if fn:
