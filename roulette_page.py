@@ -1148,28 +1148,6 @@ def render(df_data, H):
                    + (f"｜换过 {len(st.session_state.get('_roulette_marks', []))} 次"
                       if st.session_state.get("_roulette_marks") else ""))
 
-    _t1, _t2, _t3 = st.columns([1, 1, 2])
-    with _t1:
-        _tables = st.session_state.get("_roulette_tables", []) or []
-        _tcur = st.session_state.get("_roulette_table", "") or ""
-        _topt = _tables + ["（手动输入）"]
-        _tidx = _topt.index(_tcur) if _tcur in _topt else len(_topt) - 1
-        _tsel = st.selectbox("台号", _topt, index=_tidx, key="rou_table_sel")
-        if _tsel == "（手动输入）":
-            _table = st.text_input("输入台号", value=_tcur, key="rou_table_name")
-        else:
-            _table = _tsel
-        if _table != _tcur:
-            st.session_state["_roulette_table"] = _table
-            if _table and _table not in _tables:
-                st.session_state["_roulette_tables"] = _tables + [_table]
-    with _t2:
-        st.write("")
-        st.caption("换台后档案会按台号分开累积")
-    with _t3:
-        if _table:
-            st.caption(f"当前台号：{_table}（档案永久保存在云端）")
-
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         num = st.number_input("本期开奖号码", 0, 36, 0, 1, key="rou_num")
@@ -1191,15 +1169,8 @@ def render(df_data, H):
             try:
                 _prof = load_profiles(H)
                 _prev = draws[-2] if len(draws) >= 2 else None
-                _tbl = st.session_state.get("_roulette_table", "")
                 _dlr = st.session_state.get("_roulette_dealer", "")
-                _keys = []
-                if _tbl:
-                    _keys.append("台:" + _tbl)
-                if _dlr:
-                    _keys.append("官:" + _dlr)
-                if _tbl and _dlr:
-                    _keys.append(f"台:{_tbl}|官:{_dlr}")
+                _keys = ["官:" + _dlr] if _dlr else []
                 record_spin(_prof, _keys, int(num), _prev)
                 save_profiles(H, _prof)
                 st.session_state["_roulette_profiles"] = _prof
@@ -1245,11 +1216,8 @@ def render(df_data, H):
     if _prof is None:
         _prof = load_profiles(H)
         st.session_state["_roulette_profiles"] = _prof
-    _tbl_now = st.session_state.get("_roulette_table", "")
     _dlr_now = st.session_state.get("_roulette_dealer", "")
-    _pk1 = ("台:" + _tbl_now) if _tbl_now else ""
-    _pk2 = ("官:" + _dlr_now) if _dlr_now else ""
-    _prof_use = _prof.get(_pk1) or _prof.get(_pk2) or None
+    _prof_use = _prof.get("官:" + _dlr_now) if _dlr_now else None
 
     _bonus = {}
     if _prof_use and int(_prof_use.get("spins", 0)) >= 30:
@@ -1257,7 +1225,7 @@ def render(df_data, H):
         _nm3 = sorted(((int(a), b) for a, b in _prof_use.get("nums", {}).items()),
                       key=lambda x: -x[1])[:6]
         _zd3 = sorted(_prof_use.get("zod", {}).items(), key=lambda x: -x[1])[:2]
-        _who = _tbl_now or _dlr_now
+        _who = _dlr_now
         st.info(
             f"☁ 云端档案｜{_who} 累计 {_sp} 期："
             f"热号 {'、'.join(f'{a:02d}' for a, _ in _nm3)}｜"
