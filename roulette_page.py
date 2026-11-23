@@ -367,7 +367,7 @@ def load_known_names(loader, venue=""):
                                 json.loads(row.get("content") or "[]")]
                     except Exception:
                         return []
-            return []
+            pass
         except Exception:
             pass
     try:
@@ -526,10 +526,31 @@ def save_profiles_sb(loader, prof):
     if not c:
         return False
     try:
+        # 先读现有行，与本次写入合并（取较大值），避免部分数据覆盖全部
+        _exist = {}
+        try:
+            _r0 = (c.table("ai_board").select("title,content")
+                   .eq("source", SRC_PROF).execute())
+            for _row0 in (_r0.data or []):
+                try:
+                    _exist[_row0["title"]] = json.loads(_row0["content"] or "{}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        _allp = dict(_exist)
+        for _k1, _v1 in (prof or {}).items():
+            if _k1 in _allp:
+                try:
+                    _merge_profile(_allp[_k1], _v1)
+                except Exception:
+                    _allp[_k1] = _v1
+            else:
+                _allp[_k1] = _v1
         c.table("ai_board").delete().eq("source", SRC_PROF).execute()
         rows = [{"source": SRC_PROF, "title": k,
                  "content": json.dumps(v, ensure_ascii=False)}
-                for k, v in (prof or {}).items()]
+                for k, v in _allp.items()]
         for i in range(0, len(rows), 50):
             c.table("ai_board").insert(rows[i:i + 50]).execute()
         return True
@@ -1767,7 +1788,11 @@ def render(df_data, H):
             _nmx = _norm_name(_d0.get("name"))
             if _nmx:
                 _known.add(_nmx)
-        # 下拉框只用名单（档案不再自动混入，避免删不掉）
+        # 名单 + 该场所有档案的人（保证云端有档案就一定能选到）
+        for _k0 in (st.session_state.get("_roulette_profiles") or {}).keys():
+            _vk, _dk = _split_key(_k0)
+            if _norm_name(_vk) == _ven2 and _dk:
+                _known.add(_dk)
         _known = sorted(_known)
         _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
 
