@@ -1672,7 +1672,10 @@ def render(df_data, H):
                         use_container_width=True, hide_index=True)
                 else:
                     st.info("该荷官档案样本还太少，继续录入即可。")
-        _venue_section(H)
+        try:
+            _venue_section(H)
+        except Exception as _ve:
+            st.error(f"场所管理出错：{type(_ve).__name__}: {_ve}")
         return
 
     _seg_draws = current_segment(draws)
@@ -2125,4 +2128,7 @@ def render(df_data, H):
         else:
             st.caption("档案为空")
 
-    _venue_section(H)
+    try:
+        _venue_section(H)
+    except Exception as _ve2:
+        st.error(f"场所管理出错：{type(_ve2).__name__}: {_ve2}")
