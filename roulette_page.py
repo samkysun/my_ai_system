@@ -2187,6 +2187,26 @@ def render(df_data, H):
 
     if not _prof2:
         st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
+    if st.button("🔧 测试云端写入", key="rou_write_test"):
+        _tn = "roulette_write_test.json"
+        _payload = json.dumps({"time": _t.strftime("%Y-%m-%d %H:%M:%S"),
+                               "venue": _cur_venue()},
+                              ensure_ascii=False)
+        _r1 = False
+        _err = ""
+        try:
+            _fnw = H.get("gh_write")
+            if _fnw:
+                _r1 = bool(_fnw(_tn, _payload, "写入自检"))
+            else:
+                _err = "loader 无 gh_write"
+        except Exception as _e1:
+            _err = f"loader 异常 {type(_e1).__name__}: {_e1}"
+        _r2 = _direct_gh_write(_tn, _payload, "写入自检(直连)")
+        st.write({"loader写入": _r1, "直连写入": _r2,
+                  "loader错误": _err, "最近错误": _LAST_WRITE_ERR.get("msg", "")})
+
+
         if st.button("🔄 重新读取云端档案", key="rou_reload_prof"):
             _fresh = load_profiles(H)
             st.session_state["_roulette_profiles"] = _fresh
