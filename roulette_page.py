@@ -1692,246 +1692,7 @@ def render(df_data, H):
             _npf = (_prof3 or {}).get(_pkey(_cur_venue(), _nd)) if _nd else None
             _nsp = int((_npf or {}).get("spins", 0))
             if _fl:
-                st.info(("已把上一位荷官的 %d 期记录存入云端档案"
-                         % abs(_fl)) if _fl > 0
-                        else "上一位荷官记录已记录，但云端保存失败")
-            if _nd and _nsp >= 40:
-                st.success(f"已换为「{_nd}」｜云端有 {_nsp} 次记录 → 录入后即可出候选")
-            elif _nd and _nsp > 0:
-                st.warning(f"已换为「{_nd}」｜云端仅 {_nsp} 次（不足 40），"
-                           f"需继续累计")
-            else:
-                st.success("已标记换荷官，统计从本期重新开始" +
-                           ("｜档案已保存" if _okp else "｜档案保存失败"))
-            st.rerun()
-    with _d3:
-        _seg = current_segment(draws)
-        st.caption(f"全场 {len(draws)} 期｜"
-                   f"本荷官 {len(_seg)} 期"
-                   + (f"｜换过 {len(st.session_state.get('_roulette_marks', []))} 次"
-                      if st.session_state.get("_roulette_marks") else ""))
-
-    c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        num = st.number_input("本期开奖号码", 0, 36, 0, 1, key="rou_num")
-    with c2:
-        if st.button("➕ 添加", use_container_width=True, key="rou_add"):
-            draws = draws + [int(num)]
-            _pend = [x for x in st.session_state.get("_roulette_pending", [])
-                     if x != int(num)]
-            st.session_state["_roulette_pending"] = _pend
-            ok = save_history(H, draws, _pend)
-            try:
-                _rules2 = learn_rules_cached(draws)
-                _mem2 = st.session_state.get("_roulette_rules_mem") or {}
-                _mem2 = merge_rule_memory(_mem2, _rules2)
-                st.session_state["_roulette_rules_mem"] = _mem2
-                save_rule_memory(H, _mem2)
-            except Exception:
-                pass
-            try:
-                _prof = load_profiles(H)
-                _prev = draws[-2] if len(draws) >= 2 else None
-                _dlr = _norm_name(st.session_state.get("_roulette_dealer", ""))
-                _keys = [_pkey(_ven, _dlr)] if _dlr else []
-                if not _keys:
-                    st.warning("还没有选择荷官：本次只记录号码，不写档案")
-                record_spin(_prof, _keys, int(num), _prev)
-                st.session_state["_roulette_profiles"] = _prof
-                _sp_after = int(_prof.get(_keys[0], {}).get("spins", 0)) if _keys else 0
-                _saved = save_profiles(H, _prof) if _keys else False
-                st.session_state["_rou_prof_msg"] = (
-                    f"档案：{_dlr} 累计 {_sp_after} 次" +
-                    ("（已存云端）" if _saved
-                     else f"（云端保存失败：{_LAST_WRITE_ERR.get('msg','未知')}）")
-                ) if _keys else "未选择荷官，本次不写档案"
-            except Exception:
-                pass
-            st.success(f"已记录 {num}" + ("" if ok else "（仅本次会话）"))
-            st.rerun()
-    with c3:
-        st.caption(f"已记录 {len(draws)} 期" +
-                   (f"｜最新 {draws[-1]}" if draws else ""))
-
-    with st.expander("📥 批量导入历史开奖（重建荷官档案）", expanded=False):
-        st.caption("把之前记录过的号码一次粘进来，按顺序录入，"
-                   "自动累加到当前场所、当前荷官的档案。")
-        _blk = st.text_area("号码列表（逗号/空格/换行分隔，0~36）",
-                            height=120, key="rou_bulk_text",
-                            placeholder="例：12,5,31,0,17,8,...")
-        _bd = _norm_name(st.session_state.get("_roulette_dealer"))
-        st.caption(f"将计入：{_cur_venue()}｜荷官 {_bd or '（未选）'}")
-        if st.button("▶ 开始导入", key="rou_bulk_run"):
-            _nums = []
-            _txt = (_blk or "").replace("，", ",").replace("\n", ",") \
-                .replace("\t", ",").replace(";", ",").replace(" ", ",")
-            for _tok in _txt.split(","):
-                _tok = _tok.strip()
-                if not _tok:
-                    continue
-                try:
-                    _v = int(float(_tok))
-                except Exception:
-                    continue
-                if 0 <= _v <= 36:
-                    _nums.append(_v)
-            if not _nums:
-                st.warning("没解析到有效号码")
-            elif not _bd:
-                st.warning("请先选择荷官")
-            else:
-                _cur0 = list(st.session_state.get("_roulette_hist", []))
-                _prev0 = _cur0[-1] if _cur0 else None
-                _pf6 = load_profiles(H)
-                for _vv in _nums:
-                    record_spin(_pf6, [_pkey(_cur_venue(), _bd)], _vv, _prev0)
-                    _prev0 = _vv
-                _cur0.extend(_nums)
-                st.session_state["_roulette_hist"] = _cur0
-                st.session_state["_roulette_profiles"] = _pf6
-                save_history(H, _cur0)
-                _ok6 = save_profiles(H, _pf6)
-                _kn6 = set(st.session_state.get("_roulette_known_names", []) or [])
-                _kn6.add(_bd)
-                st.session_state["_roulette_known_names"] = sorted(_kn6)
-                save_known_names(H, sorted(_kn6), _cur_venue())
-                _sp6 = int(_pf6.get(_pkey(_cur_venue(), _bd), {}).get("spins", 0))
-                if _ok6:
-                    st.success(f"已导入 {len(_nums)} 期｜「{_bd}」累计 {_sp6} 次")
-                else:
-                    st.warning(f"已导入 {len(_nums)} 期｜云端保存失败")
-                st.rerun()
-    if draws:
-        with st.expander("📜 历史记录", expanded=False):
-            df = pd.DataFrame({"序号": list(range(1, len(draws) + 1)),
-                               "号码": draws})
-            st.dataframe(df.tail(50), use_container_width=True, hide_index=True)
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                if st.button("↩️ 删除最后一期", key="rou_del"):
-                    save_history(H, draws[:-1])
-                    st.rerun()
-            with cc2:
-                if st.button("🗑 清空全部", key="rou_clear"):
-                    save_history(H, [])
-                    st.rerun()
-
-    if not draws:
-        st.info("先输入并添加几期开奖号码")
-        _dlr0 = st.session_state.get("_roulette_dealer", "")
-        _pf0 = (st.session_state.get("_roulette_profiles") or {}).get(
-            _pkey(_cur_venue(), _dlr0)) \
-            if _dlr0 else None
-        if _pf0 and int(_pf0.get("spins", 0)) >= 40:
-            st.markdown(f"### ☁ 云端档案：{_dlr0}"
-                        f"（{int(_pf0.get('spins', 0))} 期）")
-            _sp0 = int(_pf0["spins"])
-            _nm0 = sorted(((int(a), b) for a, b in _pf0.get("nums", {}).items()),
-                          key=lambda x: -x[1])[:10]
-            st.dataframe(pd.DataFrame(
-                [{"排名": i + 1, "号码": f"{a}", "出现": b,
-                  "占比": f"{b/_sp0*100:.1f}%"} for i, (a, b) in enumerate(_nm0)]),
-                use_container_width=True, hide_index=True)
-            st.caption(
-                f"大号 {_pf0.get('big',0)/_sp0*100:.0f}%｜"
-                f"单数 {_pf0.get('odd',0)/_sp0*100:.0f}%｜"
-                f"红波 {_pf0.get('red',0)/_sp0*100:.0f}%｜"
-                f"姐妹 {_pf0.get('sister',0)/max(1,_sp0-1)*100:.0f}%｜"
-                f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
-            _seq0 = [int(x) for x in (_pf0.get("seq") or [])][-300:]
-            st.markdown("### 🎯 候选号码（依据该荷官的云端规则）")
-            if len(_seq0) >= 40:
-                st.caption(f"用云端保存的 {len(_seq0)} 期开奖序列，"
-                           f"重新学习该荷官的规则后给出候选。")
-                _top0, _ = smart_top3(_seq0)
-                _rec0 = [n for n, _, _ in _top0] if _top0 else []
-                _om0, _al0, _lv0 = build_candidates(_seq0, _rec0)
-                if _al0:
-                    st.markdown("**该荷官的达标项（基于其历史序列）**")
-                    for _k1, _v1 in _al0:
-                        st.warning(f"{_k1}：{'、'.join(_v1)}")
-                _rows0 = []
-                _rhit0 = st.session_state.get("_roulette_rhit") or {}
-                for _n0, _s0, _lv0b, _wh0 in _lv0:
-                    _a0 = attrs_of(_n0)
-                    _rc0 = int(_rhit0.get(_n0, 0))
-                    _j0 = ("🔥 极可能开" if _rc0 >= 3 else
-                           "⭐ 较可能" if _rc0 == 2 else
-                           "○ 留意" if _rc0 == 1 else "")
-                    _rows0.append({"等级": _lv0b, "号码": _n0, "判断": _j0,
-                                   "得分": round(_s0, 2),
-                                   "命中条件": "、".join(sorted(set(_wh0))),
-                                   "尾数": _a0["尾数"], "生肖": _a0["生肖"]})
-                st.dataframe(pd.DataFrame(_rows0), use_container_width=True,
-                             hide_index=True)
-                if _lv0:
-                    _rc0m = {r0["号码"]: int(_rhit0.get(r0["号码"], 0))
-                             for r0 in _rows0}
-                    _hot0 = sorted([v0 for v0 in _rc0m if _rc0m[v0] >= 3],
-                                   key=lambda v0: -_rc0m[v0])[:3]
-                    if _hot0:
-                        st.success("🔥 极可能开出：" +
-                                   "、".join(f"{v0}" for v in _hot0))
-            else:
-                _fr0 = frequency_candidates(_pf0)
-                if _fr0:
-                    st.caption("该荷官云端序列还不足 40 期，暂不出候选：")
-                    st.dataframe(pd.DataFrame(
-                        [{"号码": _n0, "判断": _lv0,
-                          "偏离": f"{_dev0*100:+.0f}%", "说明": _why0}
-                         for _n0, _dev0, _lv0, _why0 in _fr0]),
-                        use_container_width=True, hide_index=True)
-                else:
-                    st.info("该荷官档案样本还太少，继续录入即可。")
-        try:
-            _venue_section(H)
-        except Exception as _ve:
-            st.error(f"场所管理出错：{type(_ve).__name__}: {_ve}")
-        return
-
-    _seg_draws = current_segment(draws)
-    _use_seg = len(_seg_draws) >= 40
-    _calc = _seg_draws if _use_seg else draws
-    if _seg_draws:
-        if _use_seg:
-            st.caption(f"📊 统计范围：本荷官 {len(_seg_draws)} 期"
-                       f"（换荷官后重新计算）")
-        else:
-            st.caption(f"📊 本荷官仅 {len(_seg_draws)} 期（<40），暂用全场数据")
-
-    # ---- 读取云端档案，展示台/荷官特点 ----
-    _prof = st.session_state.get("_roulette_profiles")
-    if _prof is None:
-        _prof = load_profiles(H)
-        st.session_state["_roulette_profiles"] = _prof
-    _dlr_now = st.session_state.get("_roulette_dealer", "")
-    _prof_use = _prof.get(_pkey(_cur_venue(), _dlr_now)) if _dlr_now else None
-    if _dlr_now and not _prof_use:
-        _other = []
-        for _pk2, _pv2 in (_prof or {}).items():
-            _vk2, _dk2 = _split_key(_pk2)
-            if _dk2 == _dlr_now and int(_pv2.get("spins", 0)) > 0:
-                _other.append(f"{_vk2}({int(_pv2.get('spins', 0))}次)")
-        if _other:
-            st.info("「" + _dlr_now + "」在其他场所的档案：" +
-                    "、".join(_other) +
-                    "｜按规则不混用，本场所需重新累计")
-    _bonus = {}
-    if _prof_use and int(_prof_use.get("spins", 0)) >= 30:
-        _sp = int(_prof_use["spins"])
-        _nm3 = sorted(((int(a), b) for a, b in _prof_use.get("nums", {}).items()),
-                      key=lambda x: -x[1])[:6]
-        _zd3 = sorted(_prof_use.get("zod", {}).items(), key=lambda x: -x[1])[:2]
-        _who = _dlr_now
-        st.info(
-            f"☁ 云端档案｜{_who} 累计 {_sp} 期："
-            f"热号 {'、'.join(f'{a}' for a, _ in _nm3)}｜"
-            f"生肖 {'、'.join(f'{a}{b/_sp*100:.0f}%' for a, b in _zd3)}｜"
-            f"大号 {_prof_use.get('big',0)/_sp*100:.0f}%｜"
-            f"姐妹 {_prof_use.get('sister',0)/max(1,_sp-1)*100:.0f}%｜"
-            f"相邻 {_prof_use.get('adj',0)/max(1,_sp-1)*100:.0f}%")
-        # 自动参考该荷官档案（无需勾选）
-        _spw = int(_prof_use.get("spins", 0))
+                _spw = int(_prof_use.get("spins", 0))
         for _a, _b2 in _nm3:
             _bonus[_a] = _bonus.get(_a, 0) + 0.6
         _bigp = _prof_use.get("big", 0) / max(1, _spw)
@@ -1948,7 +1709,10 @@ def render(df_data, H):
         elif _redp <= 0.44:
             for _n2 in (2,4,6,8,10,11,13,15,17,20,22,24,26,28,29,31,33,35):
                 _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
-        st.caption("已自动参考该荷官档案：热号 +0.6、大小倾向 +0.3、波色倾向 +0.2")
+        st.session_state["_rou_bonus_note"] = (
+            f"热号 {'、'.join(str(a) for a, _ in _nm3)} 各 +0.6"
+            f"；大小倾向 {'大' if _bigp >= 0.58 else ('小' if _bigp <= 0.42 else '均衡')}"
+            f"；波色倾向 {'红' if _redp >= 0.56 else ('蓝' if _redp <= 0.44 else '均衡')}")
 
     _cold = len(draws) < 40
     _top3, _w = smart_top3(_calc)
@@ -2265,6 +2029,12 @@ def render(df_data, H):
         st.session_state["_roulette_profiles"] = load_profiles(H)
         st.success("已重新读取")
         st.rerun()
+    _bn = st.session_state.get("_rou_bonus_note")
+    if _bn:
+        with st.expander("🧠 系统参考了哪些荷官档案参数（点击查看）", expanded=False):
+            st.caption(_bn)
+            st.caption("这些参数只用于内部加权，用户只需看上方候选号码。")
+
     try:
         _venue_section(H, "_b")
     except Exception as _ve2:
