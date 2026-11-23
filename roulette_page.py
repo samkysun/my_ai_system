@@ -97,70 +97,21 @@ def _gh(loader):
 
 
 def load_history(loader):
-    if "_roulette_hist" in st.session_state:
-        return st.session_state["_roulette_hist"]
-    data = []
-    fn = loader.get("gh_read")
-    if fn:
-        try:
-            raw = fn(HIST_FILE)
-            if raw:
-                obj = json.loads(raw)
-                data = [int(x) for x in obj.get("draws", []) if 0 <= int(x) <= 36]
-                st.session_state["_roulette_pending"] = [
-                    int(x) for x in obj.get("pending", []) if 0 <= int(x) <= 36]
-                st.session_state["_roulette_marks"] = [
-                    int(x) for x in obj.get("dealer_marks", [])]
-                _dl = obj.get("dealers", []) or []
-                if not _dl and obj.get("dealer_marks"):
-                    _dl = [{"start": int(x), "name": ""}
-                           for x in obj.get("dealer_marks", [])]
-                st.session_state["_roulette_dealers"] = [
-                    {"start": int(d0.get("start", 0)),
-                     "name": str(d0.get("name", "") or "")}
-                    for d0 in _dl if isinstance(d0, dict)]
-                st.session_state["_roulette_dealer"] = str(
-                    obj.get("dealer_name", "") or "")
-        except Exception:
-            data = []
-    st.session_state["_roulette_hist"] = data
-    return data
+    """页面数据每次访问从 0 开始，不读取上次会话的历史"""
+    if "_roulette_hist" not in st.session_state:
+        st.session_state["_roulette_hist"] = []
+        st.session_state.setdefault("_roulette_pending", [])
+        st.session_state.setdefault("_roulette_marks", [])
+        st.session_state.setdefault("_roulette_dealers", [])
+    return st.session_state["_roulette_hist"]
 
 
 def save_history(loader, draws, pending=None):
+    """只更新页面（会话内），不再上传到云端"""
     st.session_state["_roulette_hist"] = list(draws)
     if pending is not None:
         st.session_state["_roulette_pending"] = list(pending)
-    fn = loader.get("gh_write")
-    if not fn:
-        return False
-    _payload = json.dumps({"draws": draws,
-                                  "pending": st.session_state.get(
-                                      "_roulette_pending", []),
-                                  "dealer_marks": st.session_state.get(
-                                      "_roulette_marks", []),
-                                  "dealers": st.session_state.get(
-                                      "_roulette_dealers", []),
-                                  "dealer_name": st.session_state.get(
-                                      "_roulette_dealer", "")},
-                             ensure_ascii=False)
-
-    def _bg():
-        try:
-            fn(HIST_FILE, _payload, "轮盘记录更新")
-        except Exception:
-            pass
-
-    try:
-        import threading
-        threading.Thread(target=_bg, daemon=True).start()
-        return True
-    except Exception:
-        try:
-            _bg()
-            return True
-        except Exception:
-            return False
+    return True
 
 
 # ============================================================
