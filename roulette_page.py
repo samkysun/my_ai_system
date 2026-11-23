@@ -1763,14 +1763,13 @@ def render(df_data, H):
             _supports_new = False
 
         if _supports_new:
-            _idx0 = _known.index(_cur_name) if _cur_name in _known else 0
-            _dealer = st.selectbox(
+            _idx0 = _known.index(_cur_name) if _cur_name in _known else None
+            _sel_one = st.selectbox(
                 "荷官（输入关键字筛选历史名字；没有就整段输入新名字）",
                 _known, index=_idx0, key="rou_dealer_one",
                 accept_new_options=True,
-                placeholder="例：输入「黄」会显示 黄东东、黄小小；"
-                            "没有就输入全名")
-            _dealer = _norm_name(_dealer)
+                placeholder="请选择或输入荷官名字")
+            _dealer = _norm_name(_sel_one) if _sel_one else ""
         else:
             _opts = _known + ["➕ 新增荷官"]
             _idx = _opts.index(_cur_name) if _cur_name in _opts else len(_opts) - 1
