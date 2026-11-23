@@ -215,17 +215,14 @@ def _merge_profile(dst, src):
 
 
 def _fix_spins(p0):
-    """用号码计数重算真实摇珠次数"""
+    """累计次数取「记录值 / 序列长度 / 号码总和」三者最大，避免变少"""
     nums = p0.get("nums") or {}
     try:
         real = sum(int(v) for v in nums.values())
     except Exception:
         real = 0
-    if real > 0:
-        p0["spins"] = real
-    seq = p0.get("seq") or []
-    if len(seq) > int(p0.get("spins", 0)):
-        p0["spins"] = len(seq)
+    seq_n = len(p0.get("seq") or [])
+    p0["spins"] = max(int(p0.get("spins", 0)), real, seq_n)
     return p0
 
 
