@@ -1913,6 +1913,7 @@ def render(df_data, H):
                 _bonus[_n2] = _bonus.get(_n2, 0) + 0.2
         st.caption("已自动参考该荷官档案：热号 +0.6、大小倾向 +0.3、波色倾向 +0.2")
 
+    _cold = len(draws) < 40
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
     if _cold and not _rec:
