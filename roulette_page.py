@@ -1391,6 +1391,10 @@ def render(df_data, H):
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
         # 已知荷官（云端名单 + 档案 + 本次会话）
+        _ven2 = _cur_venue()
+        if st.session_state.get("_roulette_known_venue") != _ven2:
+            st.session_state["_roulette_known_names"] = load_known_names(H, _ven2)
+            st.session_state["_roulette_known_venue"] = _ven2
         _known = set(st.session_state.get("_roulette_known_names", []) or [])
         for _d0 in st.session_state.get("_roulette_dealers", []) or []:
             _nmx = _norm_name(_d0.get("name"))
@@ -1398,7 +1402,7 @@ def render(df_data, H):
                 _known.add(_nmx)
         for _k0 in (st.session_state.get("_roulette_profiles") or {}).keys():
             _vk, _dk = _split_key(_k0)
-            if _vk == _ven and _dk:
+            if _norm_name(_vk) == _ven2 and _dk:
                 _known.add(_dk)
         _known = sorted(_known)
         _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
@@ -1438,7 +1442,7 @@ def render(df_data, H):
                 _kn.add(_dealer)
                 st.session_state["_roulette_known_names"] = sorted(_kn)
                 try:
-                    save_known_names(H, sorted(_kn), _ven)
+                    save_known_names(H, sorted(_kn), _cur_venue())
                 except Exception:
                     pass
 
