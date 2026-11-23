@@ -1993,7 +1993,7 @@ def _exp_simple(loader):
     st.markdown(f"### 一、下一期（{periods[-1]} 之后）第{ball}球预测")
     _last = n - 1
     _v = seq[_last]
-    _mc = _dd(_C)
+    _mc = _C()
     _rows_n = 0
     _det = []
     for _i in range(_last):
@@ -2047,7 +2047,7 @@ def _exp_simple(loader):
     detail = []
     for i in range(start, end):
         v = seq[i]
-        mc = _dd(_C)
+        mc = _C()
         cnt = 0
         for j in range(i):
             if seq[j] == v and j + 1 <= i:
