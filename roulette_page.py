@@ -1557,9 +1557,12 @@ def record_prediction(loader, num, draws_before):
     pred = st.session_state.get("_rou_last_pred") or []
     if not pred:
         return None
+    ctx = st.session_state.get("_rou_last_ctx") or {}
     hit = int(num) in pred
     rank = (pred.index(int(num)) + 1) if hit else None
-    row = {"期序": len(draws_before) + 1, "开奖": int(num),
+    row = {"场所": ctx.get("venue", ""),
+           "荷官": ctx.get("dealer", ""),
+           "期序": len(draws_before) + 1, "开奖": int(num),
            "候选": ",".join(str(x) for x in pred),
            "命中": 1 if hit else 0, "名次": rank}
     rows = st.session_state.get("_rou_pred_log")
@@ -2131,6 +2134,9 @@ def render(df_data, H):
     om, alerts, levels = build_candidates(_calc, _rec, extra_bonus=_bonus)
     try:
         st.session_state["_rou_last_pred"] = [x[0] for x in levels]
+        st.session_state["_rou_last_ctx"] = {
+            "venue": _cur_venue(),
+            "dealer": _norm_name(st.session_state.get("_roulette_dealer"))}
     except Exception:
         pass
     _rhit = st.session_state.get("_roulette_rhit", {}) or {}
@@ -2515,6 +2521,38 @@ def render(df_data, H):
             _c3.metric("累计命中率", f"{_hit_all/max(1,_n_all)*100:.1f}%")
             _c4.metric("最近50期命中率",
                        f"{_hit50/max(1,len(_last50))*100:.1f}%")
+
+            # 按场所统计
+            _byv = {}
+            for _r2 in _log:
+                _vk2 = _r2.get("场所") or "（未记录）"
+                _d2 = _byv.setdefault(_vk2, [0, 0])
+                _d2[0] += 1
+                _d2[1] += int(_r2.get("命中", 0))
+            if _byv:
+                st.markdown("**各场所命中率**")
+                st.dataframe(pd.DataFrame(
+                    [{"场所": k, "期数": v[0], "命中": v[1],
+                      "命中率": f"{v[1]/max(1,v[0])*100:.1f}%"}
+                     for k, v in sorted(_byv.items(),
+                                        key=lambda x: -x[1][0])]),
+                    use_container_width=True, hide_index=True)
+
+            # 按荷官统计
+            _byd = {}
+            for _r2 in _log:
+                _dk2 = _r2.get("荷官") or "（未记录）"
+                _d2 = _byd.setdefault(_dk2, [0, 0])
+                _d2[0] += 1
+                _d2[1] += int(_r2.get("命中", 0))
+            if _byd:
+                st.markdown("**各荷官命中率（谁让你赢得更多）**")
+                _rows_d2 = [{"荷官": k, "期数": v[0], "命中": v[1],
+                             "命中率": f"{v[1]/max(1,v[0])*100:.1f}%"}
+                            for k, v in sorted(_byd.items(),
+                                               key=lambda x: -(x[1][1]/max(1, x[1][0])))]
+                st.dataframe(pd.DataFrame(_rows_d2),
+                             use_container_width=True, hide_index=True)
 
             st.markdown("**按每 20 期滚动的命中率**")
             _roll = []
