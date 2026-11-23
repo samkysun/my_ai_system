@@ -1190,7 +1190,7 @@ def render(df_data, H):
 
     _d1, _d2, _d3 = st.columns([1, 1, 2])
     with _d1:
-        # 已知荷官（会话内 + 云端档案）
+        # 已知荷官（云端名单 + 档案 + 本次会话）
         _known = set(st.session_state.get("_roulette_known_names", []) or [])
         for _d0 in st.session_state.get("_roulette_dealers", []) or []:
             _nmx = _norm_name(_d0.get("name"))
@@ -1202,20 +1202,36 @@ def render(df_data, H):
                 if _nmx:
                     _known.add(_nmx)
         _known = sorted(_known)
-        _opts = _known + ["➕ 新增荷官"]
         _cur_name = _norm_name(st.session_state.get("_roulette_dealer"))
-        _idx = _opts.index(_cur_name) if _cur_name in _opts else len(_opts) - 1
-        _sel = st.selectbox(
-            "选择荷官（点开可直接输入名字筛选）", _opts, index=_idx,
-            key="rou_dealer_sel",
-            help="下拉框内键入即可筛选；名单来自云端档案与本次已记录")
-        if _sel == "➕ 新增荷官":
-            _typed = st.text_input("输入荷官全名", value="",
-                                   key="rou_dealer_name",
-                                   placeholder="先输入关键字，下面下拉会筛选历史名字")
-            _dealer = _norm_name(_typed)
+
+        _supports_new = False
+        try:
+            import inspect as _insp
+            _supports_new = ("accept_new_options" in
+                             _insp.signature(st.selectbox).parameters)
+        except Exception:
+            _supports_new = False
+
+        if _supports_new:
+            _idx0 = _known.index(_cur_name) if _cur_name in _known else 0
+            _dealer = st.selectbox(
+                "荷官（输入关键字筛选历史名字；没有就整段输入新名字）",
+                _known, index=_idx0, key="rou_dealer_one",
+                accept_new_options=True,
+                placeholder="例：输入「黄」会显示 黄东东、黄小小；"
+                            "没有就输入全名")
+            _dealer = _norm_name(_dealer)
         else:
-            _dealer = _sel
+            _opts = _known + ["➕ 新增荷官"]
+            _idx = _opts.index(_cur_name) if _cur_name in _opts else len(_opts) - 1
+            _sel = st.selectbox("选择荷官（点开可直接输入名字筛选）", _opts,
+                                index=_idx, key="rou_dealer_sel")
+            if _sel == "➕ 新增荷官":
+                _dealer = _norm_name(st.text_input("输入荷官全名", value="",
+                                                   key="rou_dealer_name"))
+            else:
+                _dealer = _sel
+
         if _dealer:
             st.session_state["_roulette_dealer"] = _dealer
             _kn = set(st.session_state.get("_roulette_known_names", []) or [])
