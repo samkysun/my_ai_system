@@ -928,6 +928,38 @@ def smart_top3(draws):
     return out, w
 
 
+def frequency_candidates(profile, top_n=MAX_PICK):
+    """只用长期频率（百分比）出候选；不依赖遗漏与近期序列"""
+    nums = profile.get("nums", {}) if profile else {}
+    spins = int(profile.get("spins", 0)) if profile else 0
+    if not nums or spins <= 0:
+        return []
+    expect = spins / 37.0
+    rows = []
+    for k, v in nums.items():
+        try:
+            n = int(k)
+            c = int(v)
+        except Exception:
+            continue
+        dev = c / expect - 1.0 if expect else 0.0
+        rows.append((n, c, dev))
+    rows.sort(key=lambda x: (-x[2], -x[1]))
+    out = []
+    for n, c, dev in rows[:top_n]:
+        pct = c / spins * 100
+        if dev >= 0.35:
+            lv = "🔥 明显偏多"
+        elif dev >= 0.15:
+            lv = "⭐ 略偏多"
+        elif dev <= -0.35:
+            lv = "❄ 明显偏少"
+        else:
+            lv = "○ 正常"
+        out.append((n, round(dev, 3), lv, f"出现{c}次·{pct:.1f}%（理论2.7%）"))
+    return out
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -1189,32 +1221,18 @@ def render(df_data, H):
                 f"红波 {_pf0.get('red',0)/_sp0*100:.0f}%｜"
                 f"姐妹 {_pf0.get('sister',0)/max(1,_sp0-1)*100:.0f}%｜"
                 f"相邻 {_pf0.get('adj',0)/max(1,_sp0-1)*100:.0f}%")
-            _seq0 = [int(x) for x in (_pf0.get("seq") or [])][-300:]
-            if len(_seq0) >= 40:
-                _top0, _ = smart_top3(_seq0)
-                _rec0 = [n for n, _, _ in _top0] if _top0 else []
-                _om0, _al0, _lv0 = build_candidates(_seq0, _rec0)
-                if _al0:
-                    st.markdown("**该荷官的遗漏提醒（来自云端档案）**")
-                    for _k0, _v0 in _al0:
-                        st.warning(f"{_k0}：{'、'.join(_v0)}")
-                st.markdown("### 🎯 候选号码（基于云端档案）")
-                _rows0 = []
-                for _n0, _s0, _lv0b, _wh0 in _lv0:
-                    _a0 = attrs_of(_n0)
-                    _rc0 = int((st.session_state.get("_roulette_rhit") or {}).get(_n0, 0))
-                    _j0 = ("🔥 极可能开" if _rc0 >= 3 else
-                           "⭐ 较可能" if _rc0 == 2 else
-                           "○ 留意" if _rc0 == 1 else "")
-                    _rows0.append({"等级": _lv0b, "号码": _n0, "判断": _j0,
-                                   "得分": round(_s0, 2),
-                                   "命中条件": "、".join(sorted(set(_wh0))),
-                                   "尾数": _a0["尾数"], "生肖": _a0["生肖"]})
+            _fr0 = frequency_candidates(_pf0)
+            if _fr0:
+                st.markdown("### 🎯 候选号码（只看该荷官长期频率）")
+                st.caption("离场期间的开奖情况未知，因此不计遗漏、不套规则；"
+                           "只按百分比偏离给出参考。")
+                _rows0 = [{"号码": _n0, "判断": _lv0,
+                           "偏离": f"{_dev0*100:+.0f}%",
+                           "说明": _why0} for _n0, _dev0, _lv0, _why0 in _fr0]
                 st.dataframe(pd.DataFrame(_rows0), use_container_width=True,
                              hide_index=True)
-                st.caption("以上候选完全来自云端档案，无需本地录入。")
             else:
-                st.info("录入本期号码后，系统会自动结合这份档案给出候选。")
+                st.info("该荷官档案样本还太少，继续录入即可。")
         return
 
     _seg_draws = current_segment(draws)
