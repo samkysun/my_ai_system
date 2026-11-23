@@ -76,12 +76,7 @@ st.set_page_config(page_title="💻智能数据分析系统", layout="wide")
 
 
 def _inject_css(css, key=""):
-    """优先用 st.html（1.33+），旧版回退 markdown；两者都不炸页面"""
-    try:
-        st.html(css)
-        return
-    except Exception:
-        pass
+    """统一用 markdown 注入样式（st.html 会引发 removeChild 报错）"""
     try:
         st.markdown(css, unsafe_allow_html=True)
     except Exception:
