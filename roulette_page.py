@@ -1519,16 +1519,24 @@ def render(df_data, H):
             save_history(H, draws)
             _okp = False
             try:
-                _prof3 = st.session_state.get("_roulette_profiles") or load_profiles(H)
+                _prof3 = load_profiles(H)          # 换荷官时强制核查云端
                 st.session_state["_roulette_profiles"] = _prof3
                 _okp = save_profiles(H, _prof3)
                 save_known_names(H, st.session_state.get(
                     "_roulette_known_names", []) or [])
             except Exception:
                 _okp = False
-            st.success("已标记换荷官，统计从本期重新开始" +
-                       ("｜档案已自动保存到云端" if _okp
-                        else "｜档案保存失败（网络或权限）"))
+            _nd = _norm_name(st.session_state.get("_roulette_dealer"))
+            _npf = (_prof3 or {}).get(_pkey(_cur_venue(), _nd)) if _nd else None
+            _nsp = int((_npf or {}).get("spins", 0))
+            if _nd and _nsp >= 40:
+                st.success(f"已换为「{_nd}」｜云端有 {_nsp} 次记录 → 录入后即可出候选")
+            elif _nd and _nsp > 0:
+                st.warning(f"已换为「{_nd}」｜云端仅 {_nsp} 次（不足 40），"
+                           f"需继续累计")
+            else:
+                st.success("已标记换荷官，统计从本期重新开始" +
+                           ("｜档案已保存" if _okp else "｜档案保存失败"))
             st.rerun()
     with _d3:
         _seg = current_segment(draws)
