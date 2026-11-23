@@ -1600,6 +1600,129 @@ def _exp_stake_plan(loader):
 
 
 # =====================================================================
+# 实验 J：多维属性杀号排行
+# =====================================================================
+def _load_attr_map(loader):
+    key = "_lab_amap"
+    if key in st.session_state:
+        return st.session_state[key]
+    out = {}
+    try:
+        rows = _as_rows(loader["load_excel_data"]("_attr_map.csv", None))
+        if rows:
+            head = [str(h).strip() for h in rows[0]]
+            for r in rows[1:]:
+                if not r or not str(r[0]).strip():
+                    continue
+                try:
+                    n = int(float(r[0]))
+                except Exception:
+                    continue
+                out[n] = {head[i]: (str(r[i]).strip() if i < len(r) else "")
+                          for i in range(len(head))}
+    except Exception:
+        out = {}
+    st.session_state[key] = out
+    return out
+
+
+def _exp_kill_rank(loader):
+    from collections import Counter as _C
+    st.markdown("#### 实验 J：多维属性杀号排行")
+    st.caption("统计每个属性「最热取值」的再出率，杀号率 = 1 − 再出率；"
+               "再按交叉杀号后的剩余号码做回测。")
+
+    data = _load_index6(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    amap = _load_attr_map(loader)
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        ball = st.selectbox("球位", list(range(1, 7)), index=0, key="lab_j_ball")
+    with c2:
+        win = st.selectbox("观察窗口", [50, 100, 200], index=1, key="lab_j_win")
+    with c3:
+        topk = st.number_input("交叉杀号个数", 1, 8, 3, 1, key="lab_j_k")
+    with c4:
+        bt = st.number_input("回测期数", 50, 2000, 300, 50, key="lab_j_bt")
+
+    if not st.button("▶ 运行实验 J", key="lab_j_run"):
+        return
+
+    def val_of(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        if key == "单双":
+            return "单" if num % 2 else "双"
+        if key == "大小":
+            return "大" if num >= 25 else "小"
+        return amap.get(num, {}).get(key, "")
+
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿", "大小肖",
+             "阴阳天地", "生肖五行", "波色", "3模", "单双", "门数", "段数"]
+    seqs = {k: [val_of(d[1][ball - 1], k) for d in data] for k in ATTRS}
+
+    start = max(win, n - int(bt))
+    # 属性维度统计
+    stat = {k: {"trig": 0, "kill": 0} for k in ATTRS}
+    cross_ok = 0
+    cross_tot = 0
+    remain_sum = 0
+    for i in range(start, n):
+        actual = data[i][1][ball - 1]
+        kills = []
+        for k in ATTRS:
+            seq = seqs[k]
+            c = _C(x for x in seq[i - win:i] if x)
+            if not c:
+                continue
+            v, cnt = c.most_common(1)[0]
+            if cnt < 10 or not v:
+                continue
+            stat[k]["trig"] += 1
+            if val_of(actual, k) != v:
+                stat[k]["kill"] += 1
+            kills.append((k, v, cnt))
+        # 交叉杀：按历史再出率最低（此处用计数占比近似）排序取 topk
+        kills.sort(key=lambda x: -(x[2]))
+        use = kills[:int(topk)]
+        dead_vals = {(k, v) for k, v, _ in use}
+        remain = [num for num in range(1, 50)
+                  if not any(val_of(num, k) == v for k, v in dead_vals)]
+        cross_tot += 1
+        remain_sum += len(remain)
+        if actual in remain:
+            cross_ok += 1
+
+    rows = []
+    for k in ATTRS:
+        tr = stat[k]["trig"]
+        if tr < 20:
+            continue
+        rate = stat[k]["kill"] / tr
+        rows.append({"属性": k, "触发期数": tr,
+                     "杀中": stat[k]["kill"],
+                     "杀号率": f"{rate*100:.1f}%"})
+    rows.sort(key=lambda x: -float(x["杀号率"].rstrip("%")))
+    st.markdown("**单属性杀号排行（杀最热取值）**")
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    st.markdown(f"**交叉杀 {int(topk)} 个属性后的效果**")
+    st.metric("实际号码仍存活的概率",
+              f"{cross_ok/max(1,cross_tot)*100:.1f}%",
+              f"{cross_ok}/{cross_tot} 期")
+    st.metric("平均剩余号码数", f"{remain_sum/max(1,cross_tot):.1f} 个")
+    st.caption("说明：存活概率越低，说明杀得越狠但越容易误杀；"
+               "理想是剩余号码少、存活概率仍高。")
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -1798,15 +1921,17 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabh, tabi, tab4, tab3 = st.tabs(
+    tab2, tabh, tabi, tabj, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
-         "结论档案", "清理"])
+         "实验J 属性杀号", "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabh:
         _exp_six_pick(H)
     with tabi:
         _exp_stake_plan(H)
+    with tabj:
+        _exp_kill_rank(H)
     with tab4:
         _archive()
     with tab3:
