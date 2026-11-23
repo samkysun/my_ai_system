@@ -1636,55 +1636,81 @@ def render(df_data, H):
         st.caption("还没有录满一期的荷官记录。")
     else:
         _cur_name0 = _norm_name(st.session_state.get("_roulette_dealer"))
+        _profs_all = st.session_state.get("_roulette_profiles") or {}
         _rows_d = []
         for _nm, _nums in sorted(_by_name.items(), key=lambda x: -len(x[1])):
-            _n0 = len(_nums)
-            _c0 = Counter(_nums)
+            _pf = _profs_all.get("官:" + _nm) or {}
+            _sp_local = len(_nums)
+            _sp_cloud = int(_pf.get("spins", 0))
+            _sp = max(_sp_local, _sp_cloud)
+            if _sp <= 0:
+                continue
 
-            def _pref(fn, _nums=_nums, _n0=_n0):
-                c = Counter(fn(x) for x in _nums)
-                v, k = c.most_common(1)[0]
-                return f"{v} {k/_n0*100:.0f}%"
+            # 计数优先用云端（更全），否则用本地
+            if _sp_cloud >= _sp_local and _pf.get("nums"):
+                _cnt = {int(k): int(v) for k, v in _pf["nums"].items() if k.isdigit()}
+                _zcnt = dict(_pf.get("zod") or {})
+                _sis = int(_pf.get("sister", 0))
+                _adj = int(_pf.get("adj", 0))
+                _red = int(_pf.get("red", 0))
+                _odd = int(_pf.get("odd", 0))
+                _big = int(_pf.get("big", 0))
+            else:
+                _cnt = dict(Counter(_nums))
+                _zcnt = dict(Counter(zodiac_of(x) for x in _nums))
+                _sis = sum(1 for i2 in range(1, len(_nums))
+                           if _nums[i2] in sister(_nums[i2 - 1]))
+                _adj = sum(1 for i2 in range(1, len(_nums))
+                           if _nums[i2] in wheel_neighbors(_nums[i2 - 1]))
+                _red = sum(1 for x in _nums
+                           if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36})
+                _odd = sum(1 for x in _nums if x % 2)
+                _big = sum(1 for x in _nums if x >= 19)
 
-            _bal = _pref(lambda x: "红波" if x in {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36} else ("绿(0)" if x == 0 else "蓝波"))
-            _oddeven = _pref(lambda x: "双" if x % 2 == 0 else "单")
-            _big = _pref(lambda x: "大(19-36)" if x >= 19 else "小(0-18)")
-            _segp = _pref(lambda x: f"{x//10*10}-{x//10*10+9}" if x < 30 else "30-36")
-            _tail = _pref(lambda x: f"{x%10}尾")
-            _sector = _pref(lambda x: f"第{POS[x]//6+1}段")
-            _zod = _pref(lambda x: zodiac_of(x))
-            _sis = sum(1 for i2 in range(1, len(_nums))
-                       if _nums[i2] in sister(_nums[i2 - 1]))
-            _adj = sum(1 for i2 in range(1, len(_nums))
-                       if _nums[i2] in wheel_neighbors(_nums[i2 - 1]))
-            _top3 = "、".join(f"{v}" for v, _ in _c0.most_common(3))
+            _tot = sum(_cnt.values()) or 1
+
+            def _pct(c):
+                return f"{c / _tot * 100:.0f}%"
+
+            _bal_red = _red
+            _bal_blue = _tot - _red - _cnt.get(0, 0)
+            _bal_lst = [("红波", _bal_red), ("蓝波", _bal_blue),
+                        ("绿(0)", _cnt.get(0, 0))]
+            _bal = max(_bal_lst, key=lambda x: x[1])
+            _big_s = "大(19-36)" if _big * 2 >= _tot else "小(0-18)"
+            _odd_s = "单" if _odd * 2 >= _tot else "双"
+
+            _segc = {}
+            _tailc = {}
+            _secc = {}
+            for _n2, _c2 in _cnt.items():
+                _segc[f"{_n2//10*10}-{_n2//10*10+9}" if _n2 < 30 else "30-36"] = \
+                    _segc.get(f"{_n2//10*10}-{_n2//10*10+9}" if _n2 < 30 else "30-36", 0) + _c2
+                _tailc[f"{_n2%10}尾"] = _tailc.get(f"{_n2%10}尾", 0) + _c2
+                _sk = f"第{POS[_n2]//6+1}段"
+                _secc[_sk] = _secc.get(_sk, 0) + _c2
+            _seg_best = max(_segc.items(), key=lambda x: x[1]) if _segc else ("—", 0)
+            _tail_best = max(_tailc.items(), key=lambda x: x[1]) if _tailc else ("—", 0)
+            _sec_best = max(_secc.items(), key=lambda x: x[1]) if _secc else ("—", 0)
+            _zod_best = max(_zcnt.items(), key=lambda x: x[1]) if _zcnt else ("—", 0)
+            _top3 = "、".join(f"{v}" for v, _ in
+                              sorted(_cnt.items(), key=lambda x: -x[1])[:3])
+
             _rows_d.append({
                 "荷官": _nm,
-                "期数": _n0,
-                "波色偏好": _bal,
-                "单双": _oddeven,
-                "大小": _big,
-                "号码段": _segp,
-                "尾数": _tail,
-                "轮盘扇区": _sector,
-                "生肖偏好": _zod,
-                "姐妹码": f"{_sis/max(1,_n0-1)*100:.0f}%",
-                "轮盘相邻": f"{_adj/max(1,_n0-1)*100:.0f}%",
+                "期数": _sp,
+                "波色偏好": f"{_bal[0]} {_pct(_bal[1])}",
+                "单双": f"{_odd_s} {_pct(_odd if _odd_s == '单' else _tot - _odd)}",
+                "大小": f"{_big_s} {_pct(_big if _big_s.startswith('大') else _tot - _big)}",
+                "号码段": f"{_seg_best[0]} {_pct(_seg_best[1])}",
+                "尾数": f"{_tail_best[0]} {_pct(_tail_best[1])}",
+                "轮盘扇区": f"{_sec_best[0]} {_pct(_sec_best[1])}",
+                "生肖偏好": f"{_zod_best[0]} {_pct(_zod_best[1])}",
+                "姐妹码": f"{_sis/max(1,_sp-1)*100:.0f}%",
+                "轮盘相邻": f"{_adj/max(1,_sp-1)*100:.0f}%",
                 "最热号码": _top3,
                 "当前": "✅" if _nm == _cur_name0 else "",
             })
-        # 最后一道保险：同名只保留一行（合并期数）
-        _final = {}
-        for _r0 in _rows_d:
-            _nmk = _norm_name(_r0["荷官"])
-            if _nmk in _final and _final[_nmk]["期数"] >= _r0["期数"]:
-                continue
-            _final[_nmk] = _r0
-        _rows_d = list(_final.values())
-        st.caption(f"共 {len(_rows_d)} 位荷官（同名已合并）")
-        st.dataframe(pd.DataFrame(_rows_d), use_container_width=True,
-                     hide_index=True)
-
         # 选择查看某位荷官（去重）
         _names = sorted(_by_name.keys())
         _view = st.selectbox("查看荷官详情", _names, index=0,
