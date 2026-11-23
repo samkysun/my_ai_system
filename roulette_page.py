@@ -1382,12 +1382,16 @@ def _venue_section(H):
                 st.session_state["_roulette_hist"] = []
                 st.session_state["_roulette_pending"] = []
                 st.session_state["_roulette_venue"] = _vsel2
+                st.session_state["_roulette_profiles"] = load_profiles(H)
+                _pn = [k for k in (st.session_state["_roulette_profiles"] or {})
+                       if str(k).startswith("地:" + _vsel2 + "|官:")]
                 st.session_state["_roulette_known_names"] = load_known_names(H, _vsel2)
                 st.session_state["_roulette_dealers"] = []
                 st.session_state["_roulette_marks"] = []
                 st.session_state["_roulette_dealer"] = ""
                 st.session_state.pop("_roulette_rhit", None)
-                st.success(f"已切换到「{_vsel2}」，本场数据从 0 开始")
+                st.success(f"已切换到「{_vsel2}」，本场数据从 0 开始｜"
+                           f"云端该场所有 {len(_pn)} 位荷官档案")
                 st.rerun()
 
     _nv = _norm_name(st.text_input("新场所名字（如：金莎、威尼斯人）",
@@ -1407,6 +1411,7 @@ def _venue_section(H):
             st.session_state["_roulette_pending"] = []
             st.session_state["_roulette_venue"] = _nv
             save_venues(H, sorted(_vs2))
+            st.session_state["_roulette_profiles"] = load_profiles(H)
             st.session_state["_roulette_known_names"] = load_known_names(H, _nv)
             st.session_state["_roulette_dealers"] = []
             st.session_state["_roulette_marks"] = []
