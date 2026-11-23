@@ -1447,6 +1447,19 @@ def render(df_data, H):
             st.warning(f"该荷官轮盘相邻偏高（{_adj_rate*100:.0f}%，理论 5.4%）")
 
     if len(_calc) < 40:
+        _pf_fb = (st.session_state.get("_roulette_profiles") or {}).get(
+            "官:" + _norm_name(st.session_state.get("_roulette_dealer")))
+        if _pf_fb and int(_pf_fb.get("spins", 0)) >= 40:
+            _fr1 = frequency_candidates(_pf_fb)
+            if _fr1:
+                st.success(f"☁ 该荷官云端档案 {int(_pf_fb.get('spins',0))} 期"
+                           f"（缺完整序列）→ 按长期频率出候选")
+                st.markdown("### 🎯 候选号码（依据荷官长期频率）")
+                st.dataframe(pd.DataFrame(
+                    [{"号码": a, "判断": b, "偏离": f"{c*100:+.0f}%",
+                      "说明": d} for a, c, b, d in _fr1]),
+                    use_container_width=True, hide_index=True)
+                return
         st.warning(f"📉 当前可用数据仅 {len(_calc)} 期（不足 40 期），"
                    f"暂不给出候选号码。请继续录入或换一位有档案的荷官。")
         return
