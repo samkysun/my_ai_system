@@ -1954,10 +1954,10 @@ def _exp_hot_cold(loader):
 # 实验 L：简单版（预测 + 回测）
 # =====================================================================
 def _exp_simple(loader):
-    from collections import Counter as _C, defaultdict as _dd
-    st.markdown("#### 实验 L：简单版（先看预测，再看回测）")
-    st.info("规则只有一句：看这一期某个球的属性值 → 找历史上同样的期 → "
-            "它们下一期开什么，最多的就是「追热」，最少的就是「追冷」。")
+    from collections import Counter as _C
+    st.markdown("#### 实验 L：单期回测（冷热一眼看清）")
+    st.info("选一期 → 看这一期某球属性值 → 找历史上相同的期 → "
+            "它们下一期开什么：最多的叫「热」，最少的叫「冷」。")
 
     data = _load_index6(loader)
     amap = _load_attr_map(loader)
@@ -1976,124 +1976,85 @@ def _exp_simple(loader):
             return str(num % 3)
         return amap.get(num, {}).get(key, "")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
-        ball = st.selectbox("看哪个球位", [1, 2, 3, 4, 5, 6], index=0,
-                            key="lab_l_ball")
+        pick = st.selectbox("选择期号（回测这一期）",
+                            list(reversed(periods)), index=0,
+                            key="lab_l_period")
     with c2:
-        attr = st.selectbox("看哪个属性", ATTRS, index=0, key="lab_l_attr")
+        ball = st.selectbox("球位", [1, 2, 3, 4, 5, 6], index=0,
+                            key="lab_l_ball")
     with c3:
-        need = st.number_input("历史至少匹配几期", 1, 20, 3, 1,
+        attr = st.selectbox("属性", ATTRS, index=0, key="lab_l_attr")
+    with c4:
+        need = st.number_input("最少匹配几期", 1, 20, 3, 1,
                                key="lab_l_need")
 
+    idx = periods.index(pick)
     seq = [val_of(d[1][ball - 1], attr) for d in data]
+    v = seq[idx]
     lo, hi = int(ball), 43 + int(ball)
 
-    # ---------- 一、下一期预测 ----------
-    st.markdown(f"### 一、下一期（{periods[-1]} 之后）第{ball}球预测")
-    _last = n - 1
-    _v = seq[_last]
-    _mc = _C()
-    _rows_n = 0
-    _det = []
-    for _i in range(_last):
-        if seq[_i] == _v:
-            _rows_n += 1
-            _nx = seq[_i + 1]
-            _mc[_nx] += 1
-            _det.append({"触发期": periods[_i], "下一期": periods[_i + 1],
-                         "下期值": _nx})
-    if not _mc:
-        st.warning(f"历史上没有出现「{_v}」，给不出预测")
-    else:
-        _hot = _mc.most_common(1)[0][0]
-        _uni = sorted({x for x in seq if x})
-        _cold = min(_uni, key=lambda u: _mc.get(u, 0))
-        _nums_hot = [x for x in range(lo, hi + 1)
-                     if val_of(x, attr) == _hot]
-        _nums_cold = [x for x in range(lo, hi + 1)
-                      if val_of(x, attr) == _cold]
-        st.markdown(f"**本期第{ball}球 = {_v}**，历史上相同的有 **{_rows_n}** 期")
-        st.markdown("这些期的下一期分别是："
-                    + "、".join(f"{k}×{v}" for k, v in _mc.most_common()))
-        if _rows_n < int(need):
-            st.warning(f"匹配只有 {_rows_n} 期，少于你设的 {int(need)} 期，"
-                       f"参考价值偏低")
-        st.success(f"**可买**（追热 {_hot}）："
-                   + "、".join(str(x) for x in _nums_hot))
-        st.warning(f"**可避**（追冷 {_cold}）："
-                   + "、".join(str(x) for x in _nums_cold))
-        with st.expander(f"查看这 {_rows_n} 期的明细", expanded=False):
-            st.dataframe(pd.DataFrame(_det), use_container_width=True,
-                         hide_index=True)
-
-    # ---------- 二、回测 ----------
-    st.markdown("### 二、回测（看这套方法过去准不准）")
-    _b1 = st.selectbox("回测起始期", list(reversed(periods)),
-                       index=min(299, len(periods) - 1), key="lab_l_start")
-    _b2 = st.selectbox("回测结束期", list(reversed(periods)), index=0,
-                       key="lab_l_end")
-    if not st.button("▶ 开始回测", key="lab_l_run"):
-        return
-
-    _i1 = periods.index(_b1)
-    _i2 = periods.index(_b2)
-    if _i1 > _i2:
-        _i1, _i2 = _i2, _i1
-    start = max(1, _i1)
-    end = min(n - 1, _i2)
-
-    hot_ok = cold_ok = tot = 0
+    cnt = _C()
+    rows_n = 0
     detail = []
-    for i in range(start, end):
-        v = seq[i]
-        mc = _C()
-        cnt = 0
-        for j in range(i):
-            if seq[j] == v and j + 1 <= i:
-                cnt += 1
-                mc[seq[j + 1]] += 1
-        if cnt < int(need) or not mc:
-            continue
-        hot = mc.most_common(1)[0][0]
-        uni = sorted({x for x in seq if x})
-        cold = min(uni, key=lambda u: mc.get(u, 0))
-        actual = seq[i + 1]
-        tot += 1
-        hot_ok += 1 if actual == hot else 0
-        cold_ok += 1 if actual == cold else 0
-        detail.append({"期号": periods[i + 1], "本期值": v, "匹配": cnt,
-                       "追热": hot, "追冷": cold, "实开": actual,
-                       "热中": "★" if actual == hot else "",
-                       "冷中": "★" if actual == cold else ""})
+    for j in range(idx):
+        if seq[j] == v:
+            rows_n += 1
+            nx = seq[j + 1]
+            cnt[nx] += 1
+            detail.append({"历史触发期": periods[j],
+                           "下一期": periods[j + 1],
+                           f"下一期第{ball}球{attr}": nx})
 
-    if not tot:
-        st.warning("该区间没有满足条件的期")
+    st.markdown(f"### 本期：{pick} 期，第{ball}球 {attr} = **{v}**")
+    st.markdown(f"历史上同值共 **{rows_n}** 期（要求 ≥{int(need)} 期）")
+    if rows_n < int(need):
+        st.warning(f"匹配只有 {rows_n} 期，不足 {int(need)} 期，仅供参考")
+
+    if not cnt:
+        st.warning("历史上没有可比对的期，无法判断冷热")
         return
 
-    st.caption(f"回测区间：{periods[start]} ~ {periods[end]}，"
-               f"实际参与 {tot} 期")
-    _m1, _m2, _m3 = st.columns(3)
-    _m1.metric("追热命中率", f"{hot_ok/tot*100:.1f}%", f"{hot_ok}/{tot}")
-    _m2.metric("追冷命中率", f"{cold_ok/tot*100:.1f}%", f"{cold_ok}/{tot}")
-    _m3.metric("随便猜的命中率",
-               f"{100/len({v for v in seq if v}):.1f}%",
-               f"{len({v for v in seq if v})} 个取值")
+    hot, hot_n = cnt.most_common(1)[0]
+    uni = sorted({x for x in seq if x})
+    cold = min(uni, key=lambda u: cnt.get(u, 0))
+    cold_n = cnt.get(cold, 0)
 
-    _df = pd.DataFrame(list(reversed(detail)))
+    st.markdown("**这些期的下一期都开了什么：** "
+                + "、".join(f"{k}（{vv}次）" for k, vv in cnt.most_common()))
 
-    def _hl(row):
-        if row["热中"] or row["冷中"]:
-            return ["background-color:#ffe08a"] * len(row)
-        return [""] * len(row)
+    nums_hot = [x for x in range(lo, hi + 1) if val_of(x, attr) == hot]
+    nums_cold = [x for x in range(lo, hi + 1) if val_of(x, attr) == cold]
 
-    st.dataframe(_df.style.apply(_hl, axis=1), use_container_width=True,
-                 hide_index=True, height=340)
-    st.download_button("📥 下载回测明细",
-                       _df.to_csv(index=False).encode("utf-8-sig"),
-                       file_name=f"实验L_{attr}_第{ball}球.csv",
-                       mime="text/csv", key="lab_l_dl")
+    st.success(f"🔥 热：{hot}（{hot_n} 次）→ 号码 "
+               + "、".join(str(x) for x in nums_hot))
+    st.warning(f"❄ 冷：{cold}（{cold_n} 次）→ 号码 "
+               + "、".join(str(x) for x in nums_cold))
 
+    # 该期的下一期是否已开
+    if idx + 1 < n:
+        nxt_period = periods[idx + 1]
+        actual = seq[idx + 1]
+        st.markdown(f"### 下一期：{nxt_period} 期，第{ball}球 {attr} = "
+                    f"**{actual}**")
+        hot_hit = actual == hot
+        cold_hit = actual == cold
+        _m1, _m2, _m3 = st.columns(3)
+        _m1.metric("热是否命中", "✅ 命中" if hot_hit else "❌ 未中")
+        _m2.metric("冷是否命中", "✅ 命中" if cold_hit else "❌ 未中")
+        _m3.metric("该属性取值数", len(uni))
+        if hot_hit:
+            st.success(f"追热正确：{nxt_period} 开的就是 {hot}")
+        elif cold_hit:
+            st.info(f"追冷正确：{nxt_period} 开的是最冷的 {cold}")
+        else:
+            st.error(f"冷热都没中：实际开 {actual}")
+        with st.expander("查看这一期的历史触发明细", expanded=False):
+            st.dataframe(pd.DataFrame(detail), use_container_width=True,
+                         hide_index=True)
+    else:
+        st.info(f"{pick} 是最新一期，下一期还没开奖")
 
 # =====================================================================
 # 保存 / 清理
