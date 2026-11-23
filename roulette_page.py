@@ -2290,7 +2290,12 @@ def render(df_data, H):
                 "当前": "✅" if _nm == _cur_name0 else "",
             })
         # 选择查看某位荷官（去重）
-        _names = sorted(_by_name.keys())
+        _names = set(_by_name.keys())
+        for _kp in (st.session_state.get("_roulette_profiles") or {}).keys():
+            _vkp, _dkp = _split_key(_kp)
+            if _norm_name(_vkp) == _cur_venue() and _dkp:
+                _names.add(_dkp)
+        _names = sorted(_names)
         _view = st.selectbox("查看荷官详情", _names, index=0,
                              key="rou_view_dealer")
         _vnums = list(_by_name.get(_view, []))
