@@ -2233,125 +2233,43 @@ def render(df_data, H):
     if not _prof2:
         _prof2 = load_profiles(H)
         st.session_state["_roulette_profiles"] = _prof2
-    # 显示前再按名字合并一次，确保绝不出现同名
-    _merged = {}
+
+    _prows = []
     for _k, _v in (_prof2 or {}).items():
-        if not isinstance(_v, dict) or not str(_k).startswith("官:"):
+        if not isinstance(_v, dict):
             continue
-        _nmx = _norm_name(str(_k)[2:])
-        if not _nmx:
+        _vk, _dl = _split_key(_k)
+        _sp = int(_v.get("spins", 0))
+        if not _dl or _sp <= 0:
             continue
-        _nkx = "官:" + _nmx
-        if _nkx in _merged:
-            _merge_profile(_merged[_nkx], _v)
-        else:
-            _merged[_nkx] = dict(_v)
-    _prof2 = _merged
-    st.session_state["_roulette_profiles"] = _prof2
+        _nm2 = sorted(((int(a), b) for a, b in (_v.get("nums") or {}).items()),
+                      key=lambda x: -x[1])[:3]
+        _zod2 = sorted((_v.get("zod") or {}).items(), key=lambda x: -x[1])[:2]
+        _prows.append({
+            "场所": _vk,
+            "荷官": _dl,
+            "累计期数": _sp,
+            "可用序列": len(_v.get("seq", []) or []),
+            "最热号码": "、".join(f"{a}" for a, _ in _nm2),
+            "最热生肖": "、".join(f"{a}{b/_sp*100:.0f}%" for a, b in _zod2),
+            "大号%": f"{_v.get('big',0)/_sp*100:.0f}%",
+            "单数%": f"{_v.get('odd',0)/_sp*100:.0f}%",
+            "红波%": f"{_v.get('red',0)/_sp*100:.0f}%",
+            "姐妹%": f"{_v.get('sister',0)/max(1,_sp-1)*100:.0f}%",
+            "相邻%": f"{_v.get('adj',0)/max(1,_sp-1)*100:.0f}%",
+        })
 
-    if not _prof2:
-        st.caption("云端还没有档案；每录入一期会自动累积（清空页面数据也不影响）。")
-    if st.button("🔧 测试云端写入", key="rou_write_test"):
-        _tn = "roulette_write_test.json"
-        _payload = json.dumps({"time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                               "venue": _cur_venue()},
-                              ensure_ascii=False)
-        _r1 = False
-        _err = ""
-        try:
-            _fnw = H.get("gh_write")
-            if _fnw:
-                _r1 = bool(_fnw(_tn, _payload, "写入自检"))
-            else:
-                _err = "loader 无 gh_write"
-        except Exception as _e1:
-            _err = f"loader 异常 {type(_e1).__name__}: {_e1}"
-        _r2 = _direct_gh_write(_tn, _payload, "写入自检(直连)")
-        st.write({"loader写入": _r1, "直连写入": _r2,
-                  "loader错误": _err, "最近错误": _LAST_WRITE_ERR.get("msg", "")})
-
-
-        if st.button("🔄 重新读取云端档案", key="rou_reload_prof"):
-            _fresh = load_profiles(H)
-            st.session_state["_roulette_profiles"] = _fresh
-            st.success(f"已重新读取：{len(_fresh)} 条档案")
-            st.rerun()
-        _diag = {}
-        try:
-            _rf2 = H.get("gh_read")
-            _tmp = _rf2(PROFILE_FILE) if _rf2 else ""
-            _diag["读取长度"] = len(_tmp or "")
-        except Exception as _de:
-            _diag["读取异常"] = f"{type(_de).__name__}: {_de}"
-        st.caption("诊断：" + "｜".join(f"{k}={v}" for k, v in _diag.items()))
+    if _prows:
+        st.dataframe(pd.DataFrame(_prows), use_container_width=True,
+                     hide_index=True)
+        st.caption(f"共 {len(_prows)} 条档案（当前场所：{_cur_venue()}）")
     else:
-        _prows = []
-        for _k, _v in _prof2.items():
-            _sp = int(_v.get("spins", 0))
-            if not _sp:
-                continue
-            _nm2 = sorted(((int(a), b) for a, b in _v.get("nums", {}).items()),
-                          key=lambda x: -x[1])[:3]
-            _zod2 = sorted(_v.get("zod", {}).items(), key=lambda x: -x[1])[:2]
-            _prows.append({
-                "荷官": str(_k)[2:],
-                "累计期数": _sp,
-                "可用序列": len(_v.get("seq", []) or []),
-                "最热号码": "、".join(f"{a}" for a, _ in _nm2),
-                "最热生肖": "、".join(f"{a}{b/_sp*100:.0f}%" for a, b in _zod2),
-                "大号%": f"{_v.get('big',0)/_sp*100:.0f}%",
-                "单数%": f"{_v.get('odd',0)/_sp*100:.0f}%",
-                "红波%": f"{_v.get('red',0)/_sp*100:.0f}%",
-                "姐妹%": f"{_v.get('sister',0)/max(1,_sp-1)*100:.0f}%",
-                "相邻%": f"{_v.get('adj',0)/max(1,_sp-1)*100:.0f}%",
-            })
-        if _prows:
-            st.dataframe(pd.DataFrame(_prows), use_container_width=True,
-                         hide_index=True)
-            _del_names = [str(r0["荷官"]) for r0 in _prows]
-            _dc1, _dc2 = st.columns([2, 1])
-            with _dc1:
-                _del_pick = st.selectbox("选择要删除档案的荷官", _del_names,
-                                         key="rou_prof_del")
-            with _dc2:
-                _del_ok = st.checkbox("确认删除", key="rou_prof_del_ok")
-            if st.button("🗑 删除该荷官档案", key="rou_prof_del_btn"):
-                if not _del_ok:
-                    st.warning("请先勾选「确认删除」")
-                else:
-                    _np = dict(_prof2)
-                    _np.pop(_pkey(_cur_venue(), _del_pick), None)
-                    st.session_state["_roulette_profiles"] = _np
-                    if save_profiles(H, _np):
-                        # 1) 名单里删掉
-                        _kn2 = [x for x in (st.session_state.get(
-                            "_roulette_known_names") or []) if x != _del_pick]
-                        st.session_state["_roulette_known_names"] = _kn2
-                        try:
-                            save_known_names(H, _kn2, _cur_venue())
-                        except Exception:
-                            pass
-                        # 2) 本场分段也删掉
-                        _dl3 = [d0 for d0 in
-                                (st.session_state.get("_roulette_dealers") or [])
-                                if _norm_name(d0.get("name")) != _del_pick]
-                        st.session_state["_roulette_dealers"] = _dl3
-                        st.session_state["_roulette_marks"] = [
-                            int(d0.get("start", 0)) for d0 in _dl3]
-                        # 3) 当前荷官清空
-                        if _norm_name(st.session_state.get("_roulette_dealer")) == _del_pick:
-                            st.session_state["_roulette_dealer"] = ""
-                            st.session_state["_rou_reset_dealer_widget"] = True
-                        st.success(f"已删除「{_del_pick}」的档案与历史名字")
-                        st.rerun()
-                    else:
-                        st.error("删除失败：云端写入失败")
+        st.caption("云端还没有档案；每录入一期会自动累积。")
 
-            st.caption("档案只用于识别台/荷官的长期倾向，"
-                       "当前推荐仍只看页面上录入的数据。")
-        else:
-            st.caption("档案为空")
-
+    if st.button("🔄 重新读取云端档案", key="rou_reload_prof"):
+        st.session_state["_roulette_profiles"] = load_profiles(H)
+        st.success("已重新读取")
+        st.rerun()
     try:
         _venue_section(H, "_b")
     except Exception as _ve2:
