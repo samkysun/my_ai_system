@@ -973,7 +973,7 @@ def smart_top3(draws):
     return out, w
 
 
-def build_candidates(draws, rec_nums=None):
+def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
         return om, [], []
@@ -1043,13 +1043,7 @@ def build_candidates(draws, rec_nums=None):
         if _p not in _rec:
             _rec.append(_p)
     _rec = _rec[:max(REC_N, REC_N + len(_pend))]
-    _rest = sorted(((n, s) for n, s in score.items() if n not in _rec),
-                   key=lambda x: (-x[1], x[0]))
-    _strong = [(n, s) for n, s in _rest if s >= 2]
-    _weak = [(n, s) for n, s in _rest if s < 2]
-    ranked = [(n, score.get(n, 0)) for n in _rec]
-    # 0 号按出现次数权衡：超过 40 次开始推荐
-    # 自学习规则得分
+    # 自学习规则得分（必须先算，再排序）
     _rules = learn_rules_cached(draws)
     _rscore, _active, _rhit = apply_rules(
         draws, _rules, om,
@@ -1061,6 +1055,19 @@ def build_candidates(draws, rec_nums=None):
     for _n, _s in _rscore.items():
         if _s > 0:
             add(int(_n), "规则", int(round(_s)))
+
+    if extra_bonus:
+        for _n, _w in extra_bonus.items():
+            try:
+                add(int(_n), "台/官倾向", float(_w))
+            except Exception:
+                pass
+
+    _rest = sorted(((n, s) for n, s in score.items() if n not in _rec),
+                   key=lambda x: (-x[1], x[0]))
+    _strong = [(n, s) for n, s in _rest if s >= 2]
+    _weak = [(n, s) for n, s in _rest if s < 2]
+    ranked = [(n, score.get(n, 0)) for n in _rec]
 
     _zgap = om["号码"].get(0, 0)
     if _zgap >= 40 and 0 not in _rec:
@@ -1233,9 +1240,41 @@ def render(df_data, H):
         else:
             st.caption(f"📊 本荷官仅 {len(_seg_draws)} 期（<40），暂用全场数据")
 
+    # ---- 读取云端档案，展示台/荷官特点 ----
+    _prof = st.session_state.get("_roulette_profiles")
+    if _prof is None:
+        _prof = load_profiles(H)
+        st.session_state["_roulette_profiles"] = _prof
+    _tbl_now = st.session_state.get("_roulette_table", "")
+    _dlr_now = st.session_state.get("_roulette_dealer", "")
+    _pk1 = ("台:" + _tbl_now) if _tbl_now else ""
+    _pk2 = ("官:" + _dlr_now) if _dlr_now else ""
+    _prof_use = _prof.get(_pk1) or _prof.get(_pk2) or None
+
+    _bonus = {}
+    if _prof_use and int(_prof_use.get("spins", 0)) >= 30:
+        _sp = int(_prof_use["spins"])
+        _nm3 = sorted(((int(a), b) for a, b in _prof_use.get("nums", {}).items()),
+                      key=lambda x: -x[1])[:6]
+        _zd3 = sorted(_prof_use.get("zod", {}).items(), key=lambda x: -x[1])[:2]
+        _who = _tbl_now or _dlr_now
+        st.info(
+            f"☁ 云端档案｜{_who} 累计 {_sp} 期："
+            f"热号 {'、'.join(f'{a:02d}' for a, _ in _nm3)}｜"
+            f"生肖 {'、'.join(f'{a}{b/_sp*100:.0f}%' for a, b in _zd3)}｜"
+            f"大号 {_prof_use.get('big',0)/_sp*100:.0f}%｜"
+            f"姐妹 {_prof_use.get('sister',0)/max(1,_sp-1)*100:.0f}%｜"
+            f"相邻 {_prof_use.get('adj',0)/max(1,_sp-1)*100:.0f}%")
+        _use_bonus = st.checkbox(
+            "把这个台/荷官的历史倾向计入候选（轻度加权）", value=False,
+            key="rou_use_bonus")
+        if _use_bonus:
+            for _a, _b2 in _nm3:
+                _bonus[_a] = 0.5
+
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
-    om, alerts, levels = build_candidates(_calc, _rec)
+    om, alerts, levels = build_candidates(_calc, _rec, extra_bonus=_bonus)
     _rhit = st.session_state.get("_roulette_rhit", {}) or {}
     last_no = draws[-1]
     _sg, _ag, _sh, _ah = event_gaps(draws)
