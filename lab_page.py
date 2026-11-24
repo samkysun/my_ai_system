@@ -3115,6 +3115,38 @@ def _exp_precise(loader):
 # =====================================================================
 # 实验 Q：属性融合推荐（属性口径 + 明细 + 报告）
 # =====================================================================
+# ============================================================
+# 页面状态保持（只保存输入控件，跳过按钮/下载类）
+# ============================================================
+_PS_SKIP = ("_run", "_send", "_btn", "_save", "_reset", "_clear",
+            "_del", "_dl", "_apply", "_calc", "_do")
+
+
+def page_state_seed(tag, prefix):
+    saved = st.session_state.get(f"_ps_{tag}") or {}
+    for k, v in saved.items():
+        if k.startswith(prefix) and k not in st.session_state:
+            try:
+                st.session_state[k] = v
+            except Exception:
+                pass
+
+
+def page_state_snap(tag, prefix):
+    snap = {}
+    for k, v in list(st.session_state.items()):
+        if not isinstance(k, str) or not k.startswith(prefix):
+            continue
+        if any(k.endswith(s) for s in _PS_SKIP):
+            continue
+        try:
+            snap[k] = v
+        except Exception:
+            pass
+    if snap:
+        st.session_state[f"_ps_{tag}"] = snap
+
+
 def _exp_attr_fusion(loader):
     import math as _m
     from collections import Counter as _C, defaultdict as _dd
