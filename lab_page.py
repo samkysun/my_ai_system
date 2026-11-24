@@ -3326,7 +3326,9 @@ def _exp_attr_fusion(loader):
                 else:
                     nums = [x for x in range(lo, hi + 1)
                             if amap.get(x, {}).get(_a, "") == v]
-                _rows.append({"属性值": label(v, _a), "得分": round(s, 2),
+                _rows.append({"属性值": label(v, _a),
+                              "推荐个数": _kk2,
+                              "得分": round(s, 2),
                               "对应号码": "、".join(str(x) for x in nums) or "—"})
                 for x in nums:
                     acc_num[x] = acc_num.get(x, 0) + 1
@@ -3338,7 +3340,8 @@ def _exp_attr_fusion(loader):
                 "目标属性": tattr, "推荐个数": int(kk),
                 "各属性推荐": [], "号码累计": {}}
         for _a, vals in acc_val:
-            _pkg["各属性推荐"].append({"属性": _a, "推荐值": vals})
+            _pkg["各属性推荐"].append({"属性": _a, "推荐个数": _kmap.get(_a, 0),
+                                         "推荐值": vals})
 
         st.markdown("#### ========= 叠加汇总（号码被推荐次数）========")
         if acc_num:
