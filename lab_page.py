@@ -2918,7 +2918,8 @@ def _exp_precise(loader):
                              ["数字合", "尾数", "四宝", "方位", "生肖五行"],
                              index=0, key="lab_p_tattr")
     with c3:
-        kk = st.number_input("取几个属性值", 1, 4, 2, 1, key="lab_p_k")
+        kk = st.number_input("输出几个号码（1~5）", 1, 5, 2, 1,
+                             key="lab_p_k")
 
     base_balls = st.multiselect("基准球位（可多选做融合）",
                                 list(range(1, nball + 1)), default=[1],
@@ -2967,14 +2968,20 @@ def _exp_precise(loader):
             for k in dims:
                 tables[k][tuple(seqs[k][i - dd: i])][tseq[i]] += 1
     rk = predict(idx0, tables) or []
+    nums = []
     if rk:
-        vals = [v for v, _ in rk]
-        nums = [x for x in range(lo, hi + 1) if v_of(x, tattr) in vals]
+        _sc_map = {v: s for v, s in rk}
+        _all = [(x, _sc_map.get(v_of(x, tattr), -99))
+                for x in range(lo, hi + 1)]
+        _all = [p2 for p2 in _all if p2[1] > -50]
+        _all.sort(key=lambda z: (-z[1], z[0]))
+        nums = [x for x, _ in _all[:int(kk)]]
         st.markdown(f"### 基于 {pick} 期 → 下一期第{tb}球")
         st.dataframe(pd.DataFrame(
             [{"属性值": v, "得分": round(s, 2),
-              "对应号码": "、".join(str(x) for x in range(lo, hi + 1)
-                                   if v_of(x, tattr) == v)}
+              "该属性值对应号码": "、".join(
+                  str(x) for x in range(lo, hi + 1)
+                  if v_of(x, tattr) == v)}
              for v, s in rk]), use_container_width=True, hide_index=True)
         st.success(f"建议号码（{len(nums)} 个）："
                    + "、".join(str(x) for x in nums))
@@ -3001,11 +3008,16 @@ def _exp_precise(loader):
         rr = predict(i, tables)
         if not rr:
             continue
-        vals = {v for v, _ in rr}
-        nums = {x for x in range(lo, hi + 1) if v_of(x, tattr) in vals}
+        _m2 = {v: s for v, s in rr}
+        _lst = [(x, _m2.get(v_of(x, tattr), -99)) for x in range(lo, hi + 1)]
+        _lst = [p2 for p2 in _lst if p2[1] > -50]
+        _lst.sort(key=lambda z: (-z[1], z[0]))
+        _nums2 = {x for x, _ in _lst[:int(kk)]}
+        if not _nums2:
+            continue
         tot += 1
-        cnt += len(nums)
-        ok += 1 if v_of(data[i + 1][1][tb - 1], tattr) in vals else 0
+        cnt += len(_nums2)
+        ok += 1 if data[i + 1][1][tb - 1] in _nums2 else 0
     if not tot:
         st.warning("样本不足")
         return
