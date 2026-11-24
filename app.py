@@ -4952,7 +4952,10 @@ def _rebuild_index_csv(token, repo):
         periods = sorted(set(asc) | set(desc) | set(existing))
         lines = ["期号,升1,升2,升3,升4,升5,升6,升7,"
                  "按1,按2,按3,按4,按5,按6,按7,升序行号,按序行号"]
+        import re as _re_i
         for p_ in periods:
+            if not _re_i.fullmatch(r"(19|20)\d{5}", str(p_)):
+                continue          # 跳过格式异常的期号
             a_ = asc.get(p_)
             d_ = desc.get(p_, a_)
             if a_ and d_:
