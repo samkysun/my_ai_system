@@ -1554,6 +1554,108 @@ def record_prediction(loader, num, draws_before):
     return row
 
 
+_RED = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
+
+
+def rou_color(n):
+    if n == 0:
+        return "绿"
+    return "红" if n in _RED else "黑"
+
+
+ROU_ATTRS = {
+    "尾数": lambda n: str(n % 10),
+    "数字合": lambda n: str(sum(int(c) for c in str(n))),
+    "3模": lambda n: str(n % 3),
+    "大小": lambda n: "大" if n >= 19 else "小",
+    "单双": lambda n: "单" if n % 2 else "双",
+    "波色": lambda n: rou_color(n),
+    "段数": lambda n: str(n // 6),
+}
+
+
+def attr_edge(draws, attr, lookback=400):
+    """该属性单独预测下一期号码的命中率减去随机基线"""
+    fn = ROU_ATTRS[attr]
+    if len(draws) < 60:
+        return 0.0
+    seq = [fn(int(x)) for x in draws]
+    vals = sorted({x for x in seq if x})
+    if len(vals) < 2:
+        return 0.0
+    start = max(30, len(seq) - lookback)
+    hit = tot = 0
+    for i in range(start, len(seq)):
+        pat = seq[i - 1]
+        cnt = {}
+        for j in range(i - 1):
+            if seq[j] == pat:
+                cnt[seq[j + 1]] = cnt.get(seq[j + 1], 0) + 1
+        if not cnt:
+            continue
+        best = max(cnt, key=cnt.get)
+        cand = {n for n in range(37) if fn(n) == best}
+        tot += 1
+        hit += 1 if int(draws[i]) in cand else 0
+    if not tot:
+        return 0.0
+    return hit / tot - 1.0 / max(1, len(vals))
+
+
+def fusion_scores(draws, active_attrs=None, depth=1):
+    """多属性融合评分：返回 {号码: 分数}，0 号不参与属性计算"""
+    import math as _m
+    if len(draws) < 40:
+        return {}, []
+    attrs = active_attrs or list(ROU_ATTRS.keys())
+    seqs = {a: [ROU_ATTRS[a](int(x)) for x in draws] for a in attrs}
+    n = len(draws)
+    sc = {x: 0.0 for x in range(1, 37)}   # 0 号不参与属性计算
+    used = []
+    for a in attrs:
+        s = seqs[a]
+        pat = tuple(s[n - depth: n])
+        cnt = {}
+        for j in range(depth - 1, n - 1):
+            if tuple(s[j - depth + 1: j + 1]) == pat:
+                cnt[s[j + 1]] = cnt.get(s[j + 1], 0) + 1
+        if not cnt:
+            continue
+        used.append(a)
+        tot = sum(cnt.values())
+        vals = sorted({x for x in s if x})
+        for x in range(1, 37):
+            v = ROU_ATTRS[a](x)
+            p = (cnt.get(v, 0) + 0.5) / (tot + 0.5 * max(1, len(vals)))
+            sc[x] += _m.log(p)
+    return sc, used
+
+
+def fusion_bonus(draws, depth=1):
+    """把融合评分转成候选加权（只给排名靠前的号码加分）"""
+    sc, used = fusion_scores(draws, depth=depth)
+    if not sc:
+        return {}, []
+    good = [a for a in used if attr_edge(draws, a) > 0]
+    if not good:
+        return {}, used
+    sc2, used2 = fusion_scores(draws, active_attrs=good, depth=depth)
+    if not sc2:
+        return {}, used2
+    ranked = sorted(sc2.items(), key=lambda x: -x[1])
+    bonus = {}
+    for idx, (num, _s) in enumerate(ranked[:16]):
+        if idx < 4:
+            bonus[num] = 1.2
+        elif idx < 8:
+            bonus[num] = 0.7
+        elif idx < 12:
+            bonus[num] = 0.35
+        else:
+            bonus[num] = 0.15
+    return bonus, used2
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -2087,6 +2189,15 @@ def render(df_data, H):
             + "；大小倾向 " + ("大" if _bigp >= 0.58 else ("小" if _bigp <= 0.42 else "均衡"))
             + "；波色倾向 " + ("红" if _redp >= 0.56 else ("蓝" if _redp <= 0.44 else "均衡")))
 
+    try:
+        _fb, _fused = fusion_bonus(_calc, depth=1)
+        for _fn2, _fv2 in _fb.items():
+            _bonus[_fn2] = _bonus.get(_fn2, 0) + _fv2
+        if _fused:
+            st.session_state["_rou_fusion_note"] = "、".join(_fused)
+    except Exception:
+        pass
+
     _cold = len(draws) < 40
     _top3, _w = smart_top3(_calc)
     _rec = [n for n, _, _ in _top3] if _top3 else []
@@ -2596,6 +2707,12 @@ def render(df_data, H):
     if _bn:
         with st.expander("🧠 系统参考了哪些荷官档案参数（点击查看）", expanded=False):
             st.caption(_bn)
+            _fu2 = st.session_state.get("_rou_fusion_note")
+            if _fu2:
+                st.markdown("**多属性融合已参与：**" + _fu2)
+                st.caption("融合评分：把各属性历史相似期的下一期分布折算成概率，"
+                           "取对数相加排名，前 4 名 +1.2、5~8 名 +0.7、"
+                           "9~12 名 +0.35、13~16 名 +0.15；0 号不参与。")
             _hb2 = st.session_state.get("_rou_habits_note")
             if _hb2:
                 st.markdown("**系统识别到的显著习惯（z≥2）：**")
