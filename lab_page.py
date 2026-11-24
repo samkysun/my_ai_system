@@ -3520,6 +3520,22 @@ def _exp_attr_fusion(loader):
                           ("❌ 被误杀" if _act3 in _killed else "❌ 未中"))
                 st.metric(f"是否在建议 {len(_final)} 个号里",
                           "✅ 测中" if _act3 in _final else "❌ 未中")
+                # 剔除准确率核对
+                _right = 0
+                _lines = []
+                for _a5 in _kill_attrs:
+                    _pp5 = _probs.get(_a5) or {}
+                    _kk5 = int(_kmap.get(_a5, 2))
+                    _top5 = [v for v, _ in sorted(_pp5.items(),
+                                                  key=lambda z: -z[1])][:_kk5]
+                    _failed = _num_attr2(_act3, _a5) not in _top5
+                    _right += 1 if _failed else 0
+                    _lines.append(f"{_a5}：" +
+                                  ("确实失手 ✅" if _failed else "其实会中 ❌"))
+                st.metric("剔除准确率",
+                          f"{_right}/{len(_kill_attrs)}",
+                          f"{_right/max(1,len(_kill_attrs))*100:.0f}%")
+                st.caption("　".join(_lines))
             else:
                 st.caption("最新一期，下一期未开")
 
