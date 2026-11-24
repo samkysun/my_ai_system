@@ -3332,7 +3332,10 @@ def _exp_attr_fusion(loader):
                               "得分": round(s, 2),
                               "对应号码": "、".join(str(x) for x in nums) or "—"})
                 for x in nums:
-                    acc_num[x] = acc_num.get(x, 0) + 1
+                    _ent = acc_num.setdefault(x, {"次数": 0, "属性": []})
+                    _ent["次数"] += 1
+                    if _a not in _ent["属性"]:
+                        _ent["属性"].append(_a)
             st.dataframe(pd.DataFrame(_rows), use_container_width=True,
                          hide_index=True)
             # 实际结果核对（逐属性）
@@ -3359,15 +3362,21 @@ def _exp_attr_fusion(loader):
 
         st.markdown("#### ========= 叠加汇总（号码被推荐次数）========")
         if acc_num:
-            rank = sorted(acc_num.items(), key=lambda x: (-x[1], x[0]))
+            rank = sorted(acc_num.items(),
+                          key=lambda x: (-len(x[1]["属性"]),
+                                         -x[1]["次数"], x[0]))
             st.dataframe(pd.DataFrame(
-                [{"号码": x, "被推荐次数": c,
-                  "覆盖属性数": len(multi_attrs)} for x, c in rank]),
+                [{"号码": x, "覆盖属性数": len(d["属性"]),
+                  "被推荐次数": d["次数"],
+                  "推荐属性": "、".join(d["属性"])} for x, d in rank]),
                 use_container_width=True, hide_index=True)
             top_n = rank[:int(_final_n)]
             st.success("最终号码（推荐次数最多）："
                        + "、".join(str(x) for x, _ in top_n))
-            _pkg["号码累计"] = {str(x): c for x, c in rank}
+            _pkg["号码累计"] = {str(x): {"覆盖属性数": len(d["属性"]),
+                                          "次数": d["次数"],
+                                          "属性": d["属性"]}
+                                for x, d in rank}
             _pkg["最终号码"] = [x for x, _ in top_n]
             st.session_state["_lab_q_pkg"] = _pkg
         for _a, vals in acc_val:
