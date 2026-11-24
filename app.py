@@ -1449,7 +1449,7 @@ def load_real_data():
         return result_df
     except Exception as e: return f"数据转换异常: {e}"
 
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_data(show_spinner=False, ttl=120)
 def load_excel_data(file_path, sheet_name=None):
     token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
     def parse_content(content):
@@ -2954,8 +2954,16 @@ def render_deep_linkage(df_data):
     _target_file_early = "升序全套.csv" if "升序" in mode else "按序全套.csv"
     with col2:
         _file_periods = _periods_of_file(_target_file_early)
-        if _file_periods:
-            unique_periods = _file_periods
+        _main_periods = []
+        if df_data is not None and not isinstance(df_data, str):
+            try:
+                _main_periods = [p for p in df_data.iloc[:, 18]
+                                 .apply(clean_period).tolist() if p]
+            except Exception:
+                _main_periods = []
+        if _file_periods or _main_periods:
+            unique_periods = sorted(set(_file_periods) | set(_main_periods),
+                                    reverse=True)
         elif df_data is not None and not isinstance(df_data, str):
             unique_periods = list(set([p for p in df_data.iloc[:, 18].apply(clean_period).tolist() if p != ""]))
             try: unique_periods.sort(key=lambda x: float(x) if x.replace('.','',1).isdigit() else 0, reverse=True)
