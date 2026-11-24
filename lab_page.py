@@ -2546,6 +2546,13 @@ def _exp_fusion(loader):
         pick = st.selectbox("预测期号（看这一期的下一期）",
                             list(reversed(periods)), index=0,
                             key="lab_o_pick")
+    c8, c9 = st.columns(2)
+    with c8:
+        min_rows = st.number_input("优势期：每属性最少匹配期数（0=不过滤）", 0, 500, 0, 5,
+                                   key="lab_o_minrows")
+    with c9:
+        min_edge = st.number_input("优势期：最高分领先幅度（0=不过滤）",
+                                   0.0, 5.0, 0.0, 0.1, key="lab_o_minedge")
     c6, c7 = st.columns(2)
     with c6:
         p_start = st.selectbox("回测起始期", list(reversed(periods)),
@@ -2654,6 +2661,23 @@ def _exp_fusion(loader):
                 s = seqs[a]
                 tables[a][tuple(s[i - d: i])][tseq[i]] += 1
         sc = scores_at(i, tables)
+        # 优势期判断：每个维度匹配数 + 最高分相对平均的倍数
+        _rows_ok = True
+        for a in used:
+            s = seqs[a]
+            if i < d:
+                _rows_ok = False
+                break
+            c0 = tables[a].get(tuple(s[i - d + 1: i + 1]))
+            if not c0 or sum(c0.values()) < int(min_rows):
+                _rows_ok = False
+                break
+        if not _rows_ok:
+            continue
+        _avg = sum(sc.values()) / len(sc)
+        _best = max(sc.values())
+        if _avg != 0 and (_best - _avg) < float(min_edge):
+            continue
         rk = sorted(sc.items(), key=lambda x: -x[1])[:int(topN)]
         nums = [x for x, _ in rk]
         if not nums:
@@ -2678,6 +2702,9 @@ def _exp_fusion(loader):
     m2.metric("平均候选", f"{avg:.1f} 个")
     m3.metric("随机基线", f"{base:.1f}%")
     m4.metric("优势", f"{rate-base:+.1f}")
+    st.caption(f"优势期过滤：每属性匹配 ≥{int(min_rows)} 期 且 最高分领先"
+               f" ≥{float(min_edge)} → 实际出手 {tot} 期"
+               f"（回测区间共 {end_i - start} 期）")
     detail.reverse()
     st.dataframe(pd.DataFrame(detail), use_container_width=True,
                  hide_index=True, height=320)
