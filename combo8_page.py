@@ -40,8 +40,21 @@ def render(df_data, loader):
     pmap = dict(data)
 
     st.markdown("### ① 选号")
-    default = "、".join(str(x) for x in data[-1][1][:8])
-    txt = st.text_input("8 个号码（逗号分隔）", value=default, key="c8_nums")
+    _mode = st.radio("选号方式", ["手动输入", "系统推荐（近30期最热）",
+                                "最近一期号码"], horizontal=True,
+                     key="c8_mode")
+    if _mode.startswith("系统推荐"):
+        from collections import Counter as _C
+        _cc = _C()
+        for _row in data[-30:]:
+            _cc.update(_row[1])
+        _auto = [x for x, _ in _cc.most_common(8)]
+        _defv = "、".join(str(x) for x in sorted(_auto))
+    elif _mode.startswith("最近一期"):
+        _defv = "、".join(str(x) for x in data[-1][1][:8])
+    else:
+        _defv = "、".join(str(x) for x in data[-1][1][:8])
+    txt = st.text_input("8 个号码（逗号分隔）", value=_defv, key="c8_nums")
     try:
         nums = sorted({int(x) for x in txt.replace("，", ",")
                        .replace("、", ",").split(",") if x.strip().isdigit()})
