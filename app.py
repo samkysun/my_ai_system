@@ -6080,6 +6080,8 @@ def render_auto_ai_page():
 # ==========================================
 # 会员页面权限（存 ai_board，source="__perms__"）
 # ==========================================
+_TAB_PAGES = ["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "🧬 属性融合"]
+
 _ALL_PAGES = [
     "📊 主控台", "📐 多维分析", "🔗 深度联动", "🧠 AI推演",
     "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池",
@@ -6219,11 +6221,13 @@ def main_app():
 
         menu_options = ["📊 主控台"]
         if is_admin:
-            menu_options.extend([x for x in _ALL_PAGES if x != "📊 主控台"])
-        elif _allowed:
-            # 只显示管理员分配的页面（主控台默认已在内）
             menu_options.extend([x for x in _ALL_PAGES
-                                 if x != "📊 主控台" and x in _allowed])
+                                 if x != "📊 主控台" and x not in _TAB_PAGES])
+        elif _allowed:
+            menu_options.extend([x for x in _ALL_PAGES
+                                 if x != "📊 主控台"
+                                 and x not in _TAB_PAGES
+                                 and x in _allowed])
         else:
             # 未分配权限：只能看主控台
             pass
@@ -6232,9 +6236,36 @@ def main_app():
         page = st.radio("导航菜单", menu_options)
         st.divider()
 
+    # ===== 常驻标签：这四页始终挂载，切换不丢状态 =====
+    _tp_ok = [p for p in _TAB_PAGES
+              if is_admin or (_allowed and p in _allowed)]
+    if _tp_ok:
+        _tabs4 = st.tabs(_tp_ok)
+        for _tb, _tp in zip(_tabs4, _tp_ok):
+            with _tb:
+                try:
+                    if _tp == "📐 多维分析":
+                        render_multi_analysis(df_data)
+                    elif _tp == "🔗 深度联动":
+                        render_deep_linkage(df_data)
+                    elif _tp == "🧠 AI推演":
+                        render_ai(df_data)
+                    elif _tp == "🧬 属性融合":
+                        if render_fusion_attr:
+                            lab_page.page_state_seed("fusion", "lab_q_")
+                            render_fusion_attr(df_data, {
+                                "load_excel_data": load_excel_data,
+                                "board_add": _board_add,
+                                "gh_read": _gh_read_text,
+                                "gh_write": _gh_write_text,
+                                "supabase": get_supabase_client})
+                            lab_page.page_state_snap("fusion", "lab_q_")
+                        else:
+                            st.error("fusion_attr_page.py 未找到")
+                except Exception as _e_tab:
+                    st.error(f"{_tp} 出错：{type(_e_tab).__name__}: {_e_tab}")
+
     if page == "📊 主控台": render_console(df_data)
-    elif page == "📐 多维分析": render_multi_analysis(df_data)
-    elif page == "🔗 深度联动": render_deep_linkage(df_data)
     elif page == "🎡 轮盘系统":
         if render_roulette:
             render_roulette(df_data, {"gh_read": _gh_read_text,
@@ -6242,15 +6273,6 @@ def main_app():
                                        "supabase": get_supabase_client})
         else:
             st.error("roulette_page.py 未找到")
-    elif page == "🧬 属性融合":
-        if render_fusion_attr is None:
-            st.error("fusion_attr_page.py 未找到")
-        else:
-            render_fusion_attr(df_data, {"load_excel_data": load_excel_data,
-                                            "board_add": _board_add,
-                                            "gh_read": _gh_read_text,
-                                            "gh_write": _gh_write_text,
-                                            "supabase": get_supabase_client})
     elif page == "🎯 8码复式":
         if render_combo8 is None:
             st.error("combo8_page.py 未找到")
@@ -6277,7 +6299,6 @@ def main_app():
             st.error("lab_page.py 未找到或加载失败")
     elif page == "🤖 全自动智能分析":
         render_auto_ai_page()
-    elif page == "🧠 AI推演": render_ai(df_data)
     elif page == "🎯 三码组合池":
         if render_combo2 is None:
             st.error("缺少 combo2_page.py，请与 app.py 一起上传")
