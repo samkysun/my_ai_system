@@ -2639,6 +2639,18 @@ def render(df_data, H):
                 st.dataframe(pd.DataFrame(_rows_d2),
                              use_container_width=True, hide_index=True)
 
+            _k_avg = sum(len(str(r.get("候选", "")).split(","))
+                         for r in _log) / max(1, _n_all)
+            _be = _k_avg / 36 * 100
+            _ev = _hit_all / max(1, _n_all) * 36 - _k_avg
+            st.markdown("**盈亏测算（轮盘 35 倍）**")
+            _e1, _e2, _e3 = st.columns(3)
+            _e1.metric("平均候选数", f"{_k_avg:.1f} 个")
+            _e2.metric("盈亏平衡命中率", f"{_be:.1f}%")
+            _e3.metric("每期期望收益", f"{_ev:+.2f} 注",
+                       "盈利" if _ev > 0 else "亏损")
+            st.caption("命中率高于盈亏平衡线才盈利；候选越少，平衡线越低。")
+
             st.markdown("**按每 20 期滚动的命中率**")
             _roll = []
             for _i in range(0, len(_log), 20):
