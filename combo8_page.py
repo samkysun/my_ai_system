@@ -51,9 +51,18 @@ def render(df_data, loader):
         _auto = [x for x, _ in _cc.most_common(8)]
         _defv = "、".join(str(x) for x in sorted(_auto))
     elif _mode.startswith("最近一期"):
-        _defv = "、".join(str(x) for x in data[-1][1][:8])
+        # 一期只有 7 个号（6 正码 + 第7球），补上上一期第 1 个号凑 8 个
+        _base = list(data[-1][1])[:7]
+        _prev = [x for x in data[-2][1] if x not in _base]
+        if _prev:
+            _base.append(_prev[0])
+        _defv = "、".join(str(x) for x in sorted(_base[:8]))
     else:
-        _defv = "、".join(str(x) for x in data[-1][1][:8])
+        _defv = "、".join(str(x) for x in data[-1][1][:7])
+        _prev2 = [x for x in data[-2][1]
+                  if x not in data[-1][1]]
+        if _prev2:
+            _defv += "、" + str(_prev2[0])
     txt = st.text_input("8 个号码（逗号分隔）", value=_defv, key="c8_nums")
     try:
         nums = sorted({int(x) for x in txt.replace("，", ",")
