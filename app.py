@@ -246,11 +246,6 @@ except Exception:
     render_roulette = None
 
 try:
-    from combo_analysis_page import render as render_combo_analysis
-except Exception:
-    render_combo_analysis = None
-
-try:
     from precise_page import render as render_precise
 except Exception:
     render_precise = None
@@ -6093,7 +6088,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统", "🎯 精准选号", "🧩 组合分析"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统", "🎯 精准选号"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -6109,12 +6104,6 @@ def main_app():
                                        "supabase": get_supabase_client})
         else:
             st.error("roulette_page.py 未找到")
-    elif page == "🧩 组合分析":
-        if render_combo_analysis is None:
-            st.error("combo_analysis_page.py 未找到")
-        else:
-            render_combo_analysis(df_data, {"load_excel_data": load_excel_data,
-                                           "board_add": _board_add})
     elif page == "🎯 精准选号":
         if render_precise is None:
             st.error("precision_page.py 未找到")
