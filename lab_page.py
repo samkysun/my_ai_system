@@ -3259,12 +3259,11 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tabp, tab4, tab3 = st.tabs(
+    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tab4, tab3 = st.tabs(
         ["📖 说明书", "实验B 组合池", "实验H 六码中三",
          "实验I 加注模拟", "实验J 属性杀号", "实验K 追热追冷",
          "实验L 简单版", "实验M 跨球联动", "实验N 自由联动",
-         "实验O 融合评分", "实验P 精准选号", "结论档案",
-         "清理"])
+         "实验O 融合评分", "结论档案", "清理"])
     with tabd:
         _exp_docs()
     with tab2:
@@ -3285,8 +3284,7 @@ def render(df_data, H):
         _exp_flex(H)
     with tabo:
         _exp_fusion(H)
-    with tabp:
-        _exp_precise(H)
+    # 实验P 已独立成「🎯 精准选号」页
     with tab4:
         _archive()
     with tab3:
