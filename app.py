@@ -6370,10 +6370,7 @@ def main_app():
     _tp_ok = [p for p in _TAB_PAGES
               if is_admin or (_allowed and p in _allowed)]
     if page == _WORKBENCH and _tp_ok:
-        for _pfx, _tag in (("multi_", "multi"), ("dl_", "dl"),
-                           ("ai_", "ai"), ("lab_q_", "fusion")):
-            if lab_page is not None:
-                lab_page.page_state_seed(_tag, _pfx)
+        pass
         _tabs4 = st.tabs(_tp_ok)
         for _tb, _tp in zip(_tabs4, _tp_ok):
             with _tb:
@@ -6397,10 +6394,8 @@ def main_app():
                 except Exception as _e_tab:
                     st.error(f"{_tp} 出错：{type(_e_tab).__name__}: {_e_tab}")
 
-    if page == _WORKBENCH and _tp_ok and lab_page is not None:
-        for _pfx, _tag in (("multi_", "multi"), ("dl_", "dl"),
-                           ("ai_", "ai"), ("lab_q_", "fusion")):
-            lab_page.page_state_snap(_tag, _pfx)
+    if page == _WORKBENCH and _tp_ok:
+        pass
 
     if page == "📊 主控台": render_console(df_data)
     elif page == "🎡 轮盘系统":
