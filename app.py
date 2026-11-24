@@ -261,6 +261,11 @@ except Exception:
     render_precise = None
 
 try:
+    import lab_page
+except Exception:
+    lab_page = None
+
+try:
     from lab_page import render as render_lab
 except Exception:
     render_lab = None
@@ -6252,14 +6257,16 @@ def main_app():
                         render_ai(df_data)
                     elif _tp == "🧬 属性融合":
                         if render_fusion_attr:
-                            lab_page.page_state_seed("fusion", "lab_q_")
+                            if lab_page is not None:
+                                lab_page.page_state_seed("fusion", "lab_q_")
                             render_fusion_attr(df_data, {
                                 "load_excel_data": load_excel_data,
                                 "board_add": _board_add,
                                 "gh_read": _gh_read_text,
                                 "gh_write": _gh_write_text,
                                 "supabase": get_supabase_client})
-                            lab_page.page_state_snap("fusion", "lab_q_")
+                            if lab_page is not None:
+                                lab_page.page_state_snap("fusion", "lab_q_")
                         else:
                             st.error("fusion_attr_page.py 未找到")
                 except Exception as _e_tab:
