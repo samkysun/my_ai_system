@@ -3180,8 +3180,15 @@ def _exp_attr_fusion(loader):
 
     d = int(depth)
     dims = [(b, a) for b in base_balls for a in used]
-    seqs = {k: [v_at(i, k[0], k[1]) for i in range(n)] for k in dims}
-    tseq = [v_at(i, tb, tattr) for i in range(n)]
+    _ck = (tuple(dims), n, tb, tattr)
+    _cache = st.session_state.get("_lab_q_seq_cache")
+    if _cache and _cache[0] == _ck:
+        seqs, tseq = _cache[1], _cache[2]
+    else:
+        seqs = {k: [v_at(i, k[0], k[1]) for i in range(n)] for k in dims}
+        tseq = [v_at(i, tb, tattr) for i in range(n)]
+        st.session_state["_lab_q_seq_cache"] = (_ck, seqs, tseq)
+    st.caption(f"缓存：{len(dims)} 个维度 × {n} 期")
     uni = sorted({x for x in tseq if x})
     # 各球位号码区间（经验区间）
     lo, hi = BALL_RANGES.get(int(tb), (int(tb), 43 + int(tb)))
@@ -3199,7 +3206,13 @@ def _exp_attr_fusion(loader):
         return tabs[k].get(pat), pat
 
     idx0 = periods.index(pick)
-    tabs = build_tables(idx0)
+    _tk = ("tabs", tuple(dims), idx0, d, n)
+    _tc = st.session_state.get("_lab_q_tab_cache")
+    if _tc and _tc[0] == _tk:
+        tabs = _tc[1]
+    else:
+        tabs = build_tables(idx0)
+        st.session_state["_lab_q_tab_cache"] = (_tk, tabs)
     score = {v: 0.0 for v in uni}
     dim_reports = []
     for k in dims:
