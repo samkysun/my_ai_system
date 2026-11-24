@@ -3613,6 +3613,62 @@ def _exp_attr_fusion(loader):
             else:
                 st.caption("最新一期，下一期未开")
 
+    st.markdown("---")
+    st.markdown("### ⑥ 按值杀号（比整属性杀更精准）")
+    st.caption("例如数字合推荐 01合/02合/03合，你判断 03合 不会出，"
+               "就只杀 03合 覆盖的号码，不必整条属性都杀。")
+    _val_opts = []
+    for _a in (multi_attrs or []):
+        _pp = _probs.get(_a)
+        if not _pp:
+            continue
+        _kkx = int(_kmap.get(_a, 3))
+        for _v, _ in sorted(_pp.items(), key=lambda z: -z[1])[:_kkx]:
+            _val_opts.append(f"{_a}|{_v}")
+    if not _val_opts:
+        st.caption("请先在上方点「生成叠加报告」，系统才有各属性的推荐值。")
+    else:
+        _kill_vals = st.multiselect("勾选要杀的「属性|值」", _val_opts,
+                                    default=[], key="lab_q_killvals")
+        if _kill_vals and st.button("▶ 按值杀号并出号", key="lab_q_killval_run"):
+            _kvn = set()
+            _rows_v = []
+            for _kv in _kill_vals:
+                _a5, _v5 = _kv.split("|", 1)
+                _nums_v = [x for x in range(lo, hi + 1)
+                           if _num_attr2(x, _a5) == _v5]
+                _kvn |= set(_nums_v)
+                _rows_v.append({"属性": _a5, "杀的值": label(_v5, _a5),
+                                "杀掉号码": "、".join(str(x) for x in _nums_v)})
+            _remain2 = [x for x in range(lo, hi + 1) if x not in _kvn]
+            _sc2 = {}
+            for _x in _remain2:
+                _s = 0.0
+                for _a6, _pp6 in _probs.items():
+                    _s += _m.log(_pp6.get(_num_attr2(_x, _a6), 1e-6))
+                _sc2[_x] = _s
+            _rank2 = sorted(_remain2, key=lambda x: -_sc2.get(x, 0))
+            st.dataframe(pd.DataFrame(_rows_v), use_container_width=True,
+                         hide_index=True)
+            st.success(f"杀掉 {len(_kvn)} 个号："
+                       + "、".join(str(x) for x in sorted(_kvn)))
+            st.success(f"剩余 {len(_rank2)} 个号（按联合概率排序）："
+                       + "、".join(str(x) for x in _rank2))
+            _n_keep = st.number_input("取前几个", 1, 12, 3, 1,
+                                      key="lab_q_kv_n")
+            _final2 = _rank2[:int(_n_keep)]
+            st.markdown(f"#### 建议号码（{len(_final2)} 个）："
+                        + "、".join(str(x) for x in _final2))
+            if idx0 + 1 < len(periods):
+                _act4 = data[idx0 + 1][1][tb - 1]
+                st.markdown(f"### 实际：{periods[idx0 + 1]} 期开 "
+                            f"**{_act4}**")
+                c1, c2 = st.columns(2)
+                c1.metric("是否被误杀", "❌ 被杀了" if _act4 in _kvn
+                          else "✅ 没被杀")
+                c2.metric("是否在建议号里", "✅ 测中"
+                          if _act4 in _final2 else "❌ 未中")
+
     _pkg2 = st.session_state.get("_lab_q_pkg")
     if _pkg2:
         st.markdown("---")
