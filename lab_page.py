@@ -2939,8 +2939,7 @@ def _exp_precise(loader):
                           key="lab_p_ball")
     with c2:
         tattr = st.selectbox("目标属性（建议数字合）",
-                             ["数字合", "尾数", "四宝", "方位", "生肖五行",
-                              "生肖"],
+                             ["数字合", "尾数", "四宝", "方位", "生肖五行"],
                              index=0, key="lab_p_tattr")
     with c3:
         kk = st.number_input("输出几个号码（1~5）", 1, 5, 2, 1,
