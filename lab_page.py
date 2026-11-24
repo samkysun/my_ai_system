@@ -3274,9 +3274,23 @@ def _exp_attr_fusion(loader):
     # ---------- 多属性叠加报告 ----------
     st.markdown("---")
     st.markdown("### 多属性推荐叠加（逐个属性出报告，最后汇总）")
+    def _num_attr2(x, attr):
+        if attr == "生肖":
+            zrow = zodiac.get(periods[idx0]) or []
+            if zrow and zrow[0] in _ZOD:
+                off = (_ZOD.index(zrow[0]) - (data[idx0][1][0] - 1)) % 12
+                return _ZOD[(int(x) - 1 + off) % 12]
+            return ""
+        if attr == "尾数":
+            return str(int(x) % 10)
+        if attr == "3模":
+            return str(int(x) % 3)
+        return amap.get(int(x), {}).get(attr, "")
+
     multi_attrs = st.multiselect("要逐个测的属性", ATTRS,
                                  default=[tattr], key="lab_q_multi")
     _kmap = {}
+    _probs = {}
     if multi_attrs:
         st.caption("各属性推荐个数（可分别设置）")
         _cols = st.columns(min(4, len(multi_attrs)))
@@ -3357,7 +3371,6 @@ def _exp_attr_fusion(loader):
                         periods[idx0 + 1], _anum, _a, label(_aval, _a)))
             acc_val.append((_a, [label(v, _a) for v, _ in _rk]))
 
-        _probs = {}
         _pkg = {"期号": periods[idx0], "球位": tb,
                 "目标属性": tattr, "推荐个数": int(kk),
                 "各属性推荐": [], "号码累计": {}}
@@ -3457,19 +3470,6 @@ def _exp_attr_fusion(loader):
                 except Exception as e:
                     st.error(f"送入失败：{e}")
 
-
-    def _num_attr2(x, attr):
-        if attr == "生肖":
-            zrow = zodiac.get(periods[idx0]) or []
-            if zrow and zrow[0] in _ZOD:
-                off = (_ZOD.index(zrow[0]) - (data[idx0][1][0] - 1)) % 12
-                return _ZOD[(int(x) - 1 + off) % 12]
-            return ""
-        if attr == "尾数":
-            return str(int(x) % 10)
-        if attr == "3模":
-            return str(int(x) % 3)
-        return amap.get(int(x), {}).get(attr, "")
 
     # ---------- 回测 ----------
     _i1 = periods.index(_bstart)
