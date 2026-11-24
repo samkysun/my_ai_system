@@ -1628,6 +1628,8 @@ def _load_attr_map(loader):
                     continue
                 out[n] = {head[i]: (str(r[i]).strip() if i < len(r) else "")
                           for i in range(len(head))}
+                # 数字合一律按各位相加重算（CSV 有错，如 22 被写成 05合）
+                out[n]["数字合"] = f"{sum(int(c) for c in str(n)):02d}合"
     except Exception:
         out = {}
     st.session_state[key] = out
