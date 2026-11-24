@@ -3379,6 +3379,10 @@ def _exp_attr_fusion(loader):
                                 for x, d in rank}
             _pkg["最终号码"] = [x for x, _ in top_n]
             st.session_state["_lab_q_pkg"] = _pkg
+        else:
+            st.warning("没有累计到任何号码：请确认所选属性在目标球位区间内有对应号码")
+        if acc_val:
+            st.markdown("**各属性推荐清单**")
         for _a, vals in acc_val:
             st.caption(f"{_a}：{'、'.join(vals)}")
 
