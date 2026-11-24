@@ -6120,6 +6120,52 @@ def save_user_pages(client, username, pages):
         return False
 
 
+
+# ==========================================
+# 页面状态保持：切换导航后回来，控件值不丢
+# ==========================================
+_PAGE_KEY_PREFIX = {
+    "📐 多维分析": ("multi_",),
+    "🔗 深度联动": ("dl_",),
+    "🧠 AI推演": ("ai_",),
+    "🤖 全自动智能分析": ("auto_",),
+    "🧬 属性融合": ("lab_q_",),
+    "🎯 精准选号": ("lab_p_",),
+    "🎯 8码复式": ("c8_",),
+    "🎡 轮盘系统": ("rou_",),
+}
+
+
+def _restore_page_state(page):
+    """把上次离开该页时的控件值放回 session_state"""
+    keys = _PAGE_KEY_PREFIX.get(page)
+    if not keys:
+        return
+    saved = st.session_state.get(f"_saved_{page}") or {}
+    for k, v in saved.items():
+        if k not in st.session_state:
+            try:
+                st.session_state[k] = v
+            except Exception:
+                pass
+
+
+def _save_page_state(page):
+    """离开前保存该页控件值"""
+    keys = _PAGE_KEY_PREFIX.get(page)
+    if not keys:
+        return
+    snap = {}
+    for k, v in list(st.session_state.items()):
+        if isinstance(k, str) and k.startswith(keys):
+            try:
+                snap[k] = v
+            except Exception:
+                pass
+    if snap:
+        st.session_state[f"_saved_{page}"] = snap
+
+
 def main_app():
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -6185,6 +6231,8 @@ def main_app():
 
         page = st.radio("导航菜单", menu_options)
         st.divider()
+
+    _restore_page_state(page)
 
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
@@ -6284,6 +6332,8 @@ def main_app():
 
 # ===== 刷新/重开后，用令牌自动恢复登录 =====
 if not st.session_state.get("logged_in"):
+
+    _save_page_state(page)
     _tok0 = _qp_get("t")
     _u0 = check_login_token(_tok0) if _tok0 else ""
     if not _u0:
