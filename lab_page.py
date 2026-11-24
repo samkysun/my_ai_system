@@ -1997,11 +1997,14 @@ def _exp_simple(loader):
     lo, hi = int(ball), 43 + int(ball)
 
     d = int(depth)
+    _strict_l = st.checkbox("严格屏蔽基准行之后的数据（推荐）", value=True,
+                            key="lab_l_strict")
     pat = seq[idx - d + 1: idx + 1]
     cnt = _C()
     rows_n = 0
     detail = []
-    for j in range(d - 1, idx):
+    _lim_l = idx - 1 if _strict_l else idx
+    for j in range(d - 1, max(d - 1, _lim_l)):
         if seq[j - d + 1: j + 1] == pat:
             rows_n += 1
             nx = seq[j + 1]
@@ -2112,6 +2115,8 @@ def _exp_cross_ball(loader):
 
     idx = periods.index(pick)
     d = int(depth)
+    _strict_m = st.checkbox("严格屏蔽基准行之后的数据（推荐）", value=True,
+                            key="lab_m_strict")
     seq_s = [val_of(x[1][b_src - 1], attr_s) for x in data]
     seq_t = [val_of(x[1][b_tgt - 1], attr_t) for x in data]
     pat = seq_s[idx - d + 1: idx + 1]
@@ -2119,7 +2124,8 @@ def _exp_cross_ball(loader):
     cnt = _C()
     rows_n = 0
     detail = []
-    for j in range(d - 1, idx):
+    _lim_m = idx - 1 if _strict_m else idx
+    for j in range(d - 1, max(d - 1, _lim_m)):
         if seq_s[j - d + 1: j + 1] == pat:
             rows_n += 1
             cnt[seq_t[j + 1]] += 1
@@ -2260,6 +2266,8 @@ def _exp_flex(loader):
 
     idx = periods.index(pick)
     d = int(depth)
+    _strict = st.checkbox("严格屏蔽基准行之后的数据（推荐）", value=True,
+                          key="lab_n_strict")
 
     seqs = {}
     for b in base_balls:
@@ -2280,7 +2288,8 @@ def _exp_flex(loader):
     cnt = _C()
     rows_n = 0
     detail = []
-    for j in range(d - 1, idx):
+    _lim = idx - 1 if _strict else idx
+    for j in range(d - 1, max(d - 1, _lim)):
         if pattern_at(j) == pat:
             rows_n += 1
             nx = seq_tgt[j + 1]
