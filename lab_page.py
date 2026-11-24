@@ -3270,6 +3270,70 @@ def _exp_attr_fusion(loader):
                 else:
                     st.caption("无匹配")
 
+    # ---------- 多属性叠加报告 ----------
+    st.markdown("---")
+    st.markdown("### 多属性推荐叠加（逐个属性出报告，最后汇总）")
+    multi_attrs = st.multiselect("要逐个测的属性", ATTRS,
+                                 default=[tattr], key="lab_q_multi")
+    if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
+        acc_num = {}
+        acc_val = []
+        _ZOD2 = _ZOD
+        for _a in multi_attrs:
+            _tseq = [_attr_of(data[i], tb, _a, zodiac, zattrs, amap) or ""
+                     for i in range(n)]
+            _uni = sorted({x for x in _tseq if x})
+            _sc = {v: 0.0 for v in _uni}
+            for k in dims:
+                _c = tabs[k].get(tuple(seqs[k][idx0 - d + 1: idx0 + 1]))
+                if not _c:
+                    continue
+                _tt = sum(_c.values())
+                for v in _uni:
+                    _sc[v] += _m.log((_c.get(v, 0) + 0.5)
+                                     / (_tt + 0.5 * len(_uni)))
+            _rk = sorted(_sc.items(), key=lambda z: -z[1])[:int(kk)]
+            st.markdown(f"#### ========= {periods[idx0]}期 升序 第{tb}球 "
+                        f"{_a} 推荐 =========")
+            st.write("推荐：" + "、".join(label(v, _a) for v, _ in _rk)
+                     + f"　（取前 {int(kk)} 个）")
+            _rows = []
+            for v, s in _rk:
+                if _a == "生肖":
+                    zrow = zodiac.get(periods[idx0]) or []
+                    nums = []
+                    if zrow and zrow[0] in _ZOD2:
+                        off = (_ZOD2.index(zrow[0]) - (data[idx0][1][0] - 1)) % 12
+                        nums = [x for x in range(lo, hi + 1)
+                                if _ZOD2[(x - 1 + off) % 12] == v]
+                elif _a == "尾数":
+                    nums = [x for x in range(lo, hi + 1) if str(x % 10) == v]
+                elif _a == "3模":
+                    nums = [x for x in range(lo, hi + 1) if str(x % 3) == v]
+                else:
+                    nums = [x for x in range(lo, hi + 1)
+                            if amap.get(x, {}).get(_a, "") == v]
+                _rows.append({"属性值": label(v, _a), "得分": round(s, 2),
+                              "对应号码": "、".join(str(x) for x in nums) or "—"})
+                for x in nums:
+                    acc_num[x] = acc_num.get(x, 0) + 1
+            st.dataframe(pd.DataFrame(_rows), use_container_width=True,
+                         hide_index=True)
+            acc_val.append((_a, [label(v, _a) for v, _ in _rk]))
+
+        st.markdown("#### ========= 叠加汇总（号码被推荐次数）========")
+        if acc_num:
+            rank = sorted(acc_num.items(), key=lambda x: (-x[1], x[0]))
+            st.dataframe(pd.DataFrame(
+                [{"号码": x, "被推荐次数": c,
+                  "覆盖属性数": len(multi_attrs)} for x, c in rank]),
+                use_container_width=True, hide_index=True)
+            top_n = rank[:int(kk)]
+            st.success("最终号码（推荐次数最多）："
+                       + "、".join(str(x) for x, _ in top_n))
+        for _a, vals in acc_val:
+            st.caption(f"{_a}：{'、'.join(vals)}")
+
     # ---------- 回测 ----------
     _i1 = periods.index(_bstart)
     _i2 = periods.index(_bend)
