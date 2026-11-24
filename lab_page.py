@@ -2923,7 +2923,15 @@ def _exp_precise(loader):
             return str(num % 10)
         if key == "3模":
             return str(num % 3)
+        if key == "生肖":
+            return ""      # 生肖需按期，用 v_at / v_num 处理
         return amap.get(num, {}).get(key, "")
+
+    def v_at(i, num, key):
+        """第 i 期（当年生肖）下该号码的属性值"""
+        if key == "生肖":
+            return _zod_of_num(int(num), _offset_of(i))
+        return v_of(num, key)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -2931,7 +2939,8 @@ def _exp_precise(loader):
                           key="lab_p_ball")
     with c2:
         tattr = st.selectbox("目标属性（建议数字合）",
-                             ["数字合", "尾数", "四宝", "方位", "生肖五行"],
+                             ["数字合", "尾数", "四宝", "方位", "生肖五行",
+                              "生肖"],
                              index=0, key="lab_p_tattr")
     with c3:
         kk = st.number_input("输出几个号码（1~5）", 1, 5, 2, 1,
@@ -2959,10 +2968,28 @@ def _exp_precise(loader):
         st.warning("请至少选 1 个基准球位和 1 个属性")
         return
 
+    _zrows = _load_zodiac(loader)
+    _zmap = {r[0]: r[1:8] for r in _zrows}
+    _ZOD = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+
+    def _zod_of_num(num, offset):
+        return _ZOD[(num - 1 + offset) % 12]
+
+    def _offset_of(i):
+        """按该期第1球推算当年生肖偏移"""
+        row = _zmap.get(periods[i])
+        if not row:
+            return 0
+        z0 = row[0]
+        n0 = data[i][1][0]
+        if z0 not in _ZOD:
+            return 0
+        return (_ZOD.index(z0) - (n0 - 1)) % 12
+
     lo, hi = ball_range(tb, bool(use_exp))
     st.caption(f"第{tb}球区间：{lo} ~ {hi}（共 {hi - lo + 1} 个号）"
                + ("" if use_exp else "　全区间"))
-    tseq = [v_of(x[1][tb - 1], tattr) for x in data]
+    tseq = [v_at(i, data[i][1][tb - 1], tattr) for i in range(n)]
     uni = sorted({x for x in tseq if x})
     dims = [(b, a) for b in base_balls for a in used]
     seqs = {k: [v_of(x[1][k[0] - 1], k[1]) for x in data] for k in dims}
@@ -2999,16 +3026,21 @@ def _exp_precise(loader):
             _vv = _row[1][tb - 1]
             _rc[_vv] = _rc.get(_vv, 0) + 1
         _all_n = list(range(lo, hi + 1))
-        _all_n.sort(key=lambda x: (-_sc_map.get(v_of(x, tattr), -1e9),
+        _all_n.sort(key=lambda x: (-_sc_map.get(v_at(idx0, x, tattr), -1e9),
                                    -_rc.get(x, 0), x))
         nums = _all_n[:int(kk)]
         st.markdown(f"### 基于 {pick} 期 → 下一期第{tb}球")
+        _act_line = ""
+        if idx0 + 1 < n:
+            _act_line = str(data[idx0 + 1][1][tb - 1])
         st.dataframe(pd.DataFrame(
             [{"属性值": v, "得分": round(s, 2),
               "该属性值对应号码": "、".join(
                   str(x) for x in range(lo, hi + 1)
-                  if v_of(x, tattr) == v)}
-             for v, s in rk]), use_container_width=True, hide_index=True)
+                  if v_at(idx0, x, tattr) == v),
+              "实际下期号码": _act_line if j == 0 else ""}
+             for j, (v, s) in enumerate(rk)]),
+            use_container_width=True, hide_index=True)
         st.success(f"建议号码（{len(nums)} 个）："
                    + "、".join(str(x) for x in nums))
 
@@ -3040,7 +3072,7 @@ def _exp_precise(loader):
             _vv = _row[1][tb - 1]
             _rc2[_vv] = _rc2.get(_vv, 0) + 1
         _lst = list(range(lo, hi + 1))
-        _lst.sort(key=lambda x: (-_m2.get(v_of(x, tattr), -1e9),
+        _lst.sort(key=lambda x: (-_m2.get(v_at(i, x, tattr), -1e9),
                                  -_rc2.get(x, 0), x))
         _nums2 = set(_lst[:int(kk)])
         if not _nums2:
