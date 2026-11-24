@@ -4798,6 +4798,86 @@ def render_console(df_data):
 # ==========================================
 # 8. 管理员专属后台管理页
 # ==========================================
+
+def _merge_total_from_source(token, repo):
+    """把升序源文件合并进总数据.xlsx（自动同步用）"""
+    try:
+        import io as _io
+        import base64 as _b64
+        import openpyxl as _ox
+        import pandas as _pd
+        import requests as _rq
+        headers = {"Authorization": f"Bearer {token}",
+                   "Accept": "application/vnd.github.v3+json"}
+
+        def info(fp):
+            r = _rq.get(f"https://api.github.com/repos/{repo}/contents/{fp}",
+                        headers=headers, timeout=60)
+            return r.json() if r.status_code == 200 else None
+
+        src = info("升序源文件.xlsx")
+        if not src:
+            return False, "找不到升序源文件"
+        df = _pd.read_excel(_io.BytesIO(_rq.get(src["download_url"]).content),
+                            sheet_name=0, header=None)
+        m = info("总数据.xlsx")
+        if not m:
+            return False, "找不到总数据"
+        wb = _ox.load_workbook(_io.BytesIO(_rq.get(m["download_url"]).content))
+        ws = wb["总数据表"]
+        if ws.max_row > 2:
+            ws.delete_rows(3, ws.max_row)
+
+        def cv(v):
+            if _pd.isna(v) or v is None:
+                return ""
+            try:
+                return str(int(float(v)))
+            except Exception:
+                return str(v).strip()
+
+        ri = 3
+        for idx, row in df.iterrows():
+            if idx < 2:
+                continue
+            p1, p2, p3 = cv(row[0]), cv(row[1]), cv(row[2])
+            if not p1 and not p2 and not p3:
+                continue
+            y = cv(row[26]) if len(row) > 26 else "2026"
+            ws.cell(row=ri, column=1, value=p1)
+            ws.cell(row=ri, column=2, value=p2)
+            ws.cell(row=ri, column=3, value=p3)
+            for i in range(7):
+                t_ = cv(row[3 + i * 2]) if len(row) > 3 + i * 2 else ""
+                u_ = cv(row[4 + i * 2]) if len(row) > 4 + i * 2 else ""
+                ws.cell(row=ri, column=4 + i * 2, value=t_)
+                ws.cell(row=ri, column=5 + i * 2, value=u_)
+            ws.cell(row=ri, column=19, value=f"{y}{p1}{p2}{p3}")
+            for i in range(7):
+                t_ = cv(row[3 + i * 2]) if len(row) > 3 + i * 2 else ""
+                u_ = cv(row[4 + i * 2]) if len(row) > 4 + i * 2 else ""
+                num = int(t_) * 10 + int(u_) if t_.isdigit() and u_.isdigit() else 0
+                if i < 6:
+                    ws.cell(row=ri, column=20 + i, value=num)
+                else:
+                    ws.cell(row=ri, column=26, value=num)
+            ws.cell(row=ri, column=27, value=y)
+            ri += 1
+
+        out = _io.BytesIO()
+        wb.save(out)
+        payload = {"message": "自动同步总数据",
+                   "content": _b64.b64encode(out.getvalue()).decode(),
+                   "sha": m["sha"], "branch": "main"}
+        r = _rq.put(f"https://api.github.com/repos/{repo}/contents/总数据.xlsx",
+                    headers=headers, json=payload, timeout=120)
+        if r.status_code in (200, 201):
+            return True, f"已同步 {ri - 3} 条"
+        return False, f"推送失败 {r.status_code}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 def render_admin_panel():
     st.title("⚙️ 系统后台管理中心")
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -4921,7 +5001,17 @@ def render_admin_panel():
                             s1, m1 = update_github_excel("升序源文件.xlsx", asc_nums, f"更新升序数据 {year_val}-{p1}{p2}{p3}")
                             s2, m2 = update_github_excel("按序源文件.xlsx", raw_nums, f"更新按序数据 {year_val}-{p1}{p2}{p3}")
                             if s1 and s2:
-                                st.success("✅数据已永久存入 GitHub 云端！")
+                                try:
+                                    _okm, _msgm = _merge_total_from_source(
+                                        token, repo)
+                                    if _okm:
+                                        st.success("✅数据已存入云端，"
+                                                   f"总数据已自动同步（{_msgm}）")
+                                    else:
+                                        st.warning("✅数据已存入，但总数据"
+                                                   f"自动同步失败：{_msgm}")
+                                except Exception as _e_m:
+                                    st.warning(f"总数据自动同步异常：{_e_m}")
                                 load_real_data.clear()
                             else:
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
