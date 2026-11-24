@@ -45,10 +45,26 @@ def _as_rows(x):
             return []
 
 
+_LAB_TTL = 120.0
+
+
+def _lab_fresh(key, ttl=_LAB_TTL):
+    """缓存是否仍新鲜"""
+    import time as _t
+    ent = st.session_state.get(key)
+    if not ent:
+        return False
+    try:
+        ts = ent[0]
+        return (_t.time() - float(ts)) < ttl
+    except Exception:
+        return False
+
+
 def _load_index6(loader):
     """期号 + 7 个号码（升序，第7位是特码）"""
-    if "_lab_i7" in st.session_state:
-        return st.session_state["_lab_i7"]
+    if _lab_fresh("_lab_i7"):
+        return st.session_state["_lab_i7"][1]
     out = []
     rows = _as_rows(loader["load_excel_data"]("_index.csv", None))
     ncol = 8
@@ -67,7 +83,8 @@ def _load_index6(loader):
             if period and all(nums):
                 out.append((period, nums))
     out.sort(key=lambda x: x[0])
-    st.session_state["_lab_i7"] = out
+    import time as _t_i
+    st.session_state["_lab_i7"] = (_t_i.time(), out)
     return out
 
 
@@ -108,7 +125,8 @@ def _load_attr(loader):
                 continue
             out[int(float(r[0]))] = {hdr[i]: str(r[i]).strip()
                                      for i in range(1, min(len(hdr), len(r)))}
-    st.session_state["_lab_attr2"] = out
+    import time as _t_a
+    st.session_state["_lab_attr2"] = (_t_a.time(), out)
     return out
 
 
