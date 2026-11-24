@@ -43,9 +43,15 @@ def render(df_data, loader):
     pmap = dict(data)
 
     st.markdown("### ① 选号")
-    _mode = st.radio("选号方式", ["手动输入", "系统推荐（近30期最热）",
-                                "最近一期号码"], horizontal=True,
-                     key="c8_mode")
+    _mode = st.radio("选号方式", ["系统推荐（近30期最热）", "手动输入",
+                                "照抄上期（7 码 + 补 1 码）"],
+                     horizontal=True, key="c8_mode")
+    if _mode.startswith("系统推荐"):
+        st.caption("系统按近 30 期热度选 8 码，约 10 期命中一次；"
+                   "每天/每期点一次即可，不需要自己挑。")
+    elif _mode.startswith("照抄上期"):
+        st.caption("直接用上一期开奖的 7 个号 + 上一期里没出现的 1 个号，"
+                   "仅作对照参考。")
     if _mode.startswith("系统推荐"):
         from collections import Counter as _C
         _cc = _C()
@@ -53,7 +59,7 @@ def render(df_data, loader):
             _cc.update(_row[1])
         _auto = [x for x, _ in _cc.most_common(8)]
         _defv = "、".join(str(x) for x in sorted(_auto))
-    elif _mode.startswith("最近一期"):
+    elif _mode.startswith("照抄上期"):
         # 一期只有 7 个号（6 正码 + 第7球），补上上一期第 1 个号凑 8 个
         _base = list(data[-1][1])[:7]
         _prev = [x for x in data[-2][1] if x not in _base]
