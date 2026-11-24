@@ -3288,6 +3288,9 @@ def _exp_attr_fusion(loader):
                     1, key=f"lab_q_k_{_a2}")
         _final_n = st.number_input("最终号码个数", 1, 12, 5, 1,
                                    key="lab_q_finaln")
+        _method = st.radio("最终号码生成方式",
+                           ["联合概率（推荐）", "投票叠加"],
+                           horizontal=True, key="lab_q_method")
     if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
         acc_num = {}
         acc_val = []
@@ -3307,6 +3310,7 @@ def _exp_attr_fusion(loader):
                                      / (_tt + 0.5 * len(_uni)))
             _kk2 = int(_kmap.get(_a, int(kk)))
             _rk = sorted(_sc.items(), key=lambda z: -z[1])[:_kk2]
+            _probs[_a] = dict(_sc)
             st.markdown(f"#### ========= {periods[idx0]}期 升序 第{tb}球 "
                         f"{_a} 推荐 =========")
             st.write("推荐：" + "、".join(label(v, _a) for v, _ in _rk)
@@ -3353,6 +3357,7 @@ def _exp_attr_fusion(loader):
                         periods[idx0 + 1], _anum, _a, label(_aval, _a)))
             acc_val.append((_a, [label(v, _a) for v, _ in _rk]))
 
+        _probs = {}
         _pkg = {"期号": periods[idx0], "球位": tb,
                 "目标属性": tattr, "推荐个数": int(kk),
                 "各属性推荐": [], "号码累计": {}}
@@ -3371,13 +3376,32 @@ def _exp_attr_fusion(loader):
                   "推荐属性": "、".join(d["属性"])} for x, d in rank]),
                 use_container_width=True, hide_index=True)
             top_n = rank[:int(_final_n)]
-            st.success("最终号码（推荐次数最多）："
-                       + "、".join(str(x) for x, _ in top_n))
+            _joint_top = []
+            if _probs:
+                _js = {}
+                for _x in range(lo, hi + 1):
+                    _s = 0.0
+                    for _a3, _pp in _probs.items():
+                        _v4 = _num_attr2(_x, _a3)
+                        _s += _m.log(_pp.get(_v4, 1e-6))
+                    _js[_x] = _s
+                _joint_top = [x for x, _ in sorted(_js.items(),
+                                                   key=lambda z: -z[1])][:int(_final_n)]
+            if _method.startswith("联合") and _joint_top:
+                top_n = _joint_top
+                st.success("最终号码（联合概率最高）："
+                           + "、".join(str(x) for x in top_n))
+                st.caption("投票叠加法会给出："
+                           + "、".join(str(x) for x, _ in rank[:int(_final_n)]))
+            else:
+                st.success("最终号码（推荐次数最多）："
+                           + "、".join(str(x) for x, _ in top_n))
             _pkg["号码累计"] = {str(x): {"覆盖属性数": len(d["属性"]),
                                           "次数": d["次数"],
                                           "属性": d["属性"]}
                                 for x, d in rank}
-            _pkg["最终号码"] = [x for x, _ in top_n]
+            _pkg["最终号码"] = list(top_n)
+            _pkg["生成方式"] = _method
 
             # 是否测中（有下一期时）
             if idx0 + 1 < n:
