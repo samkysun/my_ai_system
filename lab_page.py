@@ -3119,7 +3119,8 @@ def _exp_attr_fusion(loader):
         if attr == "尾数":
             return f"{v}尾"
         if attr == "3模":
-            return f"3余{v}"
+            s2 = str(v)
+            return s2 if s2.startswith("3余") else f"3余{s2}"
         if attr == "数字合":
             return v if str(v).endswith("合") else f"{v}合"
         return str(v)
