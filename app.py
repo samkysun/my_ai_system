@@ -2920,7 +2920,7 @@ def render_multi_analysis(df_data):
 
 
 #=========深度联动（多套合一核算）=======
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=180, show_spinner=False)
 def _periods_of_file(file_key):
     """取某个数据文件的期号列表（新→旧），用于下拉框"""
     try:
@@ -5112,7 +5112,7 @@ def render_admin_panel():
                                     st.success("✅ 全套属性表已自动更新")
                                 except Exception as _e_fs:
                                     st.warning(f"全套属性表自动更新失败：{_e_fs}")
-                                load_real_data.clear()
+                                st.cache_data.clear()
                             else:
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
                                 if not s2: st.error(f"❌ 按序文件同步失败: {m2}")
