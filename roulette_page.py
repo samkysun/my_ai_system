@@ -1588,7 +1588,7 @@ def attr_edge(draws, attr, lookback=400):
     for i in range(start, len(seq)):
         pat = seq[i - 1]
         cnt = {}
-        for j in range(i - 1):
+        for j in range(max(0, i - 300), i - 1):
             if seq[j] == pat:
                 cnt[seq[j + 1]] = cnt.get(seq[j + 1], 0) + 1
         if not cnt:
@@ -1633,6 +1633,10 @@ def fusion_scores(draws, active_attrs=None, depth=1):
 
 def fusion_bonus(draws, depth=1):
     """把融合评分转成候选加权（只给排名靠前的号码加分）"""
+    _key = (len(draws), tuple(int(x) for x in draws[-12:]))
+    _cache = st.session_state.get("_rou_fusion_cache")
+    if _cache and _cache[0] == _key:
+        return _cache[1], _cache[2]
     sc, used = fusion_scores(draws, depth=depth)
     if not sc:
         return {}, []
@@ -1653,6 +1657,7 @@ def fusion_bonus(draws, depth=1):
             bonus[num] = 0.35
         else:
             bonus[num] = 0.15
+    st.session_state["_rou_fusion_cache"] = (_key, bonus, used2)
     return bonus, used2
 
 
