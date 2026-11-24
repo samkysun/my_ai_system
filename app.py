@@ -1335,7 +1335,7 @@ def _board_render():
                 st.code(_ve.get("text", ""), language=None)
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def load_real_data():
     token, repo = st.secrets.get("GITHUB_TOKEN"), st.secrets.get("GITHUB_REPO")
     file_name = "总数据.xlsx"
@@ -6197,6 +6197,10 @@ def main_app():
     with st.sidebar:
         st.markdown("欢迎来到AI精算中心")
         st.write(f"👤 **{current_user}**")
+        if st.button("🔄 刷新数据", use_container_width=True,
+                     key="refresh_data_btn"):
+            st.cache_data.clear()
+            st.rerun()
         if st.button("退出登录", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.username = ""
