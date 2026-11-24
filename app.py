@@ -6302,6 +6302,16 @@ def main_app():
     if not is_admin:
         _allowed = load_user_pages(get_supabase_client(), current_user)
 
+    # 每 2 分钟自动清一次缓存，保证所有页面数据自动更新
+    try:
+        import time as _t0
+        _now0 = _t0.time()
+        if _now0 - float(st.session_state.get("_last_cache_clear", 0)) > 120:
+            st.cache_data.clear()
+            st.session_state["_last_cache_clear"] = _now0
+    except Exception:
+        pass
+
     df_data = load_real_data()
 
     with st.sidebar:
