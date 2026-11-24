@@ -2971,14 +2971,9 @@ def _exp_precise(loader):
     nums = []
     if rk:
         _sc_map = {v: s for v, s in rk}
-        _all = [(x, _sc_map.get(v_of(x, tattr), -99))
-                for x in range(lo, hi + 1)]
-        _all.sort(key=lambda z: (-z[1], z[0]))
-        nums = [x for x, _ in _all[:int(kk)]]
-        if not nums:
-            _fb = sorted(range(lo, hi + 1),
-                         key=lambda x: -_sc_map.get(v_of(x, tattr), -99))
-            nums = _fb[:int(kk)]
+        _all_n = list(range(lo, hi + 1))
+        _all_n.sort(key=lambda x: (-_sc_map.get(v_of(x, tattr), -1e9), x))
+        nums = _all_n[:int(kk)]
         st.markdown(f"### 基于 {pick} 期 → 下一期第{tb}球")
         st.dataframe(pd.DataFrame(
             [{"属性值": v, "得分": round(s, 2),
@@ -3012,9 +3007,9 @@ def _exp_precise(loader):
         if not rr:
             continue
         _m2 = {v: s for v, s in rr}
-        _lst = [(x, _m2.get(v_of(x, tattr), -99)) for x in range(lo, hi + 1)]
-        _lst.sort(key=lambda z: (-z[1], z[0]))
-        _nums2 = {x for x, _ in _lst[:int(kk)]}
+        _lst = list(range(lo, hi + 1))
+        _lst.sort(key=lambda x: (-_m2.get(v_of(x, tattr), -1e9), x))
+        _nums2 = set(_lst[:int(kk)])
         if not _nums2:
             continue
         tot += 1
