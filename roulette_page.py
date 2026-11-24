@@ -40,6 +40,8 @@ SIBAO = ["画"] + ["书", "琴", "书", "琴", "书", "棋", "棋", "画", "棋"
 
 TH_TAIL, TH_ZODIAC, TH_SISTER, TH_ADJ = 20, 15, 15, 15
 MAX_PICK = 10
+MIN_PICK = 3        # 动态候选下限
+DYN_CAP = 8         # 动态候选上限（避免稀释赔率）
 REC_N = 4
 
 HIST_FILE = "roulette_history.json"
@@ -1661,6 +1663,36 @@ def fusion_bonus(draws, depth=1):
     return bonus, used2
 
 
+def dynamic_pick(ranked, min_pick=MIN_PICK, cap=DYN_CAP):
+    """按分数断层动态决定候选个数：不固定，有上下限"""
+    if not ranked:
+        return [], ""
+    top = ranked[0][1] if ranked[0][1] > 0 else 1
+    # 先按 55% 分数线保留
+    keep = [(n, s) for n, s in ranked[:MAX_PICK] if s >= top * 0.55]
+    if len(keep) < min_pick:
+        keep = ranked[:min_pick]
+    if len(keep) > cap:
+        # 找最大断层
+        cut = cap
+        best = 0.0
+        for i in range(min_pick - 1, cap):
+            if i + 1 >= len(keep):
+                break
+            a = keep[i][1] if keep[i][1] > 0 else 0.01
+            b = keep[i + 1][1] if keep[i + 1][1] > 0 else 0.01
+            drop = (a - b) / a
+            if drop > best:
+                best, cut = drop, i + 1
+        keep = keep[:cut]
+    if len(keep) > cap:
+        keep = keep[:cap]
+    reason = f"分数 ≥ 最高分 55% 共 {len(keep)} 个"
+    if len(keep) >= cap:
+        reason += "（已封顶，避免稀释赔率）"
+    return keep, reason
+
+
 def build_candidates(draws, rec_nums=None, extra_bonus=None):
     om = omissions(draws)
     if not draws:
@@ -1768,7 +1800,12 @@ def build_candidates(draws, rec_nums=None, extra_bonus=None):
         if n not in _seen:
             ranked.append((n, s))
             _seen.add(n)
-    ranked = ranked[:MAX_PICK]
+    ranked_c, _dyn_reason = dynamic_pick(ranked)
+    try:
+        st.session_state["_rou_dyn_note"] = (len(ranked_c), _dyn_reason)
+    except Exception:
+        pass
+    ranked = ranked_c[:MAX_PICK]
     levels = []
     if ranked:
         top = ranked[0][1]
@@ -2251,7 +2288,11 @@ def render(df_data, H):
             st.warning(f"🆕 新荷官「{_dlr_s}」｜暂无历史规则，满 40 期才出候选")
     else:
         st.info("尚未选择荷官：候选只按本页数据计算")
-    st.markdown("### 🎯 候选号码（最多 10 个）")
+    _dn = st.session_state.get("_rou_dyn_note")
+    _dtitle = "### 🎯 候选号码"
+    if _dn:
+        _dtitle += f"（本次 {_dn[0]} 个 · {_dn[1]}）"
+    st.markdown(_dtitle)
     if not levels:
         st.caption("暂无候选（说明所有属性都没到阈值）")
     else:
