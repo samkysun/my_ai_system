@@ -2600,7 +2600,14 @@ def _exp_fusion(loader):
             s = seqs[a]
             if i >= d:
                 tables[a][tuple(s[i - d: i])][tseq[i]] += 1
-    idx0 = periods.index(pick)
+    if _qmode.startswith("验证"):
+        _ti = periods.index(_target)
+        idx0 = max(0, _ti - 1)
+        pick = periods[idx0]
+        st.info(f"验证模式：基准期 **{periods[idx0]}** → 预测 "
+                f"**{_target}**，并与它的实际结果对比")
+    else:
+        idx0 = periods.index(pick)
     tables = {a: _dd(_C) for a in used}
     for i in range(1, idx0 + 1):
         for a in used:
@@ -3147,8 +3154,16 @@ def _exp_attr_fusion(loader):
         tattr = st.selectbox("目标属性（结果就用这个属性表达）", ATTRS,
                              index=0, key="lab_q_tattr")
     with c3:
-        pick = st.selectbox("预测期号", list(reversed(periods)), index=0,
-                            key="lab_q_pick")
+        _qmode = st.radio("用途", ["预测下一期", "验证指定期"],
+                          horizontal=True, key="lab_q_mode")
+        if _qmode.startswith("验证"):
+            _target = st.selectbox(
+                "要验证哪一期（用它的前一期做基准）",
+                list(reversed(periods))[1:], index=0, key="lab_q_target")
+        else:
+            pick = st.selectbox("基准期（预测它的下一期）",
+                                list(reversed(periods)), index=0,
+                                key="lab_q_pick")
 
     c4, c5, c6 = st.columns(3)
     with c4:
