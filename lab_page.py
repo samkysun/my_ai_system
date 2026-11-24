@@ -3321,6 +3321,12 @@ def _exp_attr_fusion(loader):
                          hide_index=True)
             acc_val.append((_a, [label(v, _a) for v, _ in _rk]))
 
+        _pkg = {"期号": periods[idx0], "球位": tb,
+                "目标属性": tattr, "推荐个数": int(kk),
+                "各属性推荐": [], "号码累计": {}}
+        for _a, vals in acc_val:
+            _pkg["各属性推荐"].append({"属性": _a, "推荐值": vals})
+
         st.markdown("#### ========= 叠加汇总（号码被推荐次数）========")
         if acc_num:
             rank = sorted(acc_num.items(), key=lambda x: (-x[1], x[0]))
@@ -3331,8 +3337,37 @@ def _exp_attr_fusion(loader):
             top_n = rank[:int(kk)]
             st.success("最终号码（推荐次数最多）："
                        + "、".join(str(x) for x, _ in top_n))
+            _pkg["号码累计"] = {str(x): c for x, c in rank}
+            _pkg["最终号码"] = [x for x, _ in top_n]
+            st.session_state["_lab_q_pkg"] = _pkg
         for _a, vals in acc_val:
             st.caption(f"{_a}：{'、'.join(vals)}")
+
+    _pkg2 = st.session_state.get("_lab_q_pkg")
+    if _pkg2:
+        st.markdown("---")
+        st.markdown("### 📤 分析包（供系统汇总用）")
+        st.caption("后续「系统大总结」会读取这份分析包，自动生成结论。")
+        import json as _json
+        _txt = _json.dumps(_pkg2, ensure_ascii=False, indent=2)
+        st.code(_txt, language="json")
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            st.download_button("📥 下载分析包 JSON", _txt.encode("utf-8"),
+                               file_name=f"分析包_{_pkg2['期号']}.json",
+                               mime="application/json", key="lab_q_pkg_dl")
+        with _c2:
+            if st.button("📨 送入汇总看板", key="lab_q_pkg_send"):
+                try:
+                    if H.get("board_add"):
+                        H["board_add"](
+                            f"实验Q {_pkg2['期号']} 第{_pkg2['球位']}球 "
+                            f"{_pkg2['目标属性']}", _txt)
+                        st.success("已送入汇总看板")
+                    else:
+                        st.warning("当前环境没有看板接口")
+                except Exception as e:
+                    st.error(f"送入失败：{e}")
 
     # ---------- 回测 ----------
     _i1 = periods.index(_bstart)
