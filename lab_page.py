@@ -2989,8 +2989,8 @@ def _exp_precise(loader):
         act = v_of(_act_num, tattr)
         st.info(f"实际下一期（{periods[idx0 + 1]}）：第{tb}球开奖号码 = "
                 f"{_act_num}（{tattr} {act}）"
-                + ("　✅ 命中" if rk and act in [v for v, _ in rk]
-                   else "　❌ 未中" if rk else ""))
+                + ("　✅ 命中" if _act_num in nums
+                   else "　❌ 未中" if nums else ""))
     else:
         st.caption("最新一期，下一期未开")
 
