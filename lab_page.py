@@ -3141,9 +3141,16 @@ def _exp_attr_fusion(loader):
     with c5:
         kk = st.number_input("推荐几个属性值", 1, 6, 3, 1, key="lab_q_k")
     with c6:
-        bt = st.number_input("回测期数", 100, 3000, 1000, 100,
-                             key="lab_q_bt")
+        st.caption("回测区间在下方选择")
 
+    _bc1, _bc2 = st.columns(2)
+    with _bc1:
+        _bstart = st.selectbox("回测起始期", list(reversed(periods)),
+                               index=min(999, len(periods) - 1),
+                               key="lab_q_start")
+    with _bc2:
+        _bend = st.selectbox("回测结束期", list(reversed(periods)), index=0,
+                             key="lab_q_end")
     base_balls = st.multiselect("基准球位", list(range(1, nball + 1)),
                                 default=[1], key="lab_q_balls")
     used = st.multiselect("参与融合的属性", ATTRS,
@@ -3249,12 +3256,20 @@ def _exp_attr_fusion(loader):
                     st.caption("无匹配")
 
     # ---------- 回测 ----------
+    _i1 = periods.index(_bstart)
+    _i2 = periods.index(_bend)
+    if _i1 > _i2:
+        _i1, _i2 = _i2, _i1
+    st.caption(f"回测区间：{periods[_i1]} ~ {periods[_i2]}（{_i2 - _i1 + 1} 期）"
+               f"｜预测期号：{pick}")
+
     if st.button("▶ 回测这套推荐", key="lab_q_run"):
-        start = max(300, n - int(bt))
+        start = max(300, _i1)
+        end_i = min(n - 1, _i2)
         tabs2 = {k: _dd(_C) for k in dims}
         ok = tot = 0
         detail = []
-        for i in range(start, n - 1):
+        for i in range(start, end_i):
             if i >= d:
                 for k in dims:
                     tabs2[k][tuple(seqs[k][i - d: i])][tseq[i]] += 1
