@@ -3419,7 +3419,9 @@ def _exp_attr_fusion(loader):
                             "门槛（被≥N个属性推荐）",
                             "双重（交集+门槛）", "投票叠加"],
                            horizontal=True, key="lab_q_method")
-    if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
+    if multi_attrs:
+        st.caption("调整参数后会自动重算")
+    if multi_attrs:
         acc_num = {}
         acc_val = []
         _ZOD2 = _ZOD
