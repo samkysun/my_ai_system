@@ -3236,6 +3236,29 @@ def _exp_attr_fusion(loader):
         tseq = [v_at(i, tb, tattr) for i in range(n)]
         st.session_state["_lab_q_seq_cache"] = (_ck, seqs, tseq)
     st.caption(f"缓存：{len(dims)} 个维度 × {n} 期")
+
+    # ===== 所有属性的推荐概率（供⑤⑥使用，不依赖按钮）=====
+    _pk = ("all", idx0, d, tb, n)
+    _pc = st.session_state.get("_lab_q_allprobs")
+    if _pc and _pc[0] == _pk:
+        _probs_all = _pc[1]
+    else:
+        _probs_all = {}
+        for _a0 in ATTRS:
+            _s0 = [v_at(i, tb, _a0) for i in range(n)]
+            _pat0 = tuple(_s0[idx0 - d + 1: idx0 + 1])
+            _c0 = _C()
+            for _j in range(d - 1, idx0):
+                if tuple(_s0[_j - d + 1: _j + 1]) == _pat0:
+                    _c0[_s0[_j + 1]] += 1
+            if not _c0:
+                continue
+            _tt0 = sum(_c0.values())
+            _u0 = sorted({x for x in _s0 if x})
+            _probs_all[_a0] = {
+                v: (_c0.get(v, 0) + 0.5) / (_tt0 + 0.5 * len(_u0))
+                for v in _u0}
+        st.session_state["_lab_q_allprobs"] = (_pk, _probs_all)
     uni = sorted({x for x in tseq if x})
     # 各球位号码区间（经验区间）
     lo, hi = BALL_RANGES.get(int(tb), (int(tb), 43 + int(tb)))
@@ -3548,7 +3571,7 @@ def _exp_attr_fusion(loader):
         _killed = set()
         _detail = []
         for _a in _kill_attrs:
-            _pp = _probs.get(_a)
+            _pp = _probs_all.get(_a) or _probs.get(_a)
             if not _pp:
                 continue
             _kk3 = int(_kmap.get(_a, 2))
@@ -3566,7 +3589,7 @@ def _exp_attr_fusion(loader):
             _score = {}
             for _x in _remain:
                 _s = 0.0
-                for _a4, _pp4 in _probs.items():
+                for _a4, _pp4 in _probs_all.items():
                     _s += _m.log(_pp4.get(_num_attr2(_x, _a4), 1e-6))
                 _score[_x] = _s
             _ranked = sorted(_remain, key=lambda x: -_score.get(x, 0))
@@ -3618,15 +3641,15 @@ def _exp_attr_fusion(loader):
     st.caption("例如数字合推荐 01合/02合/03合，你判断 03合 不会出，"
                "就只杀 03合 覆盖的号码，不必整条属性都杀。")
     _val_opts = []
-    for _a in (multi_attrs or []):
-        _pp = _probs.get(_a)
+    for _a in ATTRS:
+        _pp = _probs_all.get(_a)
         if not _pp:
             continue
         _kkx = int(_kmap.get(_a, 3))
         for _v, _ in sorted(_pp.items(), key=lambda z: -z[1])[:_kkx]:
             _val_opts.append(f"{_a}|{_v}")
     if not _val_opts:
-        st.caption("请先在上方点「生成叠加报告」，系统才有各属性的推荐值。")
+        st.caption("暂无可杀的值（该球位属性数据不足）")
     else:
         _kill_vals = st.multiselect("勾选要杀的「属性|值」", _val_opts,
                                     default=[], key="lab_q_killvals")
@@ -3644,7 +3667,7 @@ def _exp_attr_fusion(loader):
             _sc2 = {}
             for _x in _remain2:
                 _s = 0.0
-                for _a6, _pp6 in _probs.items():
+                for _a6, _pp6 in _probs_all.items():
                     _s += _m.log(_pp6.get(_num_attr2(_x, _a6), 1e-6))
                 _sc2[_x] = _s
             _rank2 = sorted(_remain2, key=lambda x: -_sc2.get(x, 0))
