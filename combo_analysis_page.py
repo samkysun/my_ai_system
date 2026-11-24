@@ -3,7 +3,7 @@
 一、号码组：选一期 → 生成三数字/四数字组合
 二、数字联动：输入某个号码 → 找历史同号期 → 统计下一期的 7 个号
 三、中出核对：用联动候选 与 下一期开奖号比对，统计命中
-四、七套汇总：把多次联动的候选合并计数，按次数降序
+四、35 组汇总：把号码组的全部组合逐组统计历史命中次数
 """
 import sys
 from collections import Counter
@@ -60,7 +60,7 @@ def _check_hits(data, cand_nums, next_n=True):
 def render(df_data, loader):
     st.markdown("## 🧩 组合分析（移植 Excel 版核心功能）")
     st.caption("数据源：系统数据库的升序开奖记录。"
-               "四块内容：号码组组合 / 数字联动 / 中出核对 / 七套汇总。")
+               "四块内容：号码组组合 / 数字联动 / 中出核对 / 35 组汇总。")
 
     data = _load_data(loader)
     if not data:
@@ -69,7 +69,7 @@ def render(df_data, loader):
     st.info(f"已载入 {len(data)} 期，范围 {data[0][0]} ~ {data[-1][0]}")
 
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["① 号码组组合", "② 数字联动", "③ 中出核对", "④ 七套汇总"])
+        ["① 号码组组合", "② 数字联动", "③ 中出核对", "④ 35组汇总"])
 
     # ---------- ① 号码组组合 ----------
     with tab1:
@@ -173,33 +173,57 @@ def render(df_data, loader):
                                file_name="中出核对.csv", mime="text/csv",
                                key="ca_dl3")
 
-    # ---------- ④ 七套汇总 ----------
+    # ---------- ④ 35 组组合汇总 ----------
     with tab4:
-        st.markdown("#### 七套汇总：多次联动的候选合并，按次数降序")
-        st.caption("Excel 里是 7 套组合各列「号码/次数」再汇总；"
-                   "这里改成输入 7 组联动号，自动合并计数。")
-        default = ",".join(str(x) for x in
-                           (st.session_state.get("_ca_cand") or []))
-        txt = st.text_area("7 组联动号（每组一行，逗号分隔）",
-                           value="\n".join([default] * 7) if default else "",
-                           height=160, key="ca_sets")
-        sets = []
-        for line in (txt or "").splitlines():
-            nums = [int(x) for x in line.replace("，", ",")
-                    .replace("、", ",").split(",") if x.strip().isdigit()]
-            if nums:
-                sets.append(nums)
-        if not sets:
-            st.info("请先填写至少一组")
-        else:
-            cnt = Counter()
-            for s in sets:
-                for x in s:
-                    cnt[x] += 1
-            rows = sorted(cnt.items(), key=lambda x: -x[1])
-            st.success(f"共 {len(sets)} 组，{len(rows)} 个不同号码")
+        st.markdown("#### 35 组组合汇总（多套 = C(7,3) 全部组合）")
+        st.caption("把「号码组」里的 35 组，逐组去历史里统计命中次数，"
+                   "次数高的排前面；同时汇总每个号码在 35 组里出现的次数。")
+        periods4 = [p for p, _ in data][::-1]
+        pick4 = st.selectbox("选择期号", periods4, index=0, key="ca4_period")
+        rowmap = dict((p, n) for p, n in data)
+        row4 = rowmap[pick4]
+        pool4 = row4  # 7 个号
+        k4 = st.number_input("每组几个号", 2, 4, 3, 1, key="ca4_k")
+        combos4 = sorted(combinations(sorted(pool4), int(k4)))
+
+        if st.button("▶ 统计 35 组历史命中", key="ca4_run"):
+            rows = []
+            for cb in combos4:
+                need = set(cb)
+                cnt = 0
+                last = ""
+                for per, nums in data:
+                    if need <= set(nums):
+                        cnt += 1
+                        last = per
+                rows.append({"组合": "、".join(str(x) for x in cb),
+                             "历史命中次数": cnt,
+                             "最近一次": last})
+            rows.sort(key=lambda x: -x["历史命中次数"])
+            st.session_state["_ca4_rows"] = rows
+
+            numfreq = Counter()
+            for cb in combos4:
+                for x in cb:
+                    numfreq[x] += 1
+            st.markdown("**号码在 {} 组里出现的次数**".format(len(combos4)))
             st.dataframe(pd.DataFrame(
-                [{"号码": n, "出现次数": c} for n, c in rows]),
-                use_container_width=True, hide_index=True, height=340)
-            st.session_state["_ca_cand"] = [n for n, _ in rows[:7]]
-            st.caption("已把次数最高的 7 个号写入候选，可到「③ 中出核对」验证")
+                [{"号码": n, "出现组数": c}
+                 for n, c in sorted(numfreq.items(),
+                                    key=lambda z: (-z[1], z[0]))]),
+                use_container_width=True, hide_index=True, height=260)
+
+        rows4 = st.session_state.get("_ca4_rows")
+        if rows4:
+            st.markdown("**各组历史命中排行**")
+            st.dataframe(pd.DataFrame(rows4), use_container_width=True,
+                         hide_index=True, height=380)
+            top = [int(x) for x in rows4[0]["组合"].split("、")]
+            st.session_state["_ca_cand"] = top
+            st.success("命中次数最高的一组：" + rows4[0]["组合"]
+                       + "（已写入候选，可到 ③ 中出核对）")
+            st.download_button("📥 下载组合命中排行",
+                               pd.DataFrame(rows4).to_csv(
+                                   index=False).encode("utf-8-sig"),
+                               file_name=f"35组命中_{pick4}.csv",
+                               mime="text/csv", key="ca4_dl")
