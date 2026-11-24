@@ -2971,8 +2971,16 @@ def _exp_precise(loader):
     nums = []
     if rk:
         _sc_map = {v: s for v, s in rk}
+        # 近期热度微调：出现多的号码在同分时优先
+
+        _recent = data[max(0, idx0 - 59): idx0 + 1]
+        _rc = {}
+        for _row in _recent:
+            _vv = _row[1][tb - 1]
+            _rc[_vv] = _rc.get(_vv, 0) + 1
         _all_n = list(range(lo, hi + 1))
-        _all_n.sort(key=lambda x: (-_sc_map.get(v_of(x, tattr), -1e9), x))
+        _all_n.sort(key=lambda x: (-_sc_map.get(v_of(x, tattr), -1e9),
+                                   -_rc.get(x, 0), x))
         nums = _all_n[:int(kk)]
         st.markdown(f"### 基于 {pick} 期 → 下一期第{tb}球")
         st.dataframe(pd.DataFrame(
@@ -3007,8 +3015,13 @@ def _exp_precise(loader):
         if not rr:
             continue
         _m2 = {v: s for v, s in rr}
+        _rc2 = {}
+        for _row in data[max(0, i - 59): i + 1]:
+            _vv = _row[1][tb - 1]
+            _rc2[_vv] = _rc2.get(_vv, 0) + 1
         _lst = list(range(lo, hi + 1))
-        _lst.sort(key=lambda x: (-_m2.get(v_of(x, tattr), -1e9), x))
+        _lst.sort(key=lambda x: (-_m2.get(v_of(x, tattr), -1e9),
+                                 -_rc2.get(x, 0), x))
         _nums2 = set(_lst[:int(kk)])
         if not _nums2:
             continue
