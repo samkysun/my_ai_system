@@ -4945,7 +4945,7 @@ def render_admin_panel():
 
                             src_info = get_info("升序源文件.xlsx")
                             if not src_info: st.error("找不到升序源文件"); st.stop()
-                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name=_sheet, header=None)
+                            df_src = pd.read_excel(io.BytesIO(requests.get(src_info["download_url"]).content), sheet_name=0, header=None)
 
                             m_file = "总数据.xlsx"
                             m_info = get_info(m_file)
