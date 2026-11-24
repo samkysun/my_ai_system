@@ -2608,6 +2608,7 @@ def _exp_fusion(loader):
                 f"**{_target}**，并与它的实际结果对比")
     else:
         idx0 = periods.index(pick)
+
     tables = {a: _dd(_C) for a in used}
     for i in range(1, idx0 + 1):
         for a in used:
@@ -3237,9 +3238,6 @@ def _exp_attr_fusion(loader):
         st.session_state["_lab_q_seq_cache"] = (_ck, seqs, tseq)
     st.caption(f"缓存：{len(dims)} 个维度 × {n} 期")
 
-    # ===== 所有属性的推荐概率（供⑤⑥使用，不依赖按钮）=====
-    _pk = ("all", idx0, d, tb, n)
-    _pc = st.session_state.get("_lab_q_allprobs")
     if _pc and _pc[0] == _pk:
         _probs_all = _pc[1]
     else:
@@ -3276,6 +3274,10 @@ def _exp_attr_fusion(loader):
         return tabs[k].get(pat), pat
 
     idx0 = periods.index(pick)
+
+    # ===== 所有属性的推荐概率（供⑤⑥使用，不依赖按钮）=====
+    _pk = ("all", idx0, d, tb, n)
+    _pc = st.session_state.get("_lab_q_allprobs")
     _tk = ("tabs", tuple(dims), idx0, d, n)
     _tc = st.session_state.get("_lab_q_tab_cache")
     if _tc and _tc[0] == _tk:
