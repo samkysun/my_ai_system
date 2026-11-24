@@ -2882,9 +2882,12 @@ def _exp_precise(loader):
     import math as _m
     from collections import Counter as _C, defaultdict as _dd
     st.markdown("#### 实验 P：属性值精准选号（支持多球位融合）")
-    st.success("内测：预测「数字合」优于「尾数」。第1球单球：1 值≈2.7 号/17%、"
-               "2 值≈5.9 号/33%、3 值≈9.4 号/47%。"
-               "多球位融合内测未见提升，可自行勾选对比。")
+    st.success("内测结论（修正数字合后，2000 期）："
+               "第1球有效（1 个号 11.8%、5 个号 31.7%，随机 3.3%/16.7%）；"
+               "第6球有效（1 个号 9.9%、5 个号 33.8%）；"
+               "第2球、第5球基本无效（优势 ≤ +1.6 甚至为负），不建议使用。")
+    st.caption("说明：数字合按「各位相加」分组（0合、1合…13合），"
+               "第1球 0 号不存在，0~36 中 0 归 0合。")
     with st.expander("📘 原理与使用", expanded=False):
         st.markdown("""
 **原理**
