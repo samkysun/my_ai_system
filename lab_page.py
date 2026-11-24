@@ -3543,10 +3543,8 @@ def _exp_attr_fusion(loader):
     if _pkg2:
         st.markdown("---")
         st.markdown("### 📤 分析包（供系统汇总用）")
-        st.caption("后续「系统大总结」会读取这份分析包，自动生成结论。")
         import json as _json
         _txt = _json.dumps(_pkg2, ensure_ascii=False, indent=2)
-        st.code(_txt, language="json")
         _c1, _c2 = st.columns(2)
         with _c1:
             st.download_button("📥 下载分析包 JSON", _txt.encode("utf-8"),
@@ -3564,6 +3562,8 @@ def _exp_attr_fusion(loader):
                         st.warning("当前环境没有看板接口")
                 except Exception as e:
                     st.error(f"送入失败：{e}")
+        with st.expander("查看分析包内容（JSON）", expanded=False):
+            st.code(_txt, language="json")
 
 
     # ---------- 回测 ----------
