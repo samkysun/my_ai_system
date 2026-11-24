@@ -3544,8 +3544,8 @@ def _exp_attr_fusion(loader):
                               if _inter else "空集"))
             elif _method.startswith("门槛"):
                 _gate = st.number_input(
-                    "门槛：至少被几个属性推荐", 1, max(1, len(_sets_pa)),
-                    max(1, len(_sets_pa) - 4), 1, key="lab_q_gate")
+                    "门槛：至少被几个属性推荐（7~14）", 7, 14, 10, 1,
+                    key="lab_q_gate")
                 _pass = [(x, c) for x, c in _support.items()
                          if c >= int(_gate)]
                 _pass.sort(key=lambda z: (-z[1], z[0]))
