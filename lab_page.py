@@ -3409,7 +3409,8 @@ def _exp_attr_fusion(loader):
         _final_n = st.number_input("最终号码个数（可扩到 15）", 1, 15, 5, 1,
                                    key="lab_q_finaln")
         _method = st.radio("最终号码生成方式",
-                           ["联合概率（推荐）", "投票叠加"],
+                           ["联合概率（推荐）", "支持度（被几个属性推荐）",
+                            "交集（所有属性都推荐）", "投票叠加"],
                            horizontal=True, key="lab_q_method")
     if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
         acc_num = {}
@@ -3509,10 +3510,47 @@ def _exp_attr_fusion(loader):
                     _js[_x] = _s
                 _joint_top = [x for x, _ in sorted(_js.items(),
                                                    key=lambda z: -z[1])][:int(_final_n)]
+            # 支持度 / 交集（用各属性的推荐值集合）
+            _sets_pa = {}
+            for _a9 in (multi_attrs or []):
+                _pp9 = _probs_all.get(_a9)
+                if not _pp9:
+                    continue
+                _k9 = int(_kmap.get(_a9, 2))
+                _top9 = [v for v, _ in sorted(_pp9.items(),
+                                              key=lambda z: -z[1])][:_k9]
+                _sets_pa[_a9] = {x for x in range(lo, hi + 1)
+                                 if _num_attr2(x, _a9) in _top9}
+            _support = {}
+            for _s9 in _sets_pa.values():
+                for _x9 in _s9:
+                    _support[_x9] = _support.get(_x9, 0) + 1
+            _inter = (set.intersection(*_sets_pa.values())
+                      if _sets_pa else set())
+
             _vote_list = [x for x, _ in rank[:int(_final_n)]]
             _act_now = (data[idx0 + 1][1][tb - 1]
                         if idx0 + 1 < len(periods) else None)
-            if _method.startswith("联合") and _joint_top:
+            if _method.startswith("支持度"):
+                _sup_sorted = sorted(_support.items(),
+                                     key=lambda z: (-z[1], z[0]))
+                _final_list = [x for x, _ in _sup_sorted][:int(_final_n)]
+                st.success("最终号码（被最多属性推荐）："
+                           + "、".join(
+                               (f"**{x}** ★" if x == _act_now else f"{x}({_support[x]}属性)")
+                               for x in _final_list))
+                st.caption("交集（所有属性都推荐）："
+                           + ("、".join(str(x) for x in sorted(_inter))
+                              if _inter else "空集"))
+            elif _method.startswith("交集"):
+                _final_list = sorted(_inter) if _inter else \
+                    [x for x, _ in sorted(_support.items(),
+                                          key=lambda z: (-z[1], z[0]))][:int(_final_n)]
+                st.success("最终号码（属性交集）："
+                           + "、".join(str(x) for x in _final_list))
+                if not _inter:
+                    st.warning("交集为空 → 已退回「被最多属性推荐」的号")
+            elif _method.startswith("联合") and _joint_top:
                 _final_list = list(_joint_top)
                 st.success("最终号码（联合概率最高）："
                            + "、".join(
