@@ -1806,6 +1806,15 @@ def build_candidates(draws, rec_nums=None, extra_bonus=None):
     except Exception:
         pass
     ranked = ranked_c[:MAX_PICK]
+    if not ranked:
+        # 兜底：候选为空时，按总分取前几个，确保永远有输出
+        _fb = sorted(((n, s) for n, s in score.items() if n != 0),
+                     key=lambda x: (-x[1], x[0]))[:MIN_PICK]
+        if not _fb:
+            _fb = [(n, 0) for n in range(1, MIN_PICK + 1)]
+        ranked = _fb
+        st.session_state["_rou_dyn_note"] = (
+            len(ranked), "信号不足，已启用兜底号码")
     levels = []
     if ranked:
         top = ranked[0][1]
