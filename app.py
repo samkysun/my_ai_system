@@ -4878,6 +4878,100 @@ def _merge_total_from_source(token, repo):
         return False, f"{type(e).__name__}: {e}"
 
 
+def _sync_full_suite(token, repo):
+    """重算并同步 升序/按序 全套 csv"""
+    with st.spinner("正在计算属性并同步全套表..."):
+        if not token or not repo:
+            st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
+        else:
+            try:
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
+                def get_info(fp):
+                    r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
+                    return r.json() if r.status_code == 200 else None
+
+                def sync_attrs(src_f, dst_f, table_name):
+                    import csv
+                    s_info = get_info(src_f)
+                    if not s_info: return False, f"找不到 {src_f}"
+                    wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
+                    ws_src = wb_src["数据源"]
+
+                    def clean_val(cell):
+                        if cell is None: return ""
+                        val = str(cell).strip()
+                        if val.endswith(".0"): val = val[:-2]
+                        return val
+
+                    p1, p2, p3 = clean_val(ws_src["A3"].value), clean_val(ws_src["B3"].value), clean_val(ws_src["C3"].value)
+                    year_val = clean_val(ws_src["AA3"].value) or "2026"
+                    period_str = f"{year_val}{p1}{p2}{p3}"
+
+                    d_info = get_info(dst_f)
+                    if not d_info: return False, f"找不到 {dst_f}"
+                    csv_content = requests.get(d_info["download_url"]).content
+
+                    try: text = csv_content.decode("utf-8-sig")
+                    except: text = csv_content.decode("gbk", errors="ignore")
+
+                    all_rows = list(csv.reader(io.StringIO(text)))
+                    if not all_rows: return False, f"{dst_f} 数据为空"
+
+                    if len(all_rows) > 2:
+                        exist_row = all_rows[2]
+                        if len(exist_row) >= 214 and f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}" == period_str:
+                            return True, f"该期 ({period_str}) 已存在，跳过同步"
+
+                    new_row_dict = {}
+                    for n_idx in range(7):
+                        tens = clean_val(ws_src.cell(row=3, column=4 + n_idx*2).value)
+                        units = clean_val(ws_src.cell(row=3, column=5 + n_idx*2).value)
+                        ball_num = int((tens if tens.isdigit() else "0") + (units if units.isdigit() else "0")) if (tens or units) else 0
+
+                        base_col = 4 + n_idx * 30
+                        new_row_dict[str(base_col)] = str(ball_num // 10) if ball_num else ""
+                        new_row_dict[str(base_col+1)] = str(ball_num % 10) if ball_num else ""
+
+                        if ball_num:
+                            attrs = calculate_all_attributes(ball_num)
+                            for a_idx, attr_val in enumerate(attrs): new_row_dict[str(base_col + 2 + a_idx)] = str(attr_val)
+                        else:
+                            for a_idx in range(28): new_row_dict[str(base_col + 2 + a_idx)] = ""
+
+                    new_row_dict["1"], new_row_dict["2"], new_row_dict["3"] = p1, p2, p3
+                    new_row_dict["214"] = year_val
+
+                    all_rows.insert(2, [new_row_dict.get(str(i), "") for i in range(1, 215)])
+
+                    out_io = io.StringIO()
+                    csv.writer(out_io).writerows(all_rows)
+                    b64_content = base64.b64encode(out_io.getvalue().encode('utf-8-sig')).decode('utf-8')
+
+                    res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", headers=headers, json={"message": f"更新 {dst_f}", "content": b64_content, "sha": d_info["sha"], "branch": "main"})
+
+                    if res.status_code not in [200, 201]: return False, res.text
+
+                    try:
+                        client = get_supabase_client()
+                        if client: client.table(table_name).upsert({"期数": period_str, "data": new_row_dict}, on_conflict="期数").execute()
+                    except: pass
+
+                    return True, "成功"
+
+                s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.csv", "full_asc")
+                s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.csv", "full_desc")
+
+                if s1 and s2:
+                    st.success(f"✅ 极速同步成功！\n升序：{m1}\n按序：{m2}")
+                    load_excel_data.clear()
+                else:
+                    if not s1: st.error(f"❌ 升序失败: {m1}")
+                    if not s2: st.error(f"❌ 按序失败: {m2}")
+            except Exception as e:
+                st.error(f"运行异常: {e}")
+
+    return True
+
 def render_admin_panel():
     st.title("⚙️ 系统后台管理中心")
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -5012,6 +5106,12 @@ def render_admin_panel():
                                                    f"自动同步失败：{_msgm}")
                                 except Exception as _e_m:
                                     st.warning(f"总数据自动同步异常：{_e_m}")
+                                try:
+                                    st.info("正在自动更新全套属性表（约 30~60 秒）…")
+                                    _sync_full_suite(token, repo)
+                                    st.success("✅ 全套属性表已自动更新")
+                                except Exception as _e_fs:
+                                    st.warning(f"全套属性表自动更新失败：{_e_fs}")
                                 load_real_data.clear()
                             else:
                                 if not s1: st.error(f"❌ 升序文件同步失败: {m1}")
@@ -5089,96 +5189,8 @@ def render_admin_panel():
 
         with col_sync2:
             if st.button("🚀 一键计算属性并同步全套表", use_container_width=True, type="secondary"):
-                with st.spinner("正在计算 214 列属性并同步..."):
-                    if not token or not repo:
-                        st.error("请在 Secrets 中配置 GITHUB_TOKEN 和 GITHUB_REPO")
-                    else:
-                        try:
-                            headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
-                            def get_info(fp):
-                                r = requests.get(f"https://api.github.com/repos/{repo}/contents/{fp}", headers=headers)
-                                return r.json() if r.status_code == 200 else None
-
-                            def sync_attrs(src_f, dst_f, table_name):
-                                import csv
-                                s_info = get_info(src_f)
-                                if not s_info: return False, f"找不到 {src_f}"
-                                wb_src = openpyxl.load_workbook(io.BytesIO(requests.get(s_info["download_url"]).content), data_only=True)
-                                ws_src = wb_src["数据源"]
-
-                                def clean_val(cell):
-                                    if cell is None: return ""
-                                    val = str(cell).strip()
-                                    if val.endswith(".0"): val = val[:-2]
-                                    return val
-
-                                p1, p2, p3 = clean_val(ws_src["A3"].value), clean_val(ws_src["B3"].value), clean_val(ws_src["C3"].value)
-                                year_val = clean_val(ws_src["AA3"].value) or "2026"
-                                period_str = f"{year_val}{p1}{p2}{p3}"
-
-                                d_info = get_info(dst_f)
-                                if not d_info: return False, f"找不到 {dst_f}"
-                                csv_content = requests.get(d_info["download_url"]).content
-
-                                try: text = csv_content.decode("utf-8-sig")
-                                except: text = csv_content.decode("gbk", errors="ignore")
-
-                                all_rows = list(csv.reader(io.StringIO(text)))
-                                if not all_rows: return False, f"{dst_f} 数据为空"
-
-                                if len(all_rows) > 2:
-                                    exist_row = all_rows[2]
-                                    if len(exist_row) >= 214 and f"{exist_row[213]}{exist_row[0]}{exist_row[1]}{exist_row[2]}" == period_str:
-                                        return True, f"该期 ({period_str}) 已存在，跳过同步"
-
-                                new_row_dict = {}
-                                for n_idx in range(7):
-                                    tens = clean_val(ws_src.cell(row=3, column=4 + n_idx*2).value)
-                                    units = clean_val(ws_src.cell(row=3, column=5 + n_idx*2).value)
-                                    ball_num = int((tens if tens.isdigit() else "0") + (units if units.isdigit() else "0")) if (tens or units) else 0
-
-                                    base_col = 4 + n_idx * 30
-                                    new_row_dict[str(base_col)] = str(ball_num // 10) if ball_num else ""
-                                    new_row_dict[str(base_col+1)] = str(ball_num % 10) if ball_num else ""
-
-                                    if ball_num:
-                                        attrs = calculate_all_attributes(ball_num)
-                                        for a_idx, attr_val in enumerate(attrs): new_row_dict[str(base_col + 2 + a_idx)] = str(attr_val)
-                                    else:
-                                        for a_idx in range(28): new_row_dict[str(base_col + 2 + a_idx)] = ""
-
-                                new_row_dict["1"], new_row_dict["2"], new_row_dict["3"] = p1, p2, p3
-                                new_row_dict["214"] = year_val
-
-                                all_rows.insert(2, [new_row_dict.get(str(i), "") for i in range(1, 215)])
-
-                                out_io = io.StringIO()
-                                csv.writer(out_io).writerows(all_rows)
-                                b64_content = base64.b64encode(out_io.getvalue().encode('utf-8-sig')).decode('utf-8')
-
-                                res = requests.put(f"https://api.github.com/repos/{repo}/contents/{dst_f}", headers=headers, json={"message": f"更新 {dst_f}", "content": b64_content, "sha": d_info["sha"], "branch": "main"})
-
-                                if res.status_code not in [200, 201]: return False, res.text
-
-                                try:
-                                    client = get_supabase_client()
-                                    if client: client.table(table_name).upsert({"期数": period_str, "data": new_row_dict}, on_conflict="期数").execute()
-                                except: pass
-
-                                return True, "成功"
-
-                            s1, m1 = sync_attrs("升序源文件.xlsx", "升序全套.csv", "full_asc")
-                            s2, m2 = sync_attrs("按序源文件.xlsx", "按序全套.csv", "full_desc")
-
-                            if s1 and s2:
-                                st.success(f"✅ 极速同步成功！\n升序：{m1}\n按序：{m2}")
-                                load_excel_data.clear()
-                            else:
-                                if not s1: st.error(f"❌ 升序失败: {m1}")
-                                if not s2: st.error(f"❌ 按序失败: {m2}")
-                        except Exception as e:
-                            st.error(f"运行异常: {e}")
-
+                _sync_full_suite(token, repo)
+                st.success("✅ 全套表已更新")
     # --- 标签 4：AI 对话助手 ---
     with tab4:
         if render_ai_chat:
