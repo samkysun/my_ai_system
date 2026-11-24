@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""组合分析页：移植 Excel「数据分析系统」的核心功能
-一、号码组：选一期 → 生成三数字/四数字组合
-二、数字联动：输入某个号码 → 找历史同号期 → 统计下一期的 7 个号
-三、中出核对：用联动候选 与 下一期开奖号比对，统计命中
-四、35 组汇总：把号码组的全部组合逐组统计历史命中次数
+"""组合分析页（移植 Excel「数据分析系统」核心流程）
+单排 / 多排 两种模式：
+  单排：选一期 → 6 个正码 + 第 7 球 → 7 套组合（原始 20 组 + 6 种替换，共 35 组三数字）
+  多排：选多期 → 每期各生成 35 组 → 合并统计
+联动：每个组合（3 个号）→ 找历史同时出现这 3 个号的期 → 统计下一期的号码频次
 """
-import sys
 from collections import Counter
 from itertools import combinations
 
@@ -14,7 +13,6 @@ import streamlit as st
 
 
 def _load_data(loader):
-    """升序数据库源：返回 [(期号, [7个号码])]"""
     try:
         rows = loader["load_excel_data"]("_index.csv", None)
     except Exception:
@@ -33,197 +31,157 @@ def _load_data(loader):
     return out
 
 
-def _link_numbers(data, value, look="上一期"):
-    """找历史中某个号出现的位置，取相邻期的 7 个号"""
-    res = []
-    for i in range(1, len(data) - 1):
-        if value in data[i][1]:
-            if look == "上一期":
-                res.append((data[i][0], data[i - 1][1]))
-            else:
-                res.append((data[i][0], data[i + 1][1]))
-    return res
+def _sets_of_seven(six, seventh):
+    """7 套组合：原始 6 球 20 组 + 每个位置换成第 7 球各 20 组"""
+    outs = {}
+    outs["原始6球"] = six
+    names = ["1球", "2球", "3球", "4球", "5球", "6球"]
+    for i in range(6):
+        arr = list(six)
+        arr[i] = seventh
+        outs[f"替换{names[i]}"] = arr
+    return outs
 
 
-def _check_hits(data, cand_nums, next_n=True):
-    """用候选号与每期的 6 个正码比对"""
-    cset = set(cand_nums)
-    hits = []
-    for i in range(len(data) - 1):
-        period, nums = data[i + 1] if next_n else data[i]
-        got = sorted(cset & set(nums[:6]))
-        hits.append({"期号": period, "命中数": len(got),
-                     "命中号码": "、".join(str(x) for x in got)})
-    return hits
+def _combos35(six, seventh):
+    pool = sorted(set(six + [seventh]))
+    return sorted(combinations(pool, 3))
+
+
+def _link_stats(data, combos, scan_limit=3000, take_next=True):
+    """每个组合触发后，下一期的号码频次"""
+    cnt = Counter()
+    matches = {}
+    lo = max(0, len(data) - scan_limit)
+    for cb in combos:
+        need = set(cb)
+        hits = 0
+        for i in range(lo, len(data) - 1):
+            if need <= set(data[i][1]):
+                hits += 1
+                tgt = data[i + 1][1] if take_next else data[i][1]
+                for x in tgt:
+                    cnt[x] += 1
+        matches[cb] = hits
+    return cnt, matches
 
 
 def render(df_data, loader):
-    st.markdown("## 🧩 组合分析（移植 Excel 版核心功能）")
-    st.caption("数据源：系统数据库的升序开奖记录。"
-               "四块内容：号码组组合 / 数字联动 / 中出核对 / 35 组汇总。")
+    st.markdown("## 🧩 组合分析")
+    st.caption("单排 / 多排两种模式；每个组合去历史里做联动，"
+               "统计下一期的号码频次，得到候选号。")
 
     data = _load_data(loader)
     if not data:
         st.error("读取不到升序数据源（_index.csv）")
         return
-    st.info(f"已载入 {len(data)} 期，范围 {data[0][0]} ~ {data[-1][0]}")
+    periods = [p for p, _ in data]
+    pmap = dict(data)
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["① 号码组组合", "② 数字联动", "③ 中出核对", "④ 35组汇总"])
+    mode = st.radio("模式", ["单排（一期）", "多排（多期）"],
+                    horizontal=True, key="ca_mode")
 
-    # ---------- ① 号码组组合 ----------
-    with tab1:
-        st.markdown("#### 号码组：选一期，生成所有三数字组合")
-        periods = [p for p, _ in data][::-1]
-        pick = st.selectbox("选择期号", periods, index=0, key="ca_period")
-        row = dict((p, n) for p, n in data)[pick]
-        six, seventh = row[:6], row[6]
-        st.write(f"**{pick} 开奖：** 6 个正码 "
-                 + "、".join(str(x) for x in six)
-                 + f"　｜　第 7 球 {seventh}")
-
+    if mode.startswith("单排"):
+        pick = st.selectbox("选择期号", periods[::-1], index=0,
+                            key="ca_pick")
+        chosen = [pick]
+    else:
         c1, c2 = st.columns(2)
         with c1:
-            use7 = st.checkbox("把第 7 球也纳入组合", value=True,
-                               key="ca_use7")
+            n_multi = st.number_input("取最近几期", 2, 50, 5, 1,
+                                      key="ca_n")
         with c2:
-            k = st.number_input("每组合几个号", 2, 5, 3, 1, key="ca_k")
-        pool = six + ([seventh] if use7 else [])
-        combos = sorted(combinations(sorted(pool), int(k)))
-        st.success(f"共 {len(combos)} 组")
-        st.dataframe(pd.DataFrame({
-            "序号": range(1, len(combos) + 1),
-            "组合": ["、".join(str(x) for x in c) for c in combos]}),
-            use_container_width=True, hide_index=True, height=320)
-        st.download_button("📥 下载号码组",
-                           pd.DataFrame({"组合": ["、".join(str(x) for x in c)
-                                                for c in combos]})
-                           .to_csv(index=False).encode("utf-8-sig"),
-                           file_name=f"号码组_{pick}.csv", mime="text/csv",
-                           key="ca_dl1")
+            st.caption("从最新一期往前取")
+        chosen = periods[-int(n_multi):][::-1]
 
-    # ---------- ② 数字联动 ----------
+    combine_mode = st.selectbox(
+        "记录方式", ["每期各算（单排展开）", "合并后再算"],
+        help="每期各算 = 每期生成 35 组分别联动；合并后再算 = 把多期号码合在一起生成组合",
+        key="ca_cmb")
+
+    all_combos = []
+    for p in chosen:
+        six, sev = pmap[p][:6], pmap[p][6]
+        if combine_mode.startswith("每期各算"):
+            all_combos.extend(_combos35(six, sev))
+        else:
+            pass
+    if combine_mode.startswith("合并后再算"):
+        pool = []
+        for p in chosen:
+            pool.extend(pmap[p])
+        pool = sorted(set(pool))
+        if len(pool) >= 3:
+            all_combos = list(combinations(pool, 3))
+    all_combos = sorted(set(all_combos))
+    st.info(f"参与组合：{len(all_combos)} 组　｜　涉及期数：{len(chosen)}")
+
+    tab1, tab2, tab3 = st.tabs(["① 号码组（35组）", "② 联动统计", "③ 中出核对"])
+
+    with tab1:
+        p0 = chosen[0]
+        six, sev = pmap[p0][:6], pmap[p0][6]
+        st.markdown(f"#### {p0} 的号码组")
+        st.write("6 个正码：" + "、".join(str(x) for x in six)
+                 + f"　｜　第 7 球：{sev}")
+        sets = _sets_of_seven(six, sev)
+        rows = []
+        for name, arr in sets.items():
+            combos = list(combinations(sorted(arr), 3))
+            rows.append({"套别": name, "号码": "、".join(str(x) for x in arr),
+                         "组合数": len(combos),
+                         "组合": " / ".join("、".join(str(x) for x in c)
+                                           for c in combos[:6]) + " …"})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                     hide_index=True)
+        st.caption("7 套 × 20 组 = 140 组，去重后为 C(7,3)=35 组")
+
     with tab2:
-        st.markdown("#### 数字联动：某个号出现时，相邻期开什么")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            val = st.number_input("要查的号码", 1, 49, 12, 1, key="ca_val")
-        with c2:
-            look = st.selectbox("取相邻哪一期", ["上一期", "下一期"],
-                                index=1, key="ca_look")
-        with c3:
-            topn = st.number_input("候选取前几个", 3, 12, 7, 1, key="ca_topn")
-
-        res = _link_numbers(data, int(val), look)
-        if not res:
-            st.warning("历史中没有该号")
-        else:
-            cnt = Counter()
-            for _p, nums in res:
-                for x in nums:
-                    cnt[x] += 1
-            ranked = cnt.most_common()
-            st.markdown(f"**共 {len(res)} 次匹配**，相邻期号码出现次数：")
-            tab = pd.DataFrame([{"号码": n, "次数": c,
-                                 "占比": f"{c/len(res)*100:.0f}%"}
-                                for n, c in ranked])
-            st.dataframe(tab, use_container_width=True, hide_index=True,
-                         height=320)
-            cand = [n for n, _ in ranked[:int(topn)]]
-            st.session_state["_ca_cand"] = cand
-            st.success("候选号码（前 {} 个）：{}".format(
-                len(cand), "、".join(str(x) for x in cand)))
-            with st.expander("查看匹配明细", expanded=False):
+        st.markdown("#### 联动统计（每个组合 → 历史下一期号码频次）")
+        scan = st.number_input("扫描历史期数", 200, 6000, 3000, 100,
+                               key="ca_scan")
+        if st.button("▶ 开始联动统计", key="ca_run"):
+            with st.spinner("计算中…"):
+                cnt, matches = _link_stats(data, all_combos, int(scan))
+            if not cnt:
+                st.warning("没有匹配")
+            else:
+                ranked = cnt.most_common()
+                st.session_state["_ca_cand"] = [n for n, _ in ranked[:7]]
                 st.dataframe(pd.DataFrame(
-                    [{"期号": p, "相邻期号码": "、".join(str(x) for x in n)}
-                     for p, n in res]), use_container_width=True,
-                    hide_index=True, height=280)
+                    [{"号码": n, "出现次数": c} for n, c in ranked]),
+                    use_container_width=True, hide_index=True, height=340)
+                st.success("候选号码（前 7 个）："
+                           + "、".join(str(n) for n, _ in ranked[:7]))
+                top = sorted(matches.items(), key=lambda x: -x[1])[:20]
+                with st.expander("组合触发次数（前 20）", expanded=False):
+                    st.dataframe(pd.DataFrame(
+                        [{"组合": "、".join(str(x) for x in cb),
+                          "触发次数": c} for cb, c in top]),
+                        use_container_width=True, hide_index=True)
 
-    # ---------- ③ 中出核对 ----------
     with tab3:
-        st.markdown("#### 中出核对：候选号 与 每一期开奖号比对")
+        st.markdown("#### 中出核对")
         cand = st.session_state.get("_ca_cand") or []
-        manual = st.text_input("也可以手动输入候选号（逗号分隔）",
-                               value="、".join(str(x) for x in cand),
-                               key="ca_manual")
-        use = [int(x) for x in manual.replace("，", ",")
-               .replace("、", ",").split(",") if x.strip().isdigit()]
+        txt = st.text_input("候选号（逗号分隔）",
+                            value="、".join(str(x) for x in cand),
+                            key="ca_cand_txt")
+        use = [int(x) for x in txt.replace("，", ",").replace("、", ",")
+               .split(",") if x.strip().isdigit()]
         if not use:
-            st.info("请先在「② 数字联动」生成候选，或手动输入")
+            st.info("先在「② 联动统计」生成候选")
         else:
-            hits = _check_hits(data, use)
-            total = len(hits)
-            hit3 = sum(1 for h in hits if h["命中数"] >= 3)
-            hit2 = sum(1 for h in hits if h["命中数"] >= 2)
-            hit1 = sum(1 for h in hits if h["命中数"] >= 1)
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("候选号", len(use))
-            m2.metric("至少中 1 个", f"{hit1/total*100:.1f}%",
-                      f"{hit1}/{total}")
-            m3.metric("至少中 2 个", f"{hit2/total*100:.1f}%",
-                      f"{hit2}/{total}")
-            m4.metric("中 3 个以上", f"{hit3/total*100:.1f}%",
-                      f"{hit3}/{total}")
-            st.dataframe(pd.DataFrame(hits[::-1]).head(200),
-                         use_container_width=True, hide_index=True,
-                         height=320)
-            st.download_button("📥 下载中出核对",
-                               pd.DataFrame(hits).to_csv(
-                                   index=False).encode("utf-8-sig"),
-                               file_name="中出核对.csv", mime="text/csv",
-                               key="ca_dl3")
-
-    # ---------- ④ 35 组组合汇总 ----------
-    with tab4:
-        st.markdown("#### 35 组组合汇总（多套 = C(7,3) 全部组合）")
-        st.caption("把「号码组」里的 35 组，逐组去历史里统计命中次数，"
-                   "次数高的排前面；同时汇总每个号码在 35 组里出现的次数。")
-        periods4 = [p for p, _ in data][::-1]
-        pick4 = st.selectbox("选择期号", periods4, index=0, key="ca4_period")
-        rowmap = dict((p, n) for p, n in data)
-        row4 = rowmap[pick4]
-        pool4 = row4  # 7 个号
-        k4 = st.number_input("每组几个号", 2, 4, 3, 1, key="ca4_k")
-        combos4 = sorted(combinations(sorted(pool4), int(k4)))
-
-        if st.button("▶ 统计 35 组历史命中", key="ca4_run"):
             rows = []
-            for cb in combos4:
-                need = set(cb)
-                cnt = 0
-                last = ""
-                for per, nums in data:
-                    if need <= set(nums):
-                        cnt += 1
-                        last = per
-                rows.append({"组合": "、".join(str(x) for x in cb),
-                             "历史命中次数": cnt,
-                             "最近一次": last})
-            rows.sort(key=lambda x: -x["历史命中次数"])
-            st.session_state["_ca4_rows"] = rows
-
-            numfreq = Counter()
-            for cb in combos4:
-                for x in cb:
-                    numfreq[x] += 1
-            st.markdown("**号码在 {} 组里出现的次数**".format(len(combos4)))
-            st.dataframe(pd.DataFrame(
-                [{"号码": n, "出现组数": c}
-                 for n, c in sorted(numfreq.items(),
-                                    key=lambda z: (-z[1], z[0]))]),
-                use_container_width=True, hide_index=True, height=260)
-
-        rows4 = st.session_state.get("_ca4_rows")
-        if rows4:
-            st.markdown("**各组历史命中排行**")
-            st.dataframe(pd.DataFrame(rows4), use_container_width=True,
-                         hide_index=True, height=380)
-            top = [int(x) for x in rows4[0]["组合"].split("、")]
-            st.session_state["_ca_cand"] = top
-            st.success("命中次数最高的一组：" + rows4[0]["组合"]
-                       + "（已写入候选，可到 ③ 中出核对）")
-            st.download_button("📥 下载组合命中排行",
-                               pd.DataFrame(rows4).to_csv(
-                                   index=False).encode("utf-8-sig"),
-                               file_name=f"35组命中_{pick4}.csv",
-                               mime="text/csv", key="ca4_dl")
+            for p in chosen:
+                nums = pmap[p]
+                got = sorted(set(use) & set(nums[:6]))
+                rows.append({"期号": p, "开奖": "、".join(str(x) for x in nums),
+                             "正码命中": "、".join(str(x) for x in got) or "—",
+                             "命中数": len(got)})
+            st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                         hide_index=True)
+            if len(chosen) == 1:
+                st.metric("本期命中数", rows[0]["命中数"])
+            else:
+                st.metric("平均命中数",
+                          f"{sum(r['命中数'] for r in rows)/len(rows):.2f}")
