@@ -3547,11 +3547,18 @@ def _exp_attr_fusion(loader):
                            + ("、".join(str(x) for x in sorted(_inter))
                               if _inter else "空集"))
             elif _method.startswith("双重"):
-                _inter_attrs = st.multiselect(
-                    "参与交集的属性（这些属性都必须推荐该号）",
-                    list(_sets_pa.keys()),
-                    default=list(_sets_pa.keys())[:7],
-                    key="lab_q_inter_attrs")
+                _n_inter = int(st.selectbox(
+                    "交集选几个属性（这几个都要推荐该号）",
+                    list(range(3, 15)), index=4, key="lab_q_n_inter"))
+                # 按各属性推荐强度排序，取前 N 个做交集
+                _strength = {}
+                for _a7 in _sets_pa:
+                    _pp7 = _probs_all.get(_a7) or {}
+                    _top7 = sorted(_pp7.values(), reverse=True)
+                    _strength[_a7] = _top7[0] if _top7 else 0
+                _ordered = sorted(_sets_pa.keys(),
+                                  key=lambda z: -_strength.get(z, 0))
+                _inter_attrs = _ordered[:_n_inter]
                 if not _inter_attrs:
                     st.warning("请先选参与交集的属性")
                     _final_list = []
