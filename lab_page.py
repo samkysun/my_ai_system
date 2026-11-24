@@ -2355,6 +2355,113 @@ def _exp_flex(loader):
                      hide_index=True)
 
 
+    # ---------------- 双模式综合筛选 ----------------
+    st.markdown("---")
+    st.markdown("### 双模式综合筛选（追热 / 杀冷）")
+    mode = st.radio("模式", ["追热（选号）", "杀冷（排除）"],
+                    horizontal=True, key="lab_n_mode")
+    c7, c8 = st.columns(2)
+    with c7:
+        kk = st.number_input("每个维度取几个值", 1, 6, 2, 1,
+                             key="lab_n_k")
+    with c8:
+        bt = st.number_input("回测期数", 50, 1000, 200, 50,
+                             key="lab_n_bt")
+
+    lo, hi = int(tgt_ball), 43 + int(tgt_ball)
+
+    def dim_predict(b, a, i):
+        """用球 b 的属性 a 排列，预测目标球属性分布"""
+        s = seqs.get((b, a))
+        if s is None:
+            s = [val_of(x[1][b - 1], a) for x in data]
+            seqs[(b, a)] = s
+        pat2 = tuple(s[i - d + 1: i + 1])
+        c = _C()
+        for j in range(d - 1, i):
+            if tuple(s[j - d + 1: j + 1]) == pat2:
+                c[seq_tgt[j + 1]] += 1
+        return c
+
+    # 当前期筛选
+    dims = [(b, a) for b in base_balls for a in base_attrs]
+    hot_sets, cold_sets = [], []
+    dim_rows = []
+    for (b, a) in dims:
+        c = dim_predict(b, a, idx)
+        if not c:
+            continue
+        ranked = [k for k, _ in c.most_common()]
+        uni2 = sorted({x for x in seq_tgt if x})
+        colds = sorted(uni2, key=lambda u: c.get(u, 0))
+        htop = ranked[:int(kk)]
+        ctop = colds[:int(kk)]
+        hn = [x for x in range(lo, hi + 1) if val_of(x, tgt_attr) in htop]
+        cn = [x for x in range(lo, hi + 1) if val_of(x, tgt_attr) in ctop]
+        hot_sets.append(set(hn))
+        cold_sets.append(set(cn))
+        dim_rows.append({"维度": f"第{b}球{a}", "热值": "、".join(htop),
+                         "热号码数": len(hn), "冷值": "、".join(ctop),
+                         "冷号码数": len(cn)})
+    if not hot_sets:
+        st.warning("没有可用维度")
+        return
+    st.dataframe(pd.DataFrame(dim_rows), use_container_width=True,
+                 hide_index=True)
+
+    allnums = set(range(lo, hi + 1))
+    if mode.startswith("追热"):
+        final = set.intersection(*hot_sets) if len(hot_sets) > 1 else hot_sets[0]
+        if not final:
+            final = set.union(*hot_sets)
+            st.caption("各维度无交集，已改用并集")
+        st.success(f"建议号码（{len(final)} 个）："
+                   + "、".join(str(x) for x in sorted(final)))
+    else:
+        killed = set.union(*cold_sets)
+        final = allnums - killed
+        st.warning(f"排除号码（{len(killed)} 个）："
+                   + "、".join(str(x) for x in sorted(killed)))
+        st.success(f"剩余号码（{len(final)} 个）："
+                   + "、".join(str(x) for x in sorted(final)))
+
+    # 回测
+    if st.button("▶ 回测这套筛选", key="lab_n_bt2"):
+        start2 = max(200, n - int(bt))
+        ok2 = tot2 = sumcnt = 0
+        for i in range(start2, n - 1):
+            hs, cs = [], []
+            for (b, a) in dims:
+                c = dim_predict(b, a, i)
+                if not c:
+                    continue
+                ranked = [k for k, _ in c.most_common()]
+                uni2 = sorted({x for x in seq_tgt if x})
+                colds = sorted(uni2, key=lambda u: c.get(u, 0))
+                hs.append({x for x in range(lo, hi + 1)
+                           if val_of(x, tgt_attr) in ranked[:int(kk)]})
+                cs.append({x for x in range(lo, hi + 1)
+                           if val_of(x, tgt_attr) in colds[:int(kk)]})
+            if not hs:
+                continue
+            if mode.startswith("追热"):
+                f2 = (set.intersection(*hs) if len(hs) > 1 else hs[0])
+                if not f2:
+                    f2 = set.union(*hs)
+            else:
+                f2 = allnums - set.union(*cs)
+            if not f2:
+                continue
+            tot2 += 1
+            sumcnt += len(f2)
+            if data[i + 1][1][tgt_ball - 1] in f2:
+                ok2 += 1
+        if tot2:
+            st.metric("命中率", f"{ok2/tot2*100:.1f}%",
+                      f"{ok2}/{tot2} 期")
+            st.metric("平均候选数", f"{sumcnt/tot2:.1f} 个")
+
+
 # =====================================================================
 # 保存 / 清理
 # =====================================================================
