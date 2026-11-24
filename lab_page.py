@@ -2843,6 +2843,157 @@ def _exp_docs():
 
 
 # =====================================================================
+# 实验 P：属性值精准选号（内测最优：数字合）
+# =====================================================================
+def _exp_precise(loader):
+    import math as _m
+    from collections import Counter as _C, defaultdict as _dd
+    st.markdown("#### 实验 P：属性值精准选号（内测最优）")
+    st.success("内测结果：预测「数字合」比预测「尾数」更准。"
+               "取 1 个值≈2.7 个号、命中 17%；取 2 个值≈5.9 个号、命中 33%；"
+               "取 3 个值≈9.4 个号、命中 47%。（随机分别 6%、13%、21%）")
+    with st.expander("📘 原理与使用", expanded=False):
+        st.markdown("""
+**原理**
+1. 目标不再是单个号码，而是该号码的「数字合」（如 1~49 的数字合共 11 类）。
+2. 用多个属性（尾数、方位、四宝…）各自找历史相似期，统计下一期数字合的分布。
+3. 每个属性给各数字合投票（概率），取对数相加得分。
+4. 取分数最高的 K 个数字合 → 对应号码就是建议（每类含 4~5 个号）。
+
+**为什么比尾数准**
+数字合只有 11 类，尾数有 10 类但分布更散；
+数字合的历史条件分布更集中，投票更一致。
+
+**使用**
+1. 选目标球位、目标属性（默认数字合）
+2. 选参与融合的属性
+3. 设取几个属性值（K）
+4. 点「▶ 计算并回测」
+""")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+    nball = len(data[0][1])
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿",
+             "生肖五行", "阴阳天地", "3模", "波色"]
+
+    def v_of(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        return amap.get(num, {}).get(key, "")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        tb = st.selectbox("目标球位", list(range(1, nball + 1)), index=0,
+                          key="lab_p_ball")
+    with c2:
+        tattr = st.selectbox("目标属性（建议数字合）",
+                             ["数字合", "尾数", "四宝", "方位", "生肖五行"],
+                             index=0, key="lab_p_tattr")
+    with c3:
+        kk = st.number_input("取几个属性值", 1, 4, 2, 1, key="lab_p_k")
+
+    used = st.multiselect("参与融合的属性",
+                          ATTRS, default=["尾数", "方位", "四宝"],
+                          key="lab_p_attrs")
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        d = st.number_input("联动行数", 1, 6, 1, 1, key="lab_p_depth")
+    with c5:
+        pick = st.selectbox("预测期号", list(reversed(periods)), index=0,
+                            key="lab_p_pick")
+    with c6:
+        bt = st.number_input("回测期数", 100, 3000, 2000, 100,
+                             key="lab_p_bt")
+
+    if not used:
+        st.warning("请至少选一个融合属性")
+        return
+
+    lo, hi = int(tb), 43 + int(tb)
+    tseq = [v_of(x[1][tb - 1], tattr) for x in data]
+    uni = sorted({x for x in tseq if x})
+    seqs = {a: [v_of(x[1][0], a) for x in data] for a in used}
+    dd = int(d)
+
+    def predict(i, tables):
+        sc = {v: 0.0 for v in uni}
+        for a in used:
+            if i < dd:
+                return None
+            c = tables[a].get(tuple(seqs[a][i - dd + 1: i + 1]))
+            if not c:
+                continue
+            tot = sum(c.values())
+            for v in uni:
+                sc[v] += _m.log((c.get(v, 0) + 0.5)
+                                / (tot + 0.5 * len(uni)))
+        return sorted(sc.items(), key=lambda z: -z[1])[:int(kk)]
+
+    idx0 = periods.index(pick)
+    tables = {a: _dd(_C) for a in used}
+    for i in range(1, idx0 + 1):
+        for a in used:
+            if i >= dd:
+                tables[a][tuple(seqs[a][i - dd: i])][tseq[i]] += 1
+    rk = predict(idx0, tables) or []
+    if rk:
+        vals = [v for v, _ in rk]
+        nums = [x for x in range(lo, hi + 1) if v_of(x, tattr) in vals]
+        st.markdown(f"### 基于 {pick} 期 → 下一期第{tb}球")
+        st.dataframe(pd.DataFrame(
+            [{"属性值": v, "得分": round(s, 2),
+              "对应号码": "、".join(str(x) for x in range(lo, hi + 1)
+                                   if v_of(x, tattr) == v)}
+             for v, s in rk]), use_container_width=True, hide_index=True)
+        st.success(f"建议号码（{len(nums)} 个）："
+                   + "、".join(str(x) for x in nums))
+
+    if idx0 + 1 < n:
+        act = v_of(data[idx0 + 1][1][tb - 1], tattr)
+        st.info(f"实际下一期（{periods[idx0 + 1]}）：{tattr} = {act}"
+                + ("　✅ 命中" if rk and act in [v for v, _ in rk]
+                   else "　❌ 未中" if rk else ""))
+    else:
+        st.caption("最新一期，下一期未开")
+
+    if not st.button("▶ 回测", key="lab_p_run"):
+        return
+    start = max(300, n - int(bt))
+    tables = {a: _dd(_C) for a in used}
+    ok = tot = cnt = 0
+    for i in range(start, n - 1):
+        for a in used:
+            if i >= dd:
+                tables[a][tuple(seqs[a][i - dd: i])][tseq[i]] += 1
+        rr = predict(i, tables)
+        if not rr:
+            continue
+        vals = {v for v, _ in rr}
+        nums = {x for x in range(lo, hi + 1) if v_of(x, tattr) in vals}
+        tot += 1
+        cnt += len(nums)
+        ok += 1 if v_of(data[i + 1][1][tb - 1], tattr) in vals else 0
+    if not tot:
+        st.warning("样本不足")
+        return
+    rate, avg = ok / tot * 100, cnt / tot
+    base = avg / (hi - lo + 1) * 100
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("命中率", f"{rate:.1f}%", f"{ok}/{tot}")
+    m2.metric("平均号码数", f"{avg:.1f} 个")
+    m3.metric("随机基线", f"{base:.1f}%")
+    m4.metric("优势", f"{rate-base:+.1f}")
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -3041,11 +3192,12 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tab4, tab3 = st.tabs(
+    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tabp, tab4, tab3 = st.tabs(
         ["📖 说明书", "实验B 组合池", "实验H 六码中三",
          "实验I 加注模拟", "实验J 属性杀号", "实验K 追热追冷",
          "实验L 简单版", "实验M 跨球联动", "实验N 自由联动",
-         "实验O 融合评分", "结论档案", "清理"])
+         "实验O 融合评分", "实验P 精准选号", "结论档案",
+         "清理"])
     with tabd:
         _exp_docs()
     with tab2:
@@ -3066,6 +3218,8 @@ def render(df_data, H):
         _exp_flex(H)
     with tabo:
         _exp_fusion(H)
+    with tabp:
+        _exp_precise(H)
     with tab4:
         _archive()
     with tab3:
