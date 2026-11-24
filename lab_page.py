@@ -3327,7 +3327,7 @@ def _exp_attr_fusion(loader):
                     f"{_a2} 推荐几个", 1, 8,
                     3 if _a2 in ("生肖", "尾数", "数字合") else 2,
                     1, key=f"lab_q_k_{_a2}")
-        _final_n = st.number_input("最终号码个数", 1, 12, 5, 1,
+        _final_n = st.number_input("最终号码个数（可扩到 15）", 1, 15, 5, 1,
                                    key="lab_q_finaln")
         _method = st.radio("最终号码生成方式",
                            ["联合概率（推荐）", "投票叠加"],
@@ -3528,7 +3528,7 @@ def _exp_attr_fusion(loader):
                          hide_index=True)
             st.success(f"杀掉 {len(_killed)} 个号："
                        + "、".join(str(x) for x in sorted(_killed)))
-            _keep_n = st.number_input("最终取几个号（1~5）", 1, 5, 3, 1,
+            _keep_n = st.number_input("最终取几个号（1~12）", 1, 12, 3, 1,
                                       key="lab_q_keepn")
             _final = _ranked[:int(_keep_n)]
             st.success(f"剩余 {len(_remain)} 个号（按联合概率排序）："
