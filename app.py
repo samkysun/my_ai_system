@@ -6050,6 +6050,50 @@ def render_auto_ai_page():
     _board_ai_ui()
 
 
+
+# ==========================================
+# 会员页面权限（存 ai_board，source="__perms__"）
+# ==========================================
+_ALL_PAGES = [
+    "📊 主控台", "📐 多维分析", "🔗 深度联动", "🧠 AI推演",
+    "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池",
+    "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统",
+    "🎯 精准选号", "🎯 8码复式", "🧬 属性融合",
+]
+
+
+def load_user_pages(client, username):
+    """返回该会员被允许的页面列表；无记录返回 None（表示默认全部）"""
+    if not client:
+        return None
+    try:
+        res = (client.table("ai_board").select("content")
+               .eq("source", "__perms__").eq("title", username)
+               .execute().data)
+        if res:
+            import json as _j
+            obj = _j.loads(res[0].get("content") or "[]")
+            if isinstance(obj, list) and obj:
+                return [x for x in obj if x in _ALL_PAGES]
+    except Exception:
+        pass
+    return None
+
+
+def save_user_pages(client, username, pages):
+    try:
+        import json as _j
+        client.table("ai_board").delete().eq("source", "__perms__") \
+            .eq("title", username).execute()
+        client.table("ai_board").insert({
+            "source": "__perms__", "title": username,
+            "content": _j.dumps(list(pages), ensure_ascii=False)
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
 def main_app():
     current_user = st.session_state.username
     admin_name = st.secrets.get("ADMIN_USERNAME", "admin")
@@ -6063,6 +6107,10 @@ def main_app():
                 res = client.table("users").select("is_vip").eq("username", current_user).execute().data
                 if res and res[0].get("is_vip") == True: is_vip = True
             except: pass
+
+    _allowed = None
+    if not is_admin:
+        _allowed = load_user_pages(get_supabase_client(), current_user)
 
     df_data = load_real_data()
 
@@ -6098,7 +6146,14 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统", "🎯 精准选号", "🎯 8码复式", "🧬 属性融合"])
+        if is_admin:
+            menu_options.extend([x for x in _ALL_PAGES if x != "📊 主控台"])
+        elif is_vip:
+            _base = [x for x in _ALL_PAGES if x != "📊 主控台"]
+            if _allowed:
+                menu_options.extend([x for x in _base if x in _allowed])
+            else:
+                menu_options.extend(_base)
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
