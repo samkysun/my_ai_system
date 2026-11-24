@@ -3758,6 +3758,14 @@ def _exp_attr_fusion(loader):
                 if _s9[_j9] == _cur9:
                     _c9[_s9[_j9 + 1]] += 1
             if not _c9:
+                # 再兜底：直接用号码属性表里的取值
+                _vals9 = []
+                for _x9 in range(lo, hi + 1):
+                    _v9 = _num_attr2(_x9, _a)
+                    if _v9 and _v9 not in _vals9:
+                        _vals9.append(_v9)
+                for _v in _vals9[:3]:
+                    _val_opts.append(f"{_a}|{_v}")
                 continue
             _tt9 = sum(_c9.values())
             _u9 = sorted({x for x in _s9 if x})
