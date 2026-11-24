@@ -65,6 +65,7 @@ def attrs_of(n):
         "生肖五行": SX_WX.get(z, ""),
         "阴阳天地": SX_YYTD.get(z, ""),
         "波单双": "绿波双数" if n == 0 else _color(n),
+        "数字合": f"{sum(int(c) for c in str(n))}合",   # 0 → 0合
     }
 
 
@@ -1567,7 +1568,7 @@ def rou_color(n):
 
 ROU_ATTRS = {
     "尾数": lambda n: str(n % 10),
-    "数字合": lambda n: str(sum(int(c) for c in str(n))),
+    "数字合": lambda n: f"{sum(int(c) for c in str(n))}合",
     "3模": lambda n: str(n % 3),
     "大小": lambda n: "大" if n >= 19 else "小",
     "单双": lambda n: "单" if n % 2 else "双",
