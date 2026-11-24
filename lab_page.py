@@ -2183,7 +2183,7 @@ def _exp_cross_ball(loader):
             for _b in range(1, 7):
                 s_a, s_b = ss[_a], tt[_b]
                 ok = tot = 0
-                for i in range(start, n - 1):
+                for i in range(start, end_i):
                     pat2 = s_a[i - d + 1: i + 1]
                     c2 = _C()
                     for j in range(d - 1, i):
@@ -2543,8 +2543,17 @@ def _exp_fusion(loader):
     with c4:
         depth = st.number_input("联动行数", 1, 6, 1, 1, key="lab_o_depth")
     with c5:
-        bt = st.number_input("回测期数", 100, 3000, 2000, 100,
-                             key="lab_o_bt")
+        pick = st.selectbox("预测期号（看这一期的下一期）",
+                            list(reversed(periods)), index=0,
+                            key="lab_o_pick")
+    c6, c7 = st.columns(2)
+    with c6:
+        p_start = st.selectbox("回测起始期", list(reversed(periods)),
+                               index=min(1999, len(periods) - 1),
+                               key="lab_o_start")
+    with c7:
+        p_end = st.selectbox("回测结束期", list(reversed(periods)),
+                             index=0, key="lab_o_end")
 
     if not used:
         st.warning("请至少选一个属性")
@@ -2582,19 +2591,33 @@ def _exp_fusion(loader):
             s = seqs[a]
             if i >= d:
                 tables[a][tuple(s[i - d: i])][tseq[i]] += 1
-    sc = scores_at(n - 1, tables)
+    idx0 = periods.index(pick)
+    tables = {a: _dd(_C) for a in used}
+    for i in range(1, idx0 + 1):
+        for a in used:
+            s = seqs[a]
+            if i >= d:
+                tables[a][tuple(s[i - d: i])][tseq[i]] += 1
+    sc = scores_at(idx0, tables)
     ranked = sorted(sc.items(), key=lambda x: -x[1])[:int(topN)]
     st.success(f"建议号码（{len(ranked)} 个）："
                + "、".join(str(x) for x, _ in ranked))
     st.dataframe(pd.DataFrame([{"号码": x, "得分": round(v, 2)}
                                for x, v in ranked]),
                  use_container_width=True, hide_index=True)
-    st.caption(f"{periods[-1]} 之后的下一期，目标第{tgt_ball}球 {attr_t}")
+    st.caption(f"基于 {pick} 期数据，预测它之后下一期的第{tgt_ball}球 {attr_t}"
+               + ("（最新期，下一期未开）" if idx0 == n - 1 else ""))
 
     if not st.button("▶ 回测融合评分", key="lab_o_run"):
         return
 
-    start = max(300, n - int(bt))
+    _s1 = periods.index(p_start)
+    _s2 = periods.index(p_end)
+    if _s1 > _s2:
+        _s1, _s2 = _s2, _s1
+    start = max(300, _s1)
+    end_i = min(n - 1, _s2)
+    st.caption(f"回测区间：{periods[start]} ~ {periods[end_i]}")
     tables = {a: _dd(_C) for a in used}
     ok = tot = cnt = 0
     detail = []
