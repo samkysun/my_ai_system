@@ -3378,6 +3378,27 @@ def _exp_attr_fusion(loader):
                                           "属性": d["属性"]}
                                 for x, d in rank}
             _pkg["最终号码"] = [x for x, _ in top_n]
+
+            # 是否测中（有下一期时）
+            if idx0 + 1 < n:
+                _an2 = data[idx0 + 1][1][tb - 1]
+                _hit2 = _an2 in [x for x, _ in top_n]
+                _ok_attrs = [x.get("属性") for x in _pkg["各属性推荐"]
+                             if label(tseq[idx0 + 1], tattr) in x["推荐值"]]
+                st.markdown(f"### 实际：{periods[idx0 + 1]} 期，第{tb}球 = "
+                            f"**{_an2}**")
+                _mm1, _mm2 = st.columns(2)
+                _mm1.metric("最终号码是否测中",
+                            "✅ 测中" if _hit2 else "❌ 未中")
+                _mm2.metric("号码在最终单里的位置",
+                            f"{[x for x, _ in top_n].index(_an2)+1} 位"
+                            if _hit2 else "未进单")
+                _pkg["实际结果"] = {
+                    "下一期": periods[idx0 + 1], "开奖号": _an2,
+                    "最终号码测中": bool(_hit2)}
+            else:
+                st.info(f"{periods[idx0]} 是最新一期，下一期尚未开奖")
+
             st.session_state["_lab_q_pkg"] = _pkg
         else:
             st.warning("没有累计到任何号码：请确认所选属性在目标球位区间内有对应号码")
