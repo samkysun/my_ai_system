@@ -3404,16 +3404,30 @@ def _exp_attr_fusion(loader):
                 _joint_top = [x for x, _ in sorted(_js.items(),
                                                    key=lambda z: -z[1])][:int(_final_n)]
             _vote_list = [x for x, _ in rank[:int(_final_n)]]
+            _act_now = (data[idx0 + 1][1][tb - 1]
+                        if idx0 + 1 < len(periods) else None)
             if _method.startswith("联合") and _joint_top:
                 _final_list = list(_joint_top)
                 st.success("最终号码（联合概率最高）："
-                           + "、".join(str(x) for x in _final_list))
+                           + "、".join(
+                               (f"**{x}** ★" if x == _act_now else str(x))
+                               for x in _final_list)
+                           + (f"　→ 实际开 {_act_now}，✅ 测中"
+                              if _act_now in _final_list else
+                              (f"　→ 实际开 {_act_now}，❌ 未中"
+                               if _act_now is not None else "")))
                 st.caption("投票叠加法会给出："
                            + "、".join(str(x) for x in _vote_list))
             else:
                 _final_list = list(_vote_list)
                 st.success("最终号码（推荐次数最多）："
-                           + "、".join(str(x) for x in _final_list))
+                           + "、".join(
+                               (f"**{x}** ★" if x == _act_now else str(x))
+                               for x in _final_list)
+                           + (f"　→ 实际开 {_act_now}，✅ 测中"
+                              if _act_now in _final_list else
+                              (f"　→ 实际开 {_act_now}，❌ 未中"
+                               if _act_now is not None else "")))
             _pkg["号码累计"] = {str(x): {"覆盖属性数": len(d["属性"]),
                                           "次数": d["次数"],
                                           "属性": d["属性"]}
