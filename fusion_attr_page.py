@@ -70,6 +70,4 @@ def render(df_data, loader):
 - 或「📨 送入汇总看板」交给系统做总结
 """)
 
-    lab_page.page_state_seed("fusion", "lab_q_")
     lab_page._exp_attr_fusion(loader)
-    lab_page.page_state_snap("fusion", "lab_q_")
