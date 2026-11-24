@@ -3501,8 +3501,15 @@ def _exp_attr_fusion(loader):
                          hide_index=True)
             st.success(f"杀掉 {len(_killed)} 个号："
                        + "、".join(str(x) for x in sorted(_killed)))
+            _keep_n = st.number_input("最终取几个号（1~5）", 1, 5, 3, 1,
+                                      key="lab_q_keepn")
+            _final = _ranked[:int(_keep_n)]
             st.success(f"剩余 {len(_remain)} 个号（按联合概率排序）："
                        + "、".join(str(x) for x in _ranked))
+            st.markdown(f"#### 建议下注号码（{len(_final)} 个）："
+                        + "、".join(str(x) for x in _final))
+            st.caption("取法：先杀掉勾选属性覆盖的号，再按保留属性的"
+                       "联合概率排序取前 N 个。")
             if idx0 + 1 < len(periods):
                 _act3 = data[idx0 + 1][1][tb - 1]
                 _in = _act3 in _remain
@@ -3511,6 +3518,8 @@ def _exp_attr_fusion(loader):
                 st.metric("是否在剩余号码里",
                           "✅ 在" if _in else
                           ("❌ 被误杀" if _act3 in _killed else "❌ 未中"))
+                st.metric(f"是否在建议 {len(_final)} 个号里",
+                          "✅ 测中" if _act3 in _final else "❌ 未中")
             else:
                 st.caption("最新一期，下一期未开")
 
