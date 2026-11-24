@@ -3403,26 +3403,28 @@ def _exp_attr_fusion(loader):
                     _js[_x] = _s
                 _joint_top = [x for x, _ in sorted(_js.items(),
                                                    key=lambda z: -z[1])][:int(_final_n)]
+            _vote_list = [x for x, _ in rank[:int(_final_n)]]
             if _method.startswith("联合") and _joint_top:
-                top_n = _joint_top
+                _final_list = list(_joint_top)
                 st.success("最终号码（联合概率最高）："
-                           + "、".join(str(x) for x in top_n))
+                           + "、".join(str(x) for x in _final_list))
                 st.caption("投票叠加法会给出："
-                           + "、".join(str(x) for x, _ in rank[:int(_final_n)]))
+                           + "、".join(str(x) for x in _vote_list))
             else:
+                _final_list = list(_vote_list)
                 st.success("最终号码（推荐次数最多）："
-                           + "、".join(str(x) for x, _ in top_n))
+                           + "、".join(str(x) for x in _final_list))
             _pkg["号码累计"] = {str(x): {"覆盖属性数": len(d["属性"]),
                                           "次数": d["次数"],
                                           "属性": d["属性"]}
                                 for x, d in rank}
-            _pkg["最终号码"] = list(top_n)
+            _pkg["最终号码"] = list(_final_list)
             _pkg["生成方式"] = _method
 
             # 是否测中（有下一期时）
             if idx0 + 1 < n:
                 _an2 = data[idx0 + 1][1][tb - 1]
-                _hit2 = _an2 in [x for x, _ in top_n]
+                _hit2 = _an2 in _final_list
                 _ok_attrs = [x.get("属性") for x in _pkg["各属性推荐"]
                              if label(tseq[idx0 + 1], tattr) in x["推荐值"]]
                 st.markdown(f"### 实际：{periods[idx0 + 1]} 期，第{tb}球 = "
@@ -3431,7 +3433,7 @@ def _exp_attr_fusion(loader):
                 _mm1.metric("最终号码是否测中",
                             "✅ 测中" if _hit2 else "❌ 未中")
                 _mm2.metric("号码在最终单里的位置",
-                            f"{[x for x, _ in top_n].index(_an2)+1} 位"
+                            f"{_final_list.index(_an2)+1} 位"
                             if _hit2 else "未进单")
                 _pkg["实际结果"] = {
                     "下一期": periods[idx0 + 1], "开奖号": _an2,
