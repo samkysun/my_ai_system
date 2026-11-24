@@ -3408,6 +3408,9 @@ def _exp_attr_fusion(loader):
                     1, key=f"lab_q_k_{_a2}")
         _final_n = st.number_input("最终号码个数（可扩到 15）", 1, 15, 5, 1,
                                    key="lab_q_finaln")
+        _n_inter_v = st.selectbox(
+            "交集选几个属性（这几个都要推荐该号）",
+            list(range(3, 15)), index=4, key="lab_q_n_inter")
         _gate_v = st.selectbox(
             "门槛：至少被几个属性推荐", [7, 8, 9, 10, 11, 12, 13, 14],
             index=3, key="lab_q_gate")
@@ -3547,9 +3550,7 @@ def _exp_attr_fusion(loader):
                            + ("、".join(str(x) for x in sorted(_inter))
                               if _inter else "空集"))
             elif _method.startswith("双重"):
-                _n_inter = int(st.selectbox(
-                    "交集选几个属性（这几个都要推荐该号）",
-                    list(range(3, 15)), index=4, key="lab_q_n_inter"))
+                _n_inter = int(_n_inter_v)
                 # 按各属性推荐强度排序，取前 N 个做交集
                 _strength = {}
                 for _a7 in _sets_pa:
