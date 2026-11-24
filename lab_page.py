@@ -3747,32 +3747,17 @@ def _exp_attr_fusion(loader):
     st.caption("例如数字合推荐 01合/02合/03合，你判断 03合 不会出，"
                "就只杀 03合 覆盖的号码，不必整条属性都杀。")
     _val_opts = []
-    for _a in ATTRS:
-        _pp = _probs_all.get(_a)
-        if not _pp:
-            # 兜底：该属性没有缓存时，现场算一次
-            _s9 = [v_at(i, tb, _a) for i in range(n)]
-            _cur9 = _s9[idx0] if idx0 < len(_s9) else ""
-            _c9 = _C()
-            for _j9 in range(max(0, idx0 - 3000), idx0):
-                if _s9[_j9] == _cur9:
-                    _c9[_s9[_j9 + 1]] += 1
-            if not _c9:
-                # 再兜底：直接用号码属性表里的取值
-                _vals9 = []
-                for _x9 in range(lo, hi + 1):
-                    _v9 = _num_attr2(_x9, _a)
-                    if _v9 and _v9 not in _vals9:
-                        _vals9.append(_v9)
-                for _v in _vals9[:3]:
-                    _val_opts.append(f"{_a}|{_v}")
-                continue
-            _tt9 = sum(_c9.values())
-            _u9 = sorted({x for x in _s9 if x})
-            _pp = {v: (_c9.get(v, 0) + 0.5) / (_tt9 + 0.5 * len(_u9))
-                   for v in _u9}
-        _kkx = int(_kmap.get(_a, 3))
-        for _v, _ in sorted(_pp.items(), key=lambda z: -z[1])[:_kkx]:
+    _reco_now = (st.session_state.get("_lab_q_pkg") or {}).get("各属性推荐") or []
+    for _item in _reco_now:
+        _a = _item.get("属性")
+        _n_this = int(_item.get("推荐个数") or _kmap.get(_a, 3))
+        _vals = list(_item.get("推荐值") or [])
+        _raw = []
+        for _x in range(lo, hi + 1):
+            _lab = label(_num_attr2(_x, _a) if _a else "", _a) if _a else ""
+            if _lab in _vals and _num_attr2(_x, _a) not in _raw:
+                _raw.append(_num_attr2(_x, _a))
+        for _v in _raw[:_n_this]:
             _val_opts.append(f"{_a}|{_v}")
     if not _val_opts:
         st.caption("暂无可杀的值（该球位属性数据不足）")
