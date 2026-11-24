@@ -6329,11 +6329,11 @@ def main_app():
             st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
     elif page == "⚙️ 后台管理": render_admin_panel()
 
+    _save_page_state(page)
+
 
 # ===== 刷新/重开后，用令牌自动恢复登录 =====
 if not st.session_state.get("logged_in"):
-
-    _save_page_state(page)
     _tok0 = _qp_get("t")
     _u0 = check_login_token(_tok0) if _tok0 else ""
     if not _u0:
