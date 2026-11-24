@@ -3235,6 +3235,21 @@ def _exp_attr_fusion(loader):
                  hide_index=True)
     st.success("推荐属性值：" + "、".join(label(v, tattr) for v, _ in ranked))
 
+    # 实际结果对比
+    if idx0 + 1 < len(periods):
+        _act_num = data[idx0 + 1][1][tb - 1]
+        _act = tseq[idx0 + 1]
+        _hit = _act in {v for v, _ in ranked}
+        st.markdown(f"### 实际：{periods[idx0 + 1]} 期，第{tb}球 = "
+                    f"**{_act_num}**（{tattr}：{label(_act, tattr)}）")
+        m1, m2 = st.columns(2)
+        m1.metric("是否命中", "✅ 命中" if _hit else "❌ 未中")
+        _pos = [v for v, _ in ranked]
+        m2.metric("实际排第几",
+                  f"{_pos.index(_act)+1} 位" if _act in _pos else "未进推荐")
+    else:
+        st.info(f"{pick} 是最新一期，下一期尚未开奖")
+
     with st.expander("🔍 各属性匹配明细（可逐条核对）", expanded=False):
         st.dataframe(pd.DataFrame(dim_reports), use_container_width=True,
                      hide_index=True)
