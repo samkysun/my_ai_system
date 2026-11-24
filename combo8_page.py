@@ -69,7 +69,27 @@ def render(df_data, loader):
     st.success(f"共 {len(nums)} 个号 → {len(combos)} 组三中三　"
                f"每期成本 {len(combos)} 单位")
 
-    tab1, tab2, tab3 = st.tabs(["② 组合清单", "③ 逐期核对", "④ 回测统计"])
+    # ---------- 中奖进度（自动） ----------
+    st.markdown("### ② 中奖进度（自动跟踪）")
+    _scan = data[-200:]
+    _gap = 0
+    _last_period = ""
+    for _p, _arr in reversed(_scan):
+        if len(set(nums) & set(_arr)) >= 3:
+            _last_period = _p
+            break
+        _gap += 1
+    if _last_period:
+        st.warning(f"上次中奖：**{_last_period}**　→ 已过 **{_gap}** 期")
+        _pnl = PAYOUT - len(combos) * (_gap + 1)
+        st.metric("自上次中奖以来的盈亏", f"{_pnl:+.0f}",
+                  "赚" if _pnl > 0 else "亏")
+        st.caption(f"按每期投入 {len(combos)}、中奖 {int(PAYOUT)} 倍计算；"
+                   f"超过 {int(PAYOUT)//len(combos)} 期才中就会亏")
+    else:
+        st.error("最近 200 期内从未中过 3 个号（这 8 码偏冷，建议换号）")
+
+    tab1, tab2, tab3 = st.tabs(["③ 组合清单", "④ 逐期核对", "⑤ 回测统计"])
 
     with tab1:
         st.dataframe(pd.DataFrame({
