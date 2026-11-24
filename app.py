@@ -4886,6 +4886,96 @@ def _merge_total_from_source(token, repo):
         return False, f"{type(e).__name__}: {e}"
 
 
+
+def _rebuild_index_csv(token, repo):
+    """用 升序源文件 / 按序源文件 重建 _index.csv"""
+    try:
+        import io as _io
+        import base64 as _b64
+        import urllib.parse as _up
+        import openpyxl as _ox
+        import requests as _rq
+        headers = {"Authorization": f"Bearer {token}",
+                   "Accept": "application/vnd.github.v3+json"}
+
+        def info(fp):
+            r = _rq.get(f"https://api.github.com/repos/{repo}/contents/"
+                        f"{_up.quote(fp)}", headers=headers, timeout=60)
+            return r.json() if r.status_code == 200 else None
+
+        def read_nums(fp):
+            i = info(fp)
+            if not i:
+                return {}
+            wb = _ox.load_workbook(_io.BytesIO(
+                _rq.get(i["download_url"]).content), data_only=True)
+            ws = wb["数据源"] if "数据源" in wb.sheetnames else wb[wb.sheetnames[0]]
+            out = {}
+            for r in range(3, ws.max_row + 1):
+                a = str(ws.cell(row=r, column=1).value or "").replace(".0", "").strip()
+                b = str(ws.cell(row=r, column=2).value or "").replace(".0", "").strip()
+                c = str(ws.cell(row=r, column=3).value or "").replace(".0", "").strip()
+                y = str(ws.cell(row=r, column=27).value or "").replace(".0", "").strip()
+                if not (a or b or c):
+                    continue
+                nums = []
+                for k in range(7):
+                    tv = str(ws.cell(row=r, column=4 + k * 2).value or "").replace(".0", "").strip()
+                    uv = str(ws.cell(row=r, column=5 + k * 2).value or "").replace(".0", "").strip()
+                    if not tv.isdigit() or not uv.isdigit():
+                        nums = []
+                        break
+                    nums.append(int(tv) * 10 + int(uv))
+                if len(nums) != 7:
+                    continue
+                out[f"{y}{a}{b}{c}"] = nums
+            return out
+
+        asc = read_nums("升序源文件.xlsx")
+        desc = read_nums("按序源文件.xlsx")
+        if not asc:
+            return False, "升序源文件无数据"
+        # 先读现有 _index.csv，保留历史
+        existing = {}
+        cur0 = info("_index.csv")
+        if cur0:
+            try:
+                import csv as _csv
+                _txt = _rq.get(cur0["download_url"], timeout=120).content \
+                    .decode("utf-8-sig", errors="ignore")
+                for _row in _csv.reader(_io.StringIO(_txt)):
+                    if len(_row) >= 15 and _row[0]:
+                        existing[_row[0]] = ",".join(_row[:15] + ["3", "3"])
+            except Exception:
+                existing = {}
+
+        periods = sorted(set(asc) | set(desc) | set(existing))
+        lines = ["期号,升1,升2,升3,升4,升5,升6,升7,"
+                 "按1,按2,按3,按4,按5,按6,按7,升序行号,按序行号"]
+        for p_ in periods:
+            a_ = asc.get(p_)
+            d_ = desc.get(p_, a_)
+            if a_ and d_:
+                lines.append(",".join([p_] + [str(x) for x in a_]
+                                      + [str(x) for x in d_]
+                                      + ["3", "3"]))
+            elif p_ in existing:
+                lines.append(existing[p_])
+        content = "\n".join(lines).encode("utf-8-sig")
+        cur = info("_index.csv")
+        payload = {"message": "重建 _index.csv", "branch": "main",
+                   "content": _b64.b64encode(content).decode()}
+        if cur:
+            payload["sha"] = cur["sha"]
+        r = _rq.put(f"https://api.github.com/repos/{repo}/contents/_index.csv",
+                    headers=headers, json=payload, timeout=120)
+        if r.status_code in (200, 201):
+            return True, f"{len(lines) - 1} 期"
+        return False, f"推送失败 {r.status_code}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 def _sync_full_suite(token, repo):
     """重算并同步 升序/按序 全套 csv"""
     with st.spinner("正在计算属性并同步全套表..."):
@@ -5114,6 +5204,14 @@ def render_admin_panel():
                                                    f"自动同步失败：{_msgm}")
                                 except Exception as _e_m:
                                     st.warning(f"总数据自动同步异常：{_e_m}")
+                                try:
+                                    _oki, _msgi = _rebuild_index_csv(token, repo)
+                                    if _oki:
+                                        st.success(f"✅ 索引表已重建（{_msgi}）")
+                                    else:
+                                        st.warning(f"索引表重建失败：{_msgi}")
+                                except Exception as _e_ix:
+                                    st.warning(f"索引表重建异常：{_e_ix}")
                                 try:
                                     st.info("正在自动更新全套属性表（约 30~60 秒）…")
                                     _sync_full_suite(token, repo)
