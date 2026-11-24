@@ -2865,6 +2865,17 @@ def _exp_docs():
 # =====================================================================
 # 实验 P：属性值精准选号（内测最优：数字合）
 # =====================================================================
+BALL_RANGES = {1: (1, 30), 2: (2, 35), 3: (5, 41),
+               4: (9, 45), 5: (25, 48), 6: (29, 49), 7: (1, 49)}
+
+
+def ball_range(tb, use_exp=True):
+    """球位的号码区间：经验区间或全区间"""
+    if use_exp:
+        return BALL_RANGES.get(int(tb), (int(tb), 43 + int(tb)))
+    return (int(tb), 43 + int(tb))
+
+
 def _exp_precise(loader):
     import math as _m
     from collections import Counter as _C, defaultdict as _dd
@@ -2921,6 +2932,8 @@ def _exp_precise(loader):
         kk = st.number_input("输出几个号码（1~5）", 1, 5, 2, 1,
                              key="lab_p_k")
 
+    use_exp = st.checkbox("使用经验区间（按球位收窄，减少号码数）",
+                          value=True, key="lab_p_exprange")
     base_balls = st.multiselect("基准球位（可多选做融合）",
                                 list(range(1, nball + 1)), default=[1],
                                 key="lab_p_balls")
@@ -2941,7 +2954,9 @@ def _exp_precise(loader):
         st.warning("请至少选 1 个基准球位和 1 个属性")
         return
 
-    lo, hi = int(tb), 43 + int(tb)
+    lo, hi = ball_range(tb, bool(use_exp))
+    st.caption(f"第{tb}球区间：{lo} ~ {hi}（共 {hi - lo + 1} 个号）"
+               + ("" if use_exp else "　全区间"))
     tseq = [v_of(x[1][tb - 1], tattr) for x in data]
     uni = sorted({x for x in tseq if x})
     dims = [(b, a) for b in base_balls for a in used]
