@@ -3408,6 +3408,20 @@ def _exp_attr_fusion(loader):
                 except Exception as e:
                     st.error(f"送入失败：{e}")
 
+
+    def _num_attr2(x, attr):
+        if attr == "生肖":
+            zrow = zodiac.get(periods[idx0]) or []
+            if zrow and zrow[0] in _ZOD:
+                off = (_ZOD.index(zrow[0]) - (data[idx0][1][0] - 1)) % 12
+                return _ZOD[(int(x) - 1 + off) % 12]
+            return ""
+        if attr == "尾数":
+            return str(int(x) % 10)
+        if attr == "3模":
+            return str(int(x) % 3)
+        return amap.get(int(x), {}).get(attr, "")
+
     # ---------- 回测 ----------
     _i1 = periods.index(_bstart)
     _i2 = periods.index(_bend)
@@ -3415,6 +3429,15 @@ def _exp_attr_fusion(loader):
         _i1, _i2 = _i2, _i1
     st.caption(f"回测区间：{periods[_i1]} ~ {periods[_i2]}（{_i2 - _i1 + 1} 期）"
                f"｜预测期号：{pick}")
+
+    # 预计算多属性序列（避免回测里重复遍历）
+    _seq_multi = {}
+    _uni_multi = {}
+    for _a0 in (multi_attrs or []):
+        _sq = [_attr_of(data[_j], tb, _a0, zodiac, zattrs, amap) or ""
+               for _j in range(n)]
+        _seq_multi[_a0] = _sq
+        _uni_multi[_a0] = sorted({x for x in _sq if x})
 
     if st.button("▶ 回测这套推荐", key="lab_q_run"):
         start = max(300, _i1)
@@ -3441,13 +3464,48 @@ def _exp_attr_fusion(loader):
             tot += 1
             act = tseq[i + 1]
             ok += 1 if act in vals else 0
+
+            # 最终号码（多属性交叉叠加）是否命中
+            _num_hit = ""
+            _final = []
+            if multi_attrs:
+                _acc = {}
+                for _a2 in multi_attrs:
+                    _all2 = _seq_multi[_a2]
+                    _un2 = _uni_multi[_a2]
+                    _sc2 = {}
+                    for _v2 in _un2:
+                        _s2 = 0.0
+                        for k in dims:
+                            _c2 = tabs2[k].get(tuple(seqs[k][i - d + 1: i + 1]))
+                            if not _c2:
+                                continue
+                            _tt2 = sum(_c2.values())
+                            _s2 += _m.log((_c2.get(_v2, 0) + 0.5)
+                                          / (_tt2 + 0.5 * len(_un2)))
+                        _sc2[_v2] = _s2
+                    _rk2 = sorted(_sc2.items(), key=lambda z: -z[1])[
+                        :int(_kmap.get(_a2, 1))]
+                    for _v3, _ in _rk2:
+                        for _x3 in range(lo, hi + 1):
+                            if _num_attr2(_x3, _a2) == _v3:
+                                _acc[_x3] = _acc.get(_x3, 0) + 1
+                _final = [x for x, _ in sorted(
+                    _acc.items(), key=lambda z: (-z[1], z[0]))][:int(_final_n)]
+                _num_hit = "号码★" if data[i + 1][1][tb - 1] in _final else ""
+
             detail.append({"期号": periods[i + 1], "推荐": "、".join(
                 label(v, tattr) for v in vals),
-                "实开": label(act, tattr), "命中": "★" if act in vals else ""})
+                "实开": label(act, tattr), "命中": "★" if act in vals else "",
+                "最终号码": "、".join(str(x) for x in _final) or "—",
+                "号码命中": _num_hit})
         if tot:
-            m1, m2 = st.columns(2)
-            m1.metric("命中率", f"{ok/tot*100:.1f}%", f"{ok}/{tot}")
-            m2.metric("随机基线",
+            _n_hit = sum(1 for x in detail if x.get("号码命中"))
+            m1, m2, m3 = st.columns(3)
+            m1.metric("属性命中率", f"{ok/tot*100:.1f}%", f"{ok}/{tot}")
+            m2.metric("最终号码命中率", f"{_n_hit/tot*100:.1f}%",
+                      f"{_n_hit}/{tot}")
+            m3.metric("随机基线",
                       f"{min(1.0, int(kk)/max(1,len(uni)))*100:.1f}%")
             st.dataframe(pd.DataFrame(detail[::-1][:300]),
                          use_container_width=True, hide_index=True,
