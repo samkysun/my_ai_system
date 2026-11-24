@@ -6245,7 +6245,9 @@ def main_app():
     _tp_ok = [p for p in _TAB_PAGES
               if is_admin or (_allowed and p in _allowed)]
     if _tp_ok:
-        _tabs4 = st.tabs(_tp_ok)
+        _wc = st.expander("🧩 分析工作台（多维分析 / 深度联动 / AI推演 / 属性融合）",
+                          expanded=False)
+        _tabs4 = _wc.tabs(_tp_ok)
         for _tb, _tp in zip(_tabs4, _tp_ok):
             with _tb:
                 try:
