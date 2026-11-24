@@ -2206,6 +2206,8 @@ def _exp_cross_ball(loader):
 def _exp_flex(loader):
     from collections import Counter as _C
     st.markdown("#### 实验 N：自由组合深度联动")
+    st.success("回测最优组合：基准=第1球 / 属性=尾数 / 联动 1 行 / 目标=第6球，"
+               "追热取 2 个值 → 候选约 10 个，命中率约 28~30%（随机约 20%）")
     st.info("自选基准球位（可多选）+ 自选属性 + 自选联动行数（1~12），"
             "到历史里找完全一致的排列，统计下一期目标球的开出情况，"
             "按次数从多到少排列。")
@@ -2240,7 +2242,7 @@ def _exp_flex(loader):
         base_balls = st.multiselect(
             "基准球位（可多选，如 1+2 或 1+2+3）",
             list(range(1, nball + 1)),
-            default=[1, 2], key="lab_n_balls")
+            default=[1], key="lab_n_balls")
     with c2:
         base_attrs = st.multiselect(
             "基准属性（每个球位都用这些属性）",
@@ -2252,7 +2254,7 @@ def _exp_flex(loader):
     c4, c5, c6 = st.columns(3)
     with c4:
         tgt_ball = st.selectbox("目标球位", list(range(1, nball + 1)),
-                                index=0, key="lab_n_tball")
+                                index=5, key="lab_n_tball")
     with c5:
         tgt_attr = st.selectbox("目标属性", ATTRS, index=0,
                                 key="lab_n_tattr")
