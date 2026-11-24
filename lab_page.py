@@ -3408,6 +3408,9 @@ def _exp_attr_fusion(loader):
                     1, key=f"lab_q_k_{_a2}")
         _final_n = st.number_input("最终号码个数（可扩到 15）", 1, 15, 5, 1,
                                    key="lab_q_finaln")
+        _gate_v = st.selectbox(
+            "门槛：至少被几个属性推荐", [7, 8, 9, 10, 11, 12, 13, 14],
+            index=3, key="lab_q_gate")
         _method = st.radio("最终号码生成方式",
                            ["联合概率（推荐）", "支持度（被几个属性推荐）",
                             "门槛（被≥N个属性推荐）", "投票叠加"],
@@ -3543,9 +3546,7 @@ def _exp_attr_fusion(loader):
                            + ("、".join(str(x) for x in sorted(_inter))
                               if _inter else "空集"))
             elif _method.startswith("门槛"):
-                _gate = int(st.selectbox(
-                    "门槛：至少被几个属性推荐", [7, 8, 9, 10, 11, 12, 13, 14],
-                    index=3, key="lab_q_gate"))
+                _gate = int(_gate_v)
                 _pass = [(x, c) for x, c in _support.items()
                          if c >= int(_gate)]
                 _pass.sort(key=lambda z: (-z[1], z[0]))
