@@ -2195,6 +2195,158 @@ def _exp_cross_ball(loader):
 
 
 # =====================================================================
+# 实验 N：自由组合深度联动
+# =====================================================================
+def _exp_flex(loader):
+    from collections import Counter as _C
+    st.markdown("#### 实验 N：自由组合深度联动")
+    st.info("自选基准球位（可多选）+ 自选属性 + 自选联动行数（1~12），"
+            "到历史里找完全一致的排列，统计下一期目标球的开出情况，"
+            "按次数从多到少排列。")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+    nball = len(data[0][1])
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿",
+             "生肖五行", "阴阳天地", "3模", "波色", "单双", "门数", "段数"]
+
+    def val_of(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        if key == "单双":
+            return "单" if num % 2 else "双"
+        if key == "门数":
+            return f"{num // 10 + 1}门"
+        if key == "段数":
+            return f"{(num - 1) // 7 + 1}段"
+        return amap.get(num, {}).get(key, "")
+
+    st.markdown("**① 基准设置**")
+    c1, c2, c3 = st.columns([2, 2, 1])
+    with c1:
+        base_balls = st.multiselect(
+            "基准球位（可多选，如 1+2 或 1+2+3）",
+            list(range(1, nball + 1)),
+            default=[1, 2], key="lab_n_balls")
+    with c2:
+        base_attrs = st.multiselect(
+            "基准属性（每个球位都用这些属性）",
+            ATTRS, default=["尾数"], key="lab_n_attrs")
+    with c3:
+        depth = st.number_input("联动行数", 1, 12, 1, 1, key="lab_n_depth")
+
+    st.markdown("**② 预测目标**")
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        tgt_ball = st.selectbox("目标球位", list(range(1, nball + 1)),
+                                index=0, key="lab_n_tball")
+    with c5:
+        tgt_attr = st.selectbox("目标属性", ATTRS, index=0,
+                                key="lab_n_tattr")
+    with c6:
+        pick = st.selectbox("预测期号", list(reversed(periods)), index=0,
+                            key="lab_n_period")
+
+    if not base_balls or not base_attrs:
+        st.warning("请至少选 1 个基准球位和 1 个基准属性")
+        return
+
+    idx = periods.index(pick)
+    d = int(depth)
+
+    seqs = {}
+    for b in base_balls:
+        for a in base_attrs:
+            seqs[(b, a)] = [val_of(x[1][b - 1], a) for x in data]
+    seq_tgt = [val_of(x[1][tgt_ball - 1], tgt_attr) for x in data]
+
+    def pattern_at(i):
+        out = []
+        for q in range(d):
+            r = i - d + 1 + q
+            for b in base_balls:
+                for a in base_attrs:
+                    out.append(seqs[(b, a)][r])
+        return tuple(out)
+
+    pat = pattern_at(idx)
+    cnt = _C()
+    rows_n = 0
+    detail = []
+    for j in range(d - 1, idx):
+        if pattern_at(j) == pat:
+            rows_n += 1
+            nx = seq_tgt[j + 1]
+            cnt[nx] += 1
+            detail.append({
+                "起 ~ 止": f"{periods[j - d + 1]} ~ {periods[j]}",
+                "排列": " | ".join(pat[q * len(base_balls) * len(base_attrs)]
+                                   for q in range(d)),
+                f"下一期({periods[j + 1]})目标球{tgt_ball}": nx,
+            })
+
+    st.markdown(f"### 当前排列（{pick} 起，{d} 行）")
+    st.caption("基准：" + "、".join(f"第{b}球" for b in base_balls)
+               + " ｜ 属性：" + "、".join(base_attrs))
+    _show = []
+    for q in range(d):
+        r = idx - d + 1 + q
+        _row = {"第几行": f"第{q+1}行", "期号": periods[r]}
+        for b in base_balls:
+            for a in base_attrs:
+                _row[f"第{b}球{a}"] = seqs[(b, a)][r]
+        _show.append(_row)
+    st.dataframe(pd.DataFrame(_show), use_container_width=True,
+                 hide_index=True)
+
+    st.markdown(f"历史相同排列共 **{rows_n}** 期")
+    if not cnt:
+        st.warning("历史无相同排列，换少几个基准或减少行数再试")
+        return
+
+    hot = cnt.most_common(1)[0][0]
+    lo, hi = int(tgt_ball), 43 + int(tgt_ball)
+    nums_attr = {}
+    for k, v in cnt.most_common():
+        nums_attr[k] = [x for x in range(lo, hi + 1) if val_of(x, tgt_attr) == k]
+
+    rows = []
+    for k, v in cnt.most_common():
+        rows.append({f"目标{tgt_attr}": k, "次数": v,
+                     "占比": f"{v/rows_n*100:.1f}%",
+                     "对应号码": "、".join(str(x) for x in nums_attr[k])})
+    st.markdown(f"**统计：下一期第{tgt_ball}球 {tgt_attr} 分布（多的在上）**")
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                 hide_index=True)
+
+    st.success(f"🔥 最多：{hot}（{cnt[hot]} 次）→ 号码 "
+               + "、".join(str(x) for x in nums_attr[hot]))
+
+    if idx + 1 < n:
+        actual = seq_tgt[idx + 1]
+        st.markdown(f"### 实际下一期（{periods[idx + 1]}）："
+                    f"第{tgt_ball}球 {tgt_attr} = **{actual}**")
+        m1, m2 = st.columns(2)
+        m1.metric("最多项是否命中", "✅ 命中" if actual == hot else "❌ 未中")
+        m2.metric("实际在统计里排第",
+                  f"{[k for k, _ in cnt.most_common()].index(actual)+1} 位"
+                  if actual in cnt else "—")
+    else:
+        st.info(f"{pick} 是最新一期，下一期还没开")
+
+    with st.expander(f"查看这 {rows_n} 期的明细", expanded=False):
+        st.dataframe(pd.DataFrame(detail), use_container_width=True,
+                     hide_index=True)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -2393,10 +2545,11 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabh, tabi, tabj, tabk, tabl, tabm, tab4, tab3 = st.tabs(
+    tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
          "实验J 属性杀号", "实验K 追热追冷", "实验L 简单版",
-         "实验M 跨球联动", "结论档案", "清理"])
+         "实验M 跨球联动", "实验N 自由联动", "结论档案",
+         "清理"])
     with tab2:
         _exp_pool(H)
     with tabh:
@@ -2411,6 +2564,8 @@ def render(df_data, H):
         _exp_simple(H)
     with tabm:
         _exp_cross_ball(H)
+    with tabn:
+        _exp_flex(H)
     with tab4:
         _archive()
     with tab3:
