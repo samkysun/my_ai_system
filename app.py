@@ -6232,8 +6232,6 @@ def main_app():
         page = st.radio("导航菜单", menu_options)
         st.divider()
 
-    _restore_page_state(page)
-
     if page == "📊 主控台": render_console(df_data)
     elif page == "📐 多维分析": render_multi_analysis(df_data)
     elif page == "🔗 深度联动": render_deep_linkage(df_data)
@@ -6329,7 +6327,6 @@ def main_app():
             st.warning("缺少 omission_page.py —— 需与 app.py 同目录并一起提交到 GitHub 仓库。")
     elif page == "⚙️ 后台管理": render_admin_panel()
 
-    _save_page_state(page)
 
 
 # ===== 刷新/重开后，用令牌自动恢复登录 =====
