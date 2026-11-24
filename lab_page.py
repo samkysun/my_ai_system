@@ -3413,7 +3413,8 @@ def _exp_attr_fusion(loader):
             index=3, key="lab_q_gate")
         _method = st.radio("最终号码生成方式",
                            ["联合概率（推荐）", "支持度（被几个属性推荐）",
-                            "门槛（被≥N个属性推荐）", "投票叠加"],
+                            "门槛（被≥N个属性推荐）",
+                            "双重（交集+门槛）", "投票叠加"],
                            horizontal=True, key="lab_q_method")
     if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
         acc_num = {}
@@ -3545,6 +3546,32 @@ def _exp_attr_fusion(loader):
                 st.caption("交集（所有属性都推荐）："
                            + ("、".join(str(x) for x in sorted(_inter))
                               if _inter else "空集"))
+            elif _method.startswith("双重"):
+                _inter_attrs = st.multiselect(
+                    "参与交集的属性（这些属性都必须推荐该号）",
+                    list(_sets_pa.keys()),
+                    default=list(_sets_pa.keys())[:7],
+                    key="lab_q_inter_attrs")
+                if not _inter_attrs:
+                    st.warning("请先选参与交集的属性")
+                    _final_list = []
+                else:
+                    _inter2 = set.intersection(
+                        *(_sets_pa[a] for a in _inter_attrs))
+                    _pass2 = [x for x in _inter2
+                              if _support.get(x, 0) >= int(_gate_v)]
+                    _pass2.sort(key=lambda x: (-_support.get(x, 0), x))
+                    _final_list = _pass2[:int(_final_n)]
+                    st.success(f"交集 {len(_inter_attrs)} 个属性 → "
+                               f"{len(_inter2)} 个号；再要求被 ≥{int(_gate_v)} "
+                               f"个属性推荐 → 共 {len(_pass2)} 个")
+                    if _final_list:
+                        st.markdown("**建议号码：**"
+                                    + "、".join(f"{x}({_support.get(x, 0)})"
+                                                for x in _final_list))
+                    else:
+                        st.warning("双重条件太严，没有号码同时满足 → "
+                                   "请减少交集属性或调低门槛")
             elif _method.startswith("门槛"):
                 _gate = int(_gate_v)
                 _pass = [(x, c) for x, c in _support.items()
