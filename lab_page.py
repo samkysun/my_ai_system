@@ -3463,6 +3463,57 @@ def _exp_attr_fusion(loader):
         for _a, vals in acc_val:
             st.caption(f"{_a}：{'、'.join(vals)}")
 
+    st.markdown("---")
+    st.markdown("### ⑤ 勾选不中属性 → 杀号")
+    st.caption("你在多维分析里判断哪些属性本期不会中，勾上后系统把这些属性"
+               "覆盖的号码杀掉，剩余的才是候选。")
+    _kill_attrs = st.multiselect(
+        "勾选「确定不中」的属性（可多选）", ATTRS, default=[],
+        key="lab_q_kill_attrs")
+    if _kill_attrs and st.button("▶ 计算剩余号码", key="lab_q_kill_run"):
+        _killed = set()
+        _detail = []
+        for _a in _kill_attrs:
+            _pp = _probs.get(_a)
+            if not _pp:
+                continue
+            _kk3 = int(_kmap.get(_a, 2))
+            _topv = [v for v, _ in sorted(_pp.items(), key=lambda z: -z[1])][:_kk3]
+            _nums_k = [x for x in range(lo, hi + 1)
+                       if _num_attr2(x, _a) in _topv]
+            _killed |= set(_nums_k)
+            _detail.append({"属性": _a, "最可能的值": "、".join(_topv),
+                            "杀掉号码": "、".join(str(x) for x in _nums_k)})
+        if not _killed:
+            st.warning("没有可杀的号码")
+        else:
+            _remain = [x for x in range(lo, hi + 1) if x not in _killed]
+            # 剩余号码按联合概率排序
+            _score = {}
+            for _x in _remain:
+                _s = 0.0
+                for _a4, _pp4 in _probs.items():
+                    _s += _m.log(_pp4.get(_num_attr2(_x, _a4), 1e-6))
+                _score[_x] = _s
+            _ranked = sorted(_remain, key=lambda x: -_score.get(x, 0))
+            st.markdown("**杀号明细**")
+            st.dataframe(pd.DataFrame(_detail), use_container_width=True,
+                         hide_index=True)
+            st.success(f"杀掉 {len(_killed)} 个号："
+                       + "、".join(str(x) for x in sorted(_killed)))
+            st.success(f"剩余 {len(_remain)} 个号（按联合概率排序）："
+                       + "、".join(str(x) for x in _ranked))
+            if idx0 + 1 < len(periods):
+                _act3 = data[idx0 + 1][1][tb - 1]
+                _in = _act3 in _remain
+                st.markdown(f"### 实际：{periods[idx0 + 1]} 期开 "
+                            f"**{_act3}**")
+                st.metric("是否在剩余号码里",
+                          "✅ 在" if _in else
+                          ("❌ 被误杀" if _act3 in _killed else "❌ 未中"))
+            else:
+                st.caption("最新一期，下一期未开")
+
     _pkg2 = st.session_state.get("_lab_q_pkg")
     if _pkg2:
         st.markdown("---")
