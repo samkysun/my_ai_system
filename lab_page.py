@@ -3410,7 +3410,7 @@ def _exp_attr_fusion(loader):
                                    key="lab_q_finaln")
         _method = st.radio("最终号码生成方式",
                            ["联合概率（推荐）", "支持度（被几个属性推荐）",
-                            "交集（所有属性都推荐）", "投票叠加"],
+                            "门槛（被≥N个属性推荐）", "投票叠加"],
                            horizontal=True, key="lab_q_method")
     if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
         acc_num = {}
@@ -3542,14 +3542,20 @@ def _exp_attr_fusion(loader):
                 st.caption("交集（所有属性都推荐）："
                            + ("、".join(str(x) for x in sorted(_inter))
                               if _inter else "空集"))
-            elif _method.startswith("交集"):
-                _final_list = sorted(_inter) if _inter else \
-                    [x for x, _ in sorted(_support.items(),
-                                          key=lambda z: (-z[1], z[0]))][:int(_final_n)]
-                st.success("最终号码（属性交集）："
-                           + "、".join(str(x) for x in _final_list))
-                if not _inter:
-                    st.warning("交集为空 → 已退回「被最多属性推荐」的号")
+            elif _method.startswith("门槛"):
+                _gate = st.number_input(
+                    "门槛：至少被几个属性推荐", 1, max(1, len(_sets_pa)),
+                    max(1, len(_sets_pa) - 4), 1, key="lab_q_gate")
+                _pass = [(x, c) for x, c in _support.items()
+                         if c >= int(_gate)]
+                _pass.sort(key=lambda z: (-z[1], z[0]))
+                _final_list = [x for x, _ in _pass][:int(_final_n)]
+                st.success(f"最终号码（被 ≥{int(_gate)} 个属性推荐，"
+                           f"共 {len(_pass)} 个）："
+                           + "、".join(f"{x}({_support[x]})"
+                                      for x in _final_list))
+                if not _pass:
+                    st.warning("没有号码达到门槛 → 请调低门槛")
             elif _method.startswith("联合") and _joint_top:
                 _final_list = list(_joint_top)
                 st.success("最终号码（联合概率最高）："
