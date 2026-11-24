@@ -2980,8 +2980,10 @@ def _exp_precise(loader):
                    + "、".join(str(x) for x in nums))
 
     if idx0 + 1 < n:
-        act = v_of(data[idx0 + 1][1][tb - 1], tattr)
-        st.info(f"实际下一期（{periods[idx0 + 1]}）：{tattr} = {act}"
+        _act_num = data[idx0 + 1][1][tb - 1]
+        act = v_of(_act_num, tattr)
+        st.info(f"实际下一期（{periods[idx0 + 1]}）：第{tb}球开奖号码 = "
+                f"{_act_num}（{tattr} {act}）"
                 + ("　✅ 命中" if rk and act in [v for v, _ in rk]
                    else "　❌ 未中" if rk else ""))
     else:
