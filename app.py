@@ -4887,6 +4887,87 @@ def _merge_total_from_source(token, repo):
 
 
 
+
+def _sync_zodiac_table(token, repo):
+    """按 _index.csv 补齐 _zodiac_by_period.csv 缺失的期"""
+    try:
+        import io as _io
+        import base64 as _b64
+        import urllib.parse as _up
+        import requests as _rq
+        ZOD = ["鼠", "牛", "虎", "兔", "龙", "蛇",
+               "马", "羊", "猴", "鸡", "狗", "猪"]
+        headers = {"Authorization": f"Bearer {token}",
+                   "Accept": "application/vnd.github.v3+json"}
+
+        def info(fp):
+            r = _rq.get(f"https://api.github.com/repos/{repo}/contents/"
+                        f"{_up.quote(fp)}", headers=headers, timeout=60)
+            return r.json() if r.status_code == 200 else None
+
+        def dl(i):
+            return _rq.get(_up.quote(i["download_url"], safe=":/?&=%"),
+                           timeout=120).content
+
+        zi = info("_zodiac_by_period.csv")
+        ii = info("_index.csv")
+        if not zi or not ii:
+            return False, "缺少生肖表或索引表"
+        ztxt = dl(zi).decode("utf-8-sig", errors="ignore")
+        itxt = dl(ii).decode("utf-8-sig", errors="ignore")
+
+        zrows = {}
+        order = []
+        for line in ztxt.strip().splitlines()[1:]:
+            parts = line.split(",")
+            if len(parts) >= 8 and parts[0].strip():
+                zrows[parts[0].strip()] = [x.strip() for x in parts[1:8]]
+                order.append(parts[0].strip())
+
+        idx = {}
+        for line in itxt.strip().splitlines()[1:]:
+            parts = line.split(",")
+            if len(parts) >= 8 and parts[0].strip():
+                try:
+                    idx[parts[0].strip()] = [int(x) for x in parts[1:8]]
+                except Exception:
+                    continue
+
+        added = 0
+        for p_ in sorted(idx):
+            if p_ in zrows:
+                continue
+            prev = [q for q in sorted(zrows) if q < p_]
+            if not prev:
+                continue
+            base = prev[-1]
+            bz = zrows[base]
+            bn = idx.get(base)
+            if not bn or bz[0] not in ZOD:
+                continue
+            off = (ZOD.index(bz[0]) - (bn[0] - 1)) % 12
+            zrows[p_] = [ZOD[(x - 1 + off) % 12] for x in idx[p_]]
+            order.append(p_)
+            added += 1
+
+        if not added:
+            return True, "无需补齐"
+
+        out = ["期号,生肖1,生肖2,生肖3,生肖4,生肖5,生肖6,生肖7"]
+        for p_ in sorted(zrows):
+            out.append(",".join([p_] + zrows[p_]))
+        content = ("\n".join(out)).encode("utf-8-sig")
+        payload = {"message": "补齐生肖表", "branch": "main",
+                   "sha": zi["sha"],
+                   "content": _b64.b64encode(content).decode()}
+        r = _rq.put(f"https://api.github.com/repos/{repo}/contents/"
+                    f"{_up.quote('_zodiac_by_period.csv')}",
+                    headers=headers, json=payload, timeout=120)
+        return (True, f"补 {added} 期") if r.status_code in (200, 201) \
+            else (False, f"推送失败 {r.status_code}")
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
 def _rebuild_index_csv(token, repo):
     """用 升序源文件 / 按序源文件 重建 _index.csv"""
     try:
@@ -5215,6 +5296,14 @@ def render_admin_panel():
                                         st.warning(f"索引表重建失败：{_msgi}")
                                 except Exception as _e_ix:
                                     st.warning(f"索引表重建异常：{_e_ix}")
+                                try:
+                                    _okz, _msgz = _sync_zodiac_table(token, repo)
+                                    if _okz:
+                                        st.success(f"✅ 生肖表已同步（{_msgz}）")
+                                    else:
+                                        st.warning(f"生肖表同步失败：{_msgz}")
+                                except Exception as _e_zz:
+                                    st.warning(f"生肖表同步异常：{_e_zz}")
                                 try:
                                     st.info("正在自动更新全套属性表（约 30~60 秒）…")
                                     _sync_full_suite(token, repo)
