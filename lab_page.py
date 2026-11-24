@@ -2465,6 +2465,144 @@ def _exp_flex(loader):
 
 
 # =====================================================================
+# 实验 O：多属性融合评分
+# =====================================================================
+def _exp_fusion(loader):
+    import math as _m
+    from collections import Counter as _C, defaultdict as _dd
+    st.markdown("#### 实验 O：多属性融合评分（综合选号）")
+    st.info("把多个属性各自的历史匹配结果折算成概率，给每个号码打分，"
+            "取分数最高的 N 个。属性越多、方向越一致，号码越集中。")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+    nball = len(data[0][1])
+    ATTRS = ["尾数", "数字合", "四宝", "物象", "方位", "福禄寿",
+             "生肖五行", "阴阳天地", "3模", "波色", "门数", "段数"]
+
+    def val(num, key):
+        if key == "尾数":
+            return str(num % 10)
+        if key == "3模":
+            return str(num % 3)
+        if key == "门数":
+            return f"{num // 10 + 1}门"
+        if key == "段数":
+            return f"{(num - 1) // 7 + 1}段"
+        return amap.get(num, {}).get(key, "")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        tgt_ball = st.selectbox("目标球位", list(range(1, nball + 1)),
+                                index=0, key="lab_o_ball")
+    with c2:
+        attr_t = st.selectbox("目标属性", ATTRS, index=0, key="lab_o_attr")
+    with c3:
+        topN = st.number_input("输出号码个数", 3, 20, 6, 1, key="lab_o_n")
+
+    used = st.multiselect("参与融合的属性（越多越集中）",
+                          ATTRS, default=["数字合", "尾数", "方位"],
+                          key="lab_o_attrs")
+    c4, c5 = st.columns(2)
+    with c4:
+        depth = st.number_input("联动行数", 1, 6, 1, 1, key="lab_o_depth")
+    with c5:
+        bt = st.number_input("回测期数", 100, 3000, 2000, 100,
+                             key="lab_o_bt")
+
+    if not used:
+        st.warning("请至少选一个属性")
+        return
+
+    d = int(depth)
+    lo, hi = int(tgt_ball), 43 + int(tgt_ball)
+    tseq = [val(x[1][tgt_ball - 1], attr_t) for x in data]
+    uni_t = sorted({x for x in tseq if x})
+
+    # 每个属性维度：用第 1 球该属性的排列做触发
+    seqs = {a: [val(x[1][0], a) for x in data] for a in used}
+
+    def scores_at(i, tables):
+        sc = {x: 0.0 for x in range(lo, hi + 1)}
+        for a in used:
+            s = seqs[a]
+            if i < d:
+                continue
+            pat = tuple(s[i - d + 1: i + 1])
+            c = tables[a].get(pat)
+            if not c:
+                continue
+            tot = sum(c.values())
+            for x in range(lo, hi + 1):
+                v = val(x, attr_t)
+                p = (c.get(v, 0) + 0.5) / (tot + 0.5 * max(1, len(uni_t)))
+                sc[x] += _m.log(p)
+        return sc
+
+    st.markdown("**当前期打分结果**")
+    tables = {a: _dd(_C) for a in used}
+    for i in range(1, n - 1):
+        for a in used:
+            s = seqs[a]
+            if i >= d:
+                tables[a][tuple(s[i - d: i])][tseq[i]] += 1
+    sc = scores_at(n - 1, tables)
+    ranked = sorted(sc.items(), key=lambda x: -x[1])[:int(topN)]
+    st.success(f"建议号码（{len(ranked)} 个）："
+               + "、".join(str(x) for x, _ in ranked))
+    st.dataframe(pd.DataFrame([{"号码": x, "得分": round(v, 2)}
+                               for x, v in ranked]),
+                 use_container_width=True, hide_index=True)
+    st.caption(f"{periods[-1]} 之后的下一期，目标第{tgt_ball}球 {attr_t}")
+
+    if not st.button("▶ 回测融合评分", key="lab_o_run"):
+        return
+
+    start = max(300, n - int(bt))
+    tables = {a: _dd(_C) for a in used}
+    ok = tot = cnt = 0
+    detail = []
+    for i in range(start, n - 1):
+        if i >= d:
+            for a in used:
+                s = seqs[a]
+                tables[a][tuple(s[i - d: i])][tseq[i]] += 1
+        sc = scores_at(i, tables)
+        rk = sorted(sc.items(), key=lambda x: -x[1])[:int(topN)]
+        nums = [x for x, _ in rk]
+        if not nums:
+            continue
+        actual = data[i + 1][1][tgt_ball - 1]
+        tot += 1
+        cnt += len(nums)
+        hit = actual in nums
+        ok += 1 if hit else 0
+        detail.append({"期号": periods[i + 1], "开奖号": actual,
+                       "候选": "、".join(str(x) for x in nums),
+                       "命中": "★" if hit else ""})
+
+    if not tot:
+        st.warning("样本不足")
+        return
+    rate = ok / tot * 100
+    avg = cnt / tot
+    base = avg / (hi - lo + 1) * 100
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("命中率", f"{rate:.1f}%", f"{ok}/{tot}")
+    m2.metric("平均候选", f"{avg:.1f} 个")
+    m3.metric("随机基线", f"{base:.1f}%")
+    m4.metric("优势", f"{rate-base:+.1f}")
+    detail.reverse()
+    st.dataframe(pd.DataFrame(detail), use_container_width=True,
+                 hide_index=True, height=320)
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -2663,11 +2801,11 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tab4, tab3 = st.tabs(
+    tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tab4, tab3 = st.tabs(
         ["实验B 组合池", "实验H 六码中三", "实验I 加注模拟",
          "实验J 属性杀号", "实验K 追热追冷", "实验L 简单版",
-         "实验M 跨球联动", "实验N 自由联动", "结论档案",
-         "清理"])
+         "实验M 跨球联动", "实验N 自由联动", "实验O 融合评分",
+         "结论档案", "清理"])
     with tab2:
         _exp_pool(H)
     with tabh:
@@ -2684,6 +2822,8 @@ def render(df_data, H):
         _exp_cross_ball(H)
     with tabn:
         _exp_flex(H)
+    with tabo:
+        _exp_fusion(H)
     with tab4:
         _archive()
     with tab3:
