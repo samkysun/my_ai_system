@@ -6086,12 +6086,13 @@ def render_auto_ai_page():
 # 会员页面权限（存 ai_board，source="__perms__"）
 # ==========================================
 _TAB_PAGES = ["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "🧬 属性融合"]
+_WORKBENCH = "🧩 分析工作台"
 
 _ALL_PAGES = [
     "📊 主控台", "📐 多维分析", "🔗 深度联动", "🧠 AI推演",
     "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池",
     "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统",
-    "🎯 精准选号", "🎯 8码复式", "🧬 属性融合",
+    "🎯 精准选号", "🎯 8码复式", "🧬 属性融合", "🧩 分析工作台",
 ]
 
 
@@ -6241,13 +6242,15 @@ def main_app():
         page = st.radio("导航菜单", menu_options)
         st.divider()
 
-    # ===== 常驻标签：这四页始终挂载，切换不丢状态 =====
+    # ===== 分析工作台：仅在选中该菜单时渲染 =====
     _tp_ok = [p for p in _TAB_PAGES
               if is_admin or (_allowed and p in _allowed)]
-    if _tp_ok:
-        _wc = st.expander("🧩 分析工作台（多维分析 / 深度联动 / AI推演 / 属性融合）",
-                          expanded=False)
-        _tabs4 = _wc.tabs(_tp_ok)
+    if page == _WORKBENCH and _tp_ok:
+        for _pfx, _tag in (("multi_", "multi"), ("dl_", "dl"),
+                           ("ai_", "ai"), ("lab_q_", "fusion")):
+            if lab_page is not None:
+                lab_page.page_state_seed(_tag, _pfx)
+        _tabs4 = st.tabs(_tp_ok)
         for _tb, _tp in zip(_tabs4, _tp_ok):
             with _tb:
                 try:
@@ -6259,20 +6262,21 @@ def main_app():
                         render_ai(df_data)
                     elif _tp == "🧬 属性融合":
                         if render_fusion_attr:
-                            if lab_page is not None:
-                                lab_page.page_state_seed("fusion", "lab_q_")
                             render_fusion_attr(df_data, {
                                 "load_excel_data": load_excel_data,
                                 "board_add": _board_add,
                                 "gh_read": _gh_read_text,
                                 "gh_write": _gh_write_text,
                                 "supabase": get_supabase_client})
-                            if lab_page is not None:
-                                lab_page.page_state_snap("fusion", "lab_q_")
                         else:
                             st.error("fusion_attr_page.py 未找到")
                 except Exception as _e_tab:
                     st.error(f"{_tp} 出错：{type(_e_tab).__name__}: {_e_tab}")
+
+    if page == _WORKBENCH and _tp_ok and lab_page is not None:
+        for _pfx, _tag in (("multi_", "multi"), ("dl_", "dl"),
+                           ("ai_", "ai"), ("lab_q_", "fusion")):
+            lab_page.page_state_snap(_tag, _pfx)
 
     if page == "📊 主控台": render_console(df_data)
     elif page == "🎡 轮盘系统":
