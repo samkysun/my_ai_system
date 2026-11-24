@@ -162,15 +162,22 @@ td.k{{width:8%;text-align:center;}}
         st.markdown(f"**{pick} 开奖：** {'、'.join(str(x) for x in draw)}")
         st.markdown(f"**命中号码（{len(hit_nums)} 个）：** "
                     + ("、".join(str(x) for x in hit_nums) or "无"))
-        m1, m2, m3 = st.columns(3)
+        _ret = len(win) * PAYOUT
+        _cost = len(combos)
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("中奖组合数", len(win))
-        m2.metric("投入", len(combos))
-        m3.metric("回报", f"{len(win)*PAYOUT:.0f}")
-        if win:
-            st.success("中奖组合：" + " ｜ ".join(
-                "、".join(str(x) for x in c) for c in win))
+        m2.metric("投入", _cost)
+        m3.metric("回报", f"{_ret:.0f}")
+        m4.metric("本期盈亏", f"{_ret-_cost:+.0f}",
+                  "赚" if _ret > _cost else "亏")
+        if len(hit_nums) < 3:
+            st.error(f"只中 {len(hit_nums)} 个号 → 0 组中奖 → "
+                     f"投入 {_cost} 全亏")
         else:
-            st.warning("本期没有中奖组合")
+            st.success(f"中 {len(hit_nums)} 个号 → {len(win)} 组中奖 → "
+                       f"回报 {_ret:.0f}，盈亏 {_ret-_cost:+.0f}")
+            st.markdown("中奖组合：" + " ｜ ".join(
+                "、".join(str(x) for x in c) for c in win))
 
     with tab3:
         c1, c2 = st.columns(2)
@@ -208,4 +215,5 @@ td.k{{width:8%;text-align:center;}}
                                file_name="8码回测.csv", mime="text/csv",
                                key="c8_dl2")
             st.caption("说明：中奖组合数 = 开奖 7 个号里落进你 8 码的三数组合数；"
-                       "命中 3 个号 = 1 组，中 4 个号 = 4 组。")
+                       "命中 3 个号 = 1 组，中 4 个号 = 4 组；"
+                       "中 2 个及以下 = 0 组，投入全亏。")
