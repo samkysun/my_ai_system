@@ -2848,27 +2848,27 @@ def _exp_docs():
 def _exp_precise(loader):
     import math as _m
     from collections import Counter as _C, defaultdict as _dd
-    st.markdown("#### 实验 P：属性值精准选号（内测最优）")
-    st.success("内测结果：预测「数字合」比预测「尾数」更准。"
-               "取 1 个值≈2.7 个号、命中 17%；取 2 个值≈5.9 个号、命中 33%；"
-               "取 3 个值≈9.4 个号、命中 47%。（随机分别 6%、13%、21%）")
+    st.markdown("#### 实验 P：属性值精准选号（支持多球位融合）")
+    st.success("内测：预测「数字合」优于「尾数」。第1球单球：1 值≈2.7 号/17%、"
+               "2 值≈5.9 号/33%、3 值≈9.4 号/47%。"
+               "多球位融合内测未见提升，可自行勾选对比。")
     with st.expander("📘 原理与使用", expanded=False):
         st.markdown("""
 **原理**
-1. 目标不再是单个号码，而是该号码的「数字合」（如 1~49 的数字合共 11 类）。
-2. 用多个属性（尾数、方位、四宝…）各自找历史相似期，统计下一期数字合的分布。
-3. 每个属性给各数字合投票（概率），取对数相加得分。
-4. 取分数最高的 K 个数字合 → 对应号码就是建议（每类含 4~5 个号）。
+1. 目标是该球的「属性值」（默认数字合，共 11 类，每类 4~5 个号）。
+2. 每个「基准球位 + 属性」组合各自找历史相似期，统计下一期目标属性分布。
+3. 各组合给属性值投票（概率），取对数相加得分。
+4. 取分数最高的 K 个属性值 → 对应号码即建议。
 
-**为什么比尾数准**
-数字合只有 11 类，尾数有 10 类但分布更散；
-数字合的历史条件分布更集中，投票更一致。
+**多球位融合**
+勾选多个基准球位时，每个球位的属性各自投票，合起来算分。
+内测结论：1 个球位（第1球）已经最好；多球位会让候选略少但命中略降。
 
 **使用**
-1. 选目标球位、目标属性（默认数字合）
-2. 选参与融合的属性
-3. 设取几个属性值（K）
-4. 点「▶ 计算并回测」
+1. 选目标球位、目标属性、取几个属性值
+2. 勾选基准球位（默认只选 1）
+3. 勾选参与融合的属性
+4. 点「▶ 回测」
 """)
 
     data = _load_index6(loader)
@@ -2900,6 +2900,9 @@ def _exp_precise(loader):
     with c3:
         kk = st.number_input("取几个属性值", 1, 4, 2, 1, key="lab_p_k")
 
+    base_balls = st.multiselect("基准球位（可多选做融合）",
+                                list(range(1, nball + 1)), default=[1],
+                                key="lab_p_balls")
     used = st.multiselect("参与融合的属性",
                           ATTRS, default=["尾数", "方位", "四宝"],
                           key="lab_p_attrs")
@@ -2913,36 +2916,36 @@ def _exp_precise(loader):
         bt = st.number_input("回测期数", 100, 3000, 2000, 100,
                              key="lab_p_bt")
 
-    if not used:
-        st.warning("请至少选一个融合属性")
+    if not used or not base_balls:
+        st.warning("请至少选 1 个基准球位和 1 个属性")
         return
 
     lo, hi = int(tb), 43 + int(tb)
     tseq = [v_of(x[1][tb - 1], tattr) for x in data]
     uni = sorted({x for x in tseq if x})
-    seqs = {a: [v_of(x[1][0], a) for x in data] for a in used}
+    dims = [(b, a) for b in base_balls for a in used]
+    seqs = {k: [v_of(x[1][k[0] - 1], k[1]) for x in data] for k in dims}
     dd = int(d)
 
     def predict(i, tables):
+        if i < dd:
+            return None
         sc = {v: 0.0 for v in uni}
-        for a in used:
-            if i < dd:
-                return None
-            c = tables[a].get(tuple(seqs[a][i - dd + 1: i + 1]))
+        for k in dims:
+            c = tables[k].get(tuple(seqs[k][i - dd + 1: i + 1]))
             if not c:
                 continue
             tot = sum(c.values())
             for v in uni:
-                sc[v] += _m.log((c.get(v, 0) + 0.5)
-                                / (tot + 0.5 * len(uni)))
+                sc[v] += _m.log((c.get(v, 0) + 0.5) / (tot + 0.5 * len(uni)))
         return sorted(sc.items(), key=lambda z: -z[1])[:int(kk)]
 
     idx0 = periods.index(pick)
-    tables = {a: _dd(_C) for a in used}
+    tables = {k: _dd(_C) for k in dims}
     for i in range(1, idx0 + 1):
-        for a in used:
-            if i >= dd:
-                tables[a][tuple(seqs[a][i - dd: i])][tseq[i]] += 1
+        if i >= dd:
+            for k in dims:
+                tables[k][tuple(seqs[k][i - dd: i])][tseq[i]] += 1
     rk = predict(idx0, tables) or []
     if rk:
         vals = [v for v, _ in rk]
@@ -2967,12 +2970,12 @@ def _exp_precise(loader):
     if not st.button("▶ 回测", key="lab_p_run"):
         return
     start = max(300, n - int(bt))
-    tables = {a: _dd(_C) for a in used}
+    tables = {k: _dd(_C) for k in dims}
     ok = tot = cnt = 0
     for i in range(start, n - 1):
-        for a in used:
-            if i >= dd:
-                tables[a][tuple(seqs[a][i - dd: i])][tseq[i]] += 1
+        if i >= dd:
+            for k in dims:
+                tables[k][tuple(seqs[k][i - dd: i])][tseq[i]] += 1
         rr = predict(i, tables)
         if not rr:
             continue
