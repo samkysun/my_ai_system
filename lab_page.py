@@ -3335,6 +3335,19 @@ def _exp_attr_fusion(loader):
                     acc_num[x] = acc_num.get(x, 0) + 1
             st.dataframe(pd.DataFrame(_rows), use_container_width=True,
                          hide_index=True)
+            # 实际结果核对（逐属性）
+            if idx0 + 1 < n:
+                _anum = data[idx0 + 1][1][tb - 1]
+                _aval = _tseq[idx0 + 1]
+                _rec_vals = {v for v, _ in _rk}
+                _say = (", ".join(label(v, _a) for v, _ in _rk))
+                if _aval in _rec_vals:
+                    st.success(f"{{}} 期开 {{}}（{{}}：{{}}）→ ✅ 测中 {{}}".format(
+                        periods[idx0 + 1], _anum, _a, label(_aval, _a),
+                        label(_aval, _a)))
+                else:
+                    st.error(f"{{}} 期开 {{}}（{{}}：{{}}）→ ❌ 未中".format(
+                        periods[idx0 + 1], _anum, _a, label(_aval, _a)))
             acc_val.append((_a, [label(v, _a) for v, _ in _rk]))
 
         _pkg = {"期号": periods[idx0], "球位": tb,
