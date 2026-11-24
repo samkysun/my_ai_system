@@ -3408,17 +3408,29 @@ def _exp_attr_fusion(loader):
                     1, key=f"lab_q_k_{_a2}")
         _final_n = st.number_input("最终号码个数（可扩到 15）", 1, 15, 5, 1,
                                    key="lab_q_finaln")
-        _n_inter_v = st.selectbox(
-            "交集选几个属性（这几个都要推荐该号）",
-            list(range(3, 15)), index=4, key="lab_q_n_inter")
-        _gate_v = st.selectbox(
-            "门槛：至少被几个属性推荐", [7, 8, 9, 10, 11, 12, 13, 14],
-            index=3, key="lab_q_gate")
-        _method = st.radio("最终号码生成方式",
-                           ["联合概率（推荐）", "支持度（被几个属性推荐）",
-                            "门槛（被≥N个属性推荐）",
-                            "双重（交集+门槛）", "投票叠加"],
-                           horizontal=True, key="lab_q_method")
+        _c1x, _c2x = st.columns(2)
+        with _c1x:
+            _cb_joint = st.checkbox("联合概率（排序）", value=True,
+                                    key="lab_q_cb_joint")
+            _cb_supp = st.checkbox("支持度（排序）", value=False,
+                                   key="lab_q_cb_supp")
+        with _c2x:
+            _cb_gate = st.checkbox("门槛（被≥N个属性推荐）", value=False,
+                                   key="lab_q_cb_gate")
+            _cb_inter = st.checkbox("交集（N个属性都要推荐）", value=False,
+                                    key="lab_q_cb_inter")
+        _n_inter_v = 7
+        _gate_v = 10
+        if _cb_gate:
+            _gate_v = st.selectbox(
+                "门槛：至少被几个属性推荐",
+                [7, 8, 9, 10, 11, 12, 13, 14], index=3,
+                key="lab_q_gate")
+        if _cb_inter:
+            _n_inter_v = st.selectbox(
+                "交集选几个属性（这几个都要推荐该号）",
+                list(range(3, 15)), index=4, key="lab_q_n_inter")
+        _method = "叠加条件"
     if multi_attrs:
         st.caption("调整参数后会自动重算")
     if multi_attrs:
@@ -3540,82 +3552,67 @@ def _exp_attr_fusion(loader):
             _vote_list = [x for x, _ in rank[:int(_final_n)]]
             _act_now = (data[idx0 + 1][1][tb - 1]
                         if idx0 + 1 < len(periods) else None)
-            if _method.startswith("支持度"):
-                _sup_sorted = sorted(_support.items(),
-                                     key=lambda z: (-z[1], z[0]))
-                _final_list = [x for x, _ in _sup_sorted][:int(_final_n)]
-                st.success("最终号码（被最多属性推荐）："
-                           + "、".join(
-                               (f"**{x}** ★" if x == _act_now else f"{x}({_support[x]}属性)")
-                               for x in _final_list))
-                st.caption("交集（所有属性都推荐）："
-                           + ("、".join(str(x) for x in sorted(_inter))
-                              if _inter else "空集"))
-            elif _method.startswith("双重"):
-                _n_inter = int(_n_inter_v)
-                # 按各属性推荐强度排序，取前 N 个做交集
-                _strength = {}
-                for _a7 in _sets_pa:
-                    _pp7 = _probs_all.get(_a7) or {}
-                    _top7 = sorted(_pp7.values(), reverse=True)
-                    _strength[_a7] = _top7[0] if _top7 else 0
-                _ordered = sorted(_sets_pa.keys(),
-                                  key=lambda z: -_strength.get(z, 0))
-                _inter_attrs = _ordered[:_n_inter]
-                if not _inter_attrs:
-                    st.warning("请先选参与交集的属性")
-                    _final_list = []
-                else:
-                    _inter2 = set.intersection(
-                        *(_sets_pa[a] for a in _inter_attrs))
-                    _pass2 = [x for x in _inter2
-                              if _support.get(x, 0) >= int(_gate_v)]
-                    _pass2.sort(key=lambda x: (-_support.get(x, 0), x))
-                    _final_list = _pass2[:int(_final_n)]
-                    st.success(f"交集 {len(_inter_attrs)} 个属性 → "
-                               f"{len(_inter2)} 个号；再要求被 ≥{int(_gate_v)} "
-                               f"个属性推荐 → 共 {len(_pass2)} 个")
-                    if _final_list:
-                        st.markdown("**建议号码：**"
-                                    + "、".join(f"{x}({_support.get(x, 0)})"
-                                                for x in _final_list))
-                    else:
-                        st.warning("双重条件太严，没有号码同时满足 → "
-                                   "请减少交集属性或调低门槛")
-            elif _method.startswith("门槛"):
-                _gate = int(_gate_v)
-                _pass = [(x, c) for x, c in _support.items()
-                         if c >= int(_gate)]
-                _pass.sort(key=lambda z: (-z[1], z[0]))
-                _final_list = [x for x, _ in _pass][:int(_final_n)]
-                st.success(f"最终号码（被 ≥{int(_gate)} 个属性推荐，"
-                           f"共 {len(_pass)} 个）："
-                           + "、".join(f"{x}({_support[x]})"
-                                      for x in _final_list))
-                if not _pass:
-                    st.warning("没有号码达到门槛 → 请调低门槛")
-            elif _method.startswith("联合") and _joint_top:
-                _final_list = list(_joint_top)
-                st.success("最终号码（联合概率最高）："
-                           + "、".join(
-                               (f"**{x}** ★" if x == _act_now else str(x))
-                               for x in _final_list)
-                           + (f"　→ 实际开 {_act_now}，✅ 测中"
-                              if _act_now in _final_list else
-                              (f"　→ 实际开 {_act_now}，❌ 未中"
-                               if _act_now is not None else "")))
-                st.caption("投票叠加法会给出："
-                           + "、".join(str(x) for x in _vote_list))
+
+            # === 叠加条件 ===
+            _pool = set(range(lo, hi + 1))
+            _notes = []
+            if _cb_gate:
+                _pool = {x for x in _pool if _support.get(x, 0) >= int(_gate_v)}
+                _notes.append(f"门槛≥{int(_gate_v)}个属性")
+            if _cb_inter:
+                _n_i2 = int(_n_inter_v)
+                _strength2 = {}
+                for _a8 in _sets_pa:
+                    _pp8 = _probs_all.get(_a8) or {}
+                    _tops8 = sorted(_pp8.values(), reverse=True)
+                    _strength2[_a8] = _tops8[0] if _tops8 else 0
+                _ord2 = sorted(_sets_pa.keys(),
+                               key=lambda z: -_strength2.get(z, 0))
+                _attr_i = _ord2[:_n_i2]
+                if _attr_i:
+                    _pool &= set.intersection(
+                        *(_sets_pa[a] for a in _attr_i))
+                    _notes.append(f"交集{len(_attr_i)}个属性")
+            if not _notes:
+                st.caption("未勾选筛选条件 → 只按排序输出")
+
+            # 排序
+            _sc_all = {}
+            for _x in _pool:
+                _s = 0.0
+                for _a5, _pp5 in _probs_all.items():
+                    _s += _m.log(_pp5.get(_num_attr2(_x, _a5), 1e-6))
+                _sc_all[_x] = _s
+            if _cb_joint:
+                _ordered2 = sorted(_pool, key=lambda x: -_sc_all.get(x, 0))
+                _rank_way = "联合概率"
+            elif _cb_supp:
+                _ordered2 = sorted(_pool,
+                                   key=lambda x: (-_support.get(x, 0), x))
+                _rank_way = "支持度"
             else:
-                _final_list = list(_vote_list)
-                st.success("最终号码（推荐次数最多）："
-                           + "、".join(
-                               (f"**{x}** ★" if x == _act_now else str(x))
-                               for x in _final_list)
-                           + (f"　→ 实际开 {_act_now}，✅ 测中"
-                              if _act_now in _final_list else
-                              (f"　→ 实际开 {_act_now}，❌ 未中"
-                               if _act_now is not None else "")))
+                _ordered2 = [x for x in _vote_list if x in _pool]
+                _ordered2 += [x for x in sorted(_pool) if x not in _ordered2]
+                _rank_way = "投票"
+
+            _final_list = _ordered2[:int(_final_n)]
+            if _notes:
+                st.caption("筛选：" + " ＋ ".join(_notes)
+                           + f"　排序：{_rank_way}"
+                           + f"　剩余 {len(_pool)} 个号")
+            st.success("最终号码（" + _rank_way + "）："
+                       + "、".join(
+                           (f"**{x}** ★" if x == _act_now else
+                            (f"{x}({_support.get(x, 0)})"
+                             if _cb_supp or _cb_gate else str(x)))
+                           for x in _final_list)
+                       + (f"　→ 实际开 {_act_now}，✅ 测中"
+                          if _act_now in _final_list else
+                          (f"　→ 实际开 {_act_now}，❌ 未中"
+                           if _act_now is not None else "")))
+            if not _final_list:
+                st.warning("叠加条件太严，没有号码 → 请减少条件或调低门槛")
+
             _pkg["号码累计"] = {str(x): {"覆盖属性数": len(d["属性"]),
                                           "次数": d["次数"],
                                           "属性": d["属性"]}
