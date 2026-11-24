@@ -96,6 +96,45 @@ def render(df_data, loader):
             "序号": range(1, len(combos) + 1),
             "组合": ["、".join(str(x) for x in c) for c in combos]}),
             use_container_width=True, hide_index=True, height=380)
+        # 打印单
+        import datetime as _dt
+        _rows_html = ""
+        _per = 4
+        for _i in range(0, len(combos), _per):
+            _cells = ""
+            for _c in combos[_i:_i + _per]:
+                _cells += ("<td class='c'>" + "、".join(str(x) for x in _c)
+                           + "</td><td class='k'>☐</td>")
+            _rows_html += "<tr>" + _cells + "</tr>"
+        _html = f"""<!doctype html><html><head><meta charset='utf-8'>
+<title>8码三中三打印单</title>
+<style>
+body{{font-family:'Microsoft YaHei',sans-serif;margin:14px;}}
+h2{{margin:4px 0 8px 0;font-size:18px;}}
+.info{{font-size:13px;margin-bottom:8px;}}
+table{{border-collapse:collapse;width:100%;}}
+td,th{{border:1px solid #999;padding:5px 6px;font-size:13px;}}
+th{{background:#eee;}}
+td.c{{width:32%;}}
+td.k{{width:8%;text-align:center;}}
+@media print{{ @page{{size:A4;margin:10mm;}} }}
+</style></head><body>
+<h2>8 码复式 · 三中三（共 {len(combos)} 组）</h2>
+<div class='info'>号码：{('、'.join(str(x) for x in nums))}　｜　
+单组赔率：{int(PAYOUT)} 倍　｜　每期投入：{len(combos)} 注　｜　
+打印时间：{_dt.datetime.now():%Y-%m-%d %H:%M}</div>
+<table><thead><tr><th>组合</th><th>✔</th><th>组合</th><th>✔</th>
+<th>组合</th><th>✔</th><th>组合</th><th>✔</th></tr></thead>
+<tbody>{_rows_html}</tbody></table>
+<div class='info' style='margin-top:8px;'>核对：开奖 7 个号中与你 8 码重合 3 个 → 1 组中奖；
+重合 4 个 → 4 组中奖；重合 5 个 → 10 组中奖。</div>
+</body></html>"""
+        st.download_button("🖨 生成打印单（HTML，可打印）",
+                           _html.encode("utf-8"),
+                           file_name="8码三中三打印单.html",
+                           mime="text/html", key="c8_print")
+        st.caption("下载后双击打开 → Ctrl+P 打印，可带到投注点逐组对照。")
+
         st.download_button("📥 下载组合清单",
                            pd.DataFrame(
                                [{"组合": "、".join(str(x) for x in c)}
