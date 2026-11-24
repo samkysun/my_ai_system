@@ -4827,7 +4827,7 @@ def render_admin_panel():
                             _pick = st.multiselect(
                                 "可见页面", _ALL_PAGES,
                                 default=(_cur if _cur is not None
-                                         else _ALL_PAGES),
+                                         else ["📊 主控台"]),
                                 key=f"perm_{_u}")
                             _p1, _p2 = st.columns(2)
                             with _p1:
@@ -6174,12 +6174,13 @@ def main_app():
         menu_options = ["📊 主控台"]
         if is_admin:
             menu_options.extend([x for x in _ALL_PAGES if x != "📊 主控台"])
-        elif is_vip:
-            _base = [x for x in _ALL_PAGES if x != "📊 主控台"]
-            if _allowed:
-                menu_options.extend([x for x in _base if x in _allowed])
-            else:
-                menu_options.extend(_base)
+        elif _allowed:
+            # 只显示管理员分配的页面（主控台默认已在内）
+            menu_options.extend([x for x in _ALL_PAGES
+                                 if x != "📊 主控台" and x in _allowed])
+        else:
+            # 未分配权限：只能看主控台
+            pass
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
