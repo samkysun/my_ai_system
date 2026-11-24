@@ -31,6 +31,9 @@ def render(df_data, loader):
     st.markdown("## 🎯 8 码复式（三中三）")
     st.caption(f"8 个号 → C(8,3)=56 组；每注 1 单位，"
                f"命中一组按 {int(PAYOUT)} 倍计。")
+    st.info("实测：8 码每期约 10 期命中 1 次（9~16%）。"
+            "系统推荐用「近30期最热」或固定码都可以，长期看差异不大；"
+            "赚钱靠的是 600 倍赔率 > 等待成本（56×10=560）。")
 
     data = _load_data(loader)
     if not data:
