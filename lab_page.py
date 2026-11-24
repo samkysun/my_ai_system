@@ -3324,7 +3324,10 @@ def _exp_attr_fusion(loader):
                                      / (_tt + 0.5 * len(_uni)))
             _kk2 = int(_kmap.get(_a, int(kk)))
             _rk = sorted(_sc.items(), key=lambda z: -z[1])[:_kk2]
-            _probs[_a] = dict(_sc)
+            _mx = max(_sc.values()) if _sc else 0.0
+            _w = {v: _m.exp(s - _mx) for v, s in _sc.items()}
+            _wt = sum(_w.values()) or 1.0
+            _probs[_a] = {v: w / _wt for v, w in _w.items()}
             st.markdown(f"#### ========= {periods[idx0]}期 升序 第{tb}球 "
                         f"{_a} 推荐 =========")
             st.write("推荐：" + "、".join(label(v, _a) for v, _ in _rk)
