@@ -3488,24 +3488,14 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tabq, tab4, tab3 = st.tabs(
-        ["📖 说明书", "实验B 组合池", "实验H 六码中三",
-         "实验I 加注模拟", "实验J 属性杀号", "实验K 追热追冷",
-         "实验L 简单版", "实验M 跨球联动", "实验N 自由联动",
-         "实验O 融合评分", "实验Q 属性推荐", "结论档案",
-         "清理"])
+    tabd, tabh, tabl, tabm, tabn, tabo, tabq, tab4, tab3 = st.tabs(
+        ["📖 说明书", "实验H 六码中三", "实验L 简单版",
+         "实验M 跨球联动", "实验N 自由联动", "实验O 融合评分",
+         "实验Q 属性推荐", "结论档案", "清理"])
     with tabd:
         _exp_docs()
-    with tab2:
-        _exp_pool(H)
     with tabh:
         _exp_six_pick(H)
-    with tabi:
-        _exp_stake_plan(H)
-    with tabj:
-        _exp_kill_rank(H)
-    with tabk:
-        _exp_hot_cold(H)
     with tabl:
         _exp_simple(H)
     with tabm:
@@ -3523,13 +3513,24 @@ def render(df_data, H):
         _cleanup(H)
 
     st.divider()
-    st.caption("📁 旧实验（已收进下拉框，需要时再打开）")
+    st.caption("📁 实验下拉框（选一个再打开）")
     _old = st.selectbox(
-        "选择旧实验",
-        ["（不打开）", "实验C 形态组合", "实验D 属性联动",
+        "选择实验",
+        ["（不打开）",
+         "实验B 组合池", "实验I 加注模拟", "实验J 属性杀号",
+         "实验K 追热追冷",
+         "实验C 形态组合", "实验D 属性联动",
          "实验E 锁定目标球", "实验F 三三组合", "实验G 热号回测"],
         index=0, key="lab_old_pick")
-    if _old.startswith("实验C"):
+    if _old.startswith("实验B"):
+        _exp_pool(H)
+    elif _old.startswith("实验I"):
+        _exp_stake_plan(H)
+    elif _old.startswith("实验J"):
+        _exp_kill_rank(H)
+    elif _old.startswith("实验K"):
+        _exp_hot_cold(H)
+    elif _old.startswith("实验C"):
         _exp_gate3(H)
     elif _old.startswith("实验D"):
         _exp_link_attr(H)
