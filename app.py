@@ -4816,6 +4816,32 @@ def render_admin_panel():
                         if selected_vips:
                             client.table("users").update({"is_vip": True}).in_("username", selected_vips).execute()
                         st.success("✅ 授权已更新！")
+
+                    st.divider()
+                    st.markdown("### 🎛️ 会员页面分配")
+                    st.caption("给每个会员勾选他能看到的页面；"
+                               "没保存过的会员默认看全部页面。")
+                    for _u in all_users:
+                        _cur = load_user_pages(client, _u)
+                        with st.expander(f"👤 {_u}", expanded=False):
+                            _pick = st.multiselect(
+                                "可见页面", _ALL_PAGES,
+                                default=(_cur if _cur is not None
+                                         else _ALL_PAGES),
+                                key=f"perm_{_u}")
+                            _p1, _p2 = st.columns(2)
+                            with _p1:
+                                if st.button("💾 保存该会员页面",
+                                             key=f"perm_save_{_u}"):
+                                    if save_user_pages(client, _u, _pick):
+                                        st.success(f"已保存 {_u} 的页面权限")
+                                    else:
+                                        st.error("保存失败")
+                            with _p2:
+                                if st.button("↩️ 恢复全部页面",
+                                             key=f"perm_reset_{_u}"):
+                                    save_user_pages(client, _u, _ALL_PAGES)
+                                    st.success(f"{_u} 已恢复全部页面")
                 else: st.warning("暂无其他注册用户。")
         except Exception as e: st.error(f"读取失败: {e}")
 
