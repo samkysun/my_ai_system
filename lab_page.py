@@ -3168,7 +3168,7 @@ def _exp_attr_fusion(loader):
 
     ATTRS = ["生肖", "尾数", "3模", "数字合", "四宝", "物象", "方位",
              "数字五行", "尾五行", "生肖五行", "颜色肖", "阴阳天地",
-             "家野", "吉凶", "男女", "福禄寿", "大小肖",
+             "福禄寿", "大小肖",
              "波色", "波单双", "门数", "段数"]
 
     def label(v, attr):
@@ -3240,25 +3240,6 @@ def _exp_attr_fusion(loader):
         st.session_state["_lab_q_seq_cache"] = (_ck, seqs, tseq)
     st.caption(f"缓存：{len(dims)} 个维度 × {n} 期")
 
-    if _pc and _pc[0] == _pk:
-        _probs_all = _pc[1]
-    else:
-        _probs_all = {}
-        for _a0 in ATTRS:
-            _s0 = [v_at(i, tb, _a0) for i in range(n)]
-            _pat0 = tuple(_s0[idx0 - d + 1: idx0 + 1])
-            _c0 = _C()
-            for _j in range(d - 1, idx0):
-                if tuple(_s0[_j - d + 1: _j + 1]) == _pat0:
-                    _c0[_s0[_j + 1]] += 1
-            if not _c0:
-                continue
-            _tt0 = sum(_c0.values())
-            _u0 = sorted({x for x in _s0 if x})
-            _probs_all[_a0] = {
-                v: (_c0.get(v, 0) + 0.5) / (_tt0 + 0.5 * len(_u0))
-                for v in _u0}
-        st.session_state["_lab_q_allprobs"] = (_pk, _probs_all)
     uni = sorted({x for x in tseq if x})
     # 各球位号码区间（经验区间）
     lo, hi = BALL_RANGES.get(int(tb), (int(tb), 43 + int(tb)))
@@ -3278,8 +3259,7 @@ def _exp_attr_fusion(loader):
     idx0 = periods.index(pick)
 
     # ===== 所有属性的推荐概率（供⑤⑥使用，不依赖按钮）=====
-    _pk = ("all", idx0, d, tb, n)
-    _pc = st.session_state.get("_lab_q_allprobs")
+    # 联动表缓存
     _tk = ("tabs", tuple(dims), idx0, d, n)
     _tc = st.session_state.get("_lab_q_tab_cache")
     if _tc and _tc[0] == _tk:
@@ -3287,6 +3267,31 @@ def _exp_attr_fusion(loader):
     else:
         tabs = build_tables(idx0)
         st.session_state["_lab_q_tab_cache"] = (_tk, tabs)
+
+    # 所有属性推荐概率（供⑤⑥使用）
+    _pk2 = ("all", idx0, d, tb, n)
+    _pc2 = st.session_state.get("_lab_q_allprobs")
+    if _pc2 and _pc2[0] == _pk2:
+        _probs_all = _pc2[1]
+    else:
+        _probs_all = {}
+        for _a0 in ATTRS:
+            _s0 = [v_at(i, tb, _a0) for i in range(n)]
+            _pat0 = tuple(_s0[idx0 - d + 1: idx0 + 1])
+            _c0 = _C()
+            for _j in range(d - 1, idx0):
+                if tuple(_s0[_j - d + 1: _j + 1]) == _pat0:
+                    _c0[_s0[_j + 1]] += 1
+            if not _c0:
+                continue
+            _tt0 = sum(_c0.values())
+            _u0 = sorted({x for x in _s0 if x})
+            _probs_all[_a0] = {
+                v: (_c0.get(v, 0) + 0.5) / (_tt0 + 0.5 * len(_u0))
+                for v in _u0}
+        st.session_state["_lab_q_allprobs"] = (_pk2, _probs_all)
+
+
     score = {v: 0.0 for v in uni}
     dim_reports = []
     for k in dims:
