@@ -3092,6 +3092,204 @@ def _exp_precise(loader):
 
 
 # =====================================================================
+# 实验 Q：属性融合推荐（属性口径 + 明细 + 报告）
+# =====================================================================
+def _exp_attr_fusion(loader):
+    import math as _m
+    from collections import Counter as _C, defaultdict as _dd
+    st.markdown("#### 实验 Q：属性融合推荐（结果用属性表达）")
+    st.info("推荐结果是「属性值」：选生肖就推生肖、选尾数就推 X尾、"
+            "选 3 模就推 3余X；下方有每一条的匹配期号，可逐条核对。")
+
+    data = _load_index6(loader)
+    amap = _load_attr_map(loader)
+    zodiac = {r[0]: r[1:8] for r in _load_zodiac(loader)}
+    zattrs = _load_zodiac_attrs(loader)
+    if not data:
+        st.error("缺少 _index.csv")
+        return
+    periods = [p2 for p2, _ in data]
+    n = len(data)
+    nball = len(data[0][1])
+
+    ATTRS = ["生肖", "尾数", "3模", "数字合", "四宝", "物象", "方位",
+             "生肖五行", "波色", "单双", "门数", "段数"]
+
+    def label(v, attr):
+        if attr == "尾数":
+            return f"{v}尾"
+        if attr == "3模":
+            return f"3余{v}"
+        if attr == "数字合":
+            return v if str(v).endswith("合") else f"{v}合"
+        return str(v)
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        tb = st.selectbox("目标球位", list(range(1, nball + 1)), index=0,
+                          key="lab_q_ball")
+    with c2:
+        tattr = st.selectbox("目标属性（结果就用这个属性表达）", ATTRS,
+                             index=0, key="lab_q_tattr")
+    with c3:
+        pick = st.selectbox("预测期号", list(reversed(periods)), index=0,
+                            key="lab_q_pick")
+
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        depth = st.number_input("联动行数", 1, 6, 1, 1, key="lab_q_depth")
+    with c5:
+        kk = st.number_input("推荐几个属性值", 1, 6, 3, 1, key="lab_q_k")
+    with c6:
+        bt = st.number_input("回测期数", 100, 3000, 1000, 100,
+                             key="lab_q_bt")
+
+    base_balls = st.multiselect("基准球位", list(range(1, nball + 1)),
+                                default=[1], key="lab_q_balls")
+    used = st.multiselect("参与融合的属性", ATTRS,
+                          default=["尾数", "方位", "四宝"], key="lab_q_attrs")
+    if not base_balls or not used:
+        st.warning("请至少选 1 个基准球位和 1 个融合属性")
+        return
+
+    def v_at(i, ball, attr):
+        val = _attr_of(data[i], ball, attr, zodiac, zattrs, amap)
+        return str(val) if val is not None else ""
+
+    d = int(depth)
+    dims = [(b, a) for b in base_balls for a in used]
+    seqs = {k: [v_at(i, k[0], k[1]) for i in range(n)] for k in dims}
+    tseq = [v_at(i, tb, tattr) for i in range(n)]
+    uni = sorted({x for x in tseq if x})
+    # 各球位号码区间（经验区间）
+    lo, hi = BALL_RANGES.get(int(tb), (int(tb), 43 + int(tb)))
+
+    def build_tables(upto):
+        tabs = {k: _dd(_C) for k in dims}
+        for i in range(1, upto + 1):
+            if i >= d:
+                for k in dims:
+                    tabs[k][tuple(seqs[k][i - d: i])][tseq[i]] += 1
+        return tabs
+
+    def dim_match(k, i, tabs):
+        pat = tuple(seqs[k][i - d + 1: i + 1])
+        return tabs[k].get(pat), pat
+
+    idx0 = periods.index(pick)
+    tabs = build_tables(idx0)
+    score = {v: 0.0 for v in uni}
+    dim_reports = []
+    for k in dims:
+        c, pat = dim_match(k, idx0, tabs)
+        if not c:
+            dim_reports.append({"维度": f"第{k[0]}球{k[1]}",
+                                "排列": " → ".join(pat),
+                                "匹配期数": 0, "最偏向": "—"})
+            continue
+        tot = sum(c.values())
+        for v in uni:
+            score[v] += _m.log((c.get(v, 0) + 0.5) / (tot + 0.5 * len(uni)))
+        top = c.most_common(3)
+        dim_reports.append({"维度": f"第{k[0]}球{k[1]}",
+                            "排列": " → ".join(pat),
+                            "匹配期数": tot,
+                            "最偏向": "、".join(f"{label(v, tattr)}({x}次)"
+                                             for v, x in top)})
+
+    ranked = sorted(score.items(), key=lambda z: -z[1])[:int(kk)]
+
+    st.markdown(f"### 推荐（{pick} 之后，第{tb}球 {tattr}）")
+    _ZOD = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
+
+    def _num_attr(x):
+        """号码 x 在第 idx0 期所属年的属性值"""
+        if tattr == "生肖":
+            zrow = zodiac.get(periods[idx0])
+            if not zrow:
+                return ""
+            z0, n0 = zrow[0], data[idx0][1][0]
+            if z0 not in _ZOD:
+                return ""
+            off = (_ZOD.index(z0) - (n0 - 1)) % 12
+            return _ZOD[(int(x) - 1 + off) % 12]
+        if tattr == "尾数":
+            return str(int(x) % 10)
+        if tattr == "3模":
+            return str(int(x) % 3)
+        return amap.get(int(x), {}).get(tattr, "")
+
+    rows = []
+    for v, s in ranked:
+        nums = [x for x in range(lo, hi + 1) if _num_attr(x) == v]
+        rows.append({"属性值": label(v, tattr), "得分": round(s, 2),
+                     "对应号码": "、".join(str(x) for x in nums) or "—"})
+    st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                 hide_index=True)
+    st.success("推荐属性值：" + "、".join(label(v, tattr) for v, _ in ranked))
+
+    with st.expander("🔍 各属性匹配明细（可逐条核对）", expanded=False):
+        st.dataframe(pd.DataFrame(dim_reports), use_container_width=True,
+                     hide_index=True)
+        for k in dims:
+            c, pat = dim_match(k, idx0, tabs)
+            if not c:
+                continue
+            hits = []
+            for j in range(d - 1, idx0):
+                if tuple(seqs[k][j - d + 1: j + 1]) == pat:
+                    hits.append({"历史触发期": periods[j],
+                                 "下一期": periods[j + 1],
+                                 "下一期目标值": label(tseq[j + 1], tattr)})
+            with st.expander(f"第{k[0]}球{k[1]}：{len(hits)} 条匹配", expanded=False):
+                if hits:
+                    st.dataframe(pd.DataFrame(hits[::-1][:100]),
+                                 use_container_width=True, hide_index=True)
+                else:
+                    st.caption("无匹配")
+
+    # ---------- 回测 ----------
+    if st.button("▶ 回测这套推荐", key="lab_q_run"):
+        start = max(300, n - int(bt))
+        tabs2 = {k: _dd(_C) for k in dims}
+        ok = tot = 0
+        detail = []
+        for i in range(start, n - 1):
+            if i >= d:
+                for k in dims:
+                    tabs2[k][tuple(seqs[k][i - d: i])][tseq[i]] += 1
+            sc = {v: 0.0 for v in uni}
+            for k in dims:
+                c, _pat = dim_match(k, i, tabs2)
+                if not c:
+                    continue
+                tt = sum(c.values())
+                for v in uni:
+                    sc[v] += _m.log((c.get(v, 0) + 0.5) / (tt + 0.5 * len(uni)))
+            rk = sorted(sc.items(), key=lambda z: -z[1])[:int(kk)]
+            vals = {v for v, _ in rk}
+            if not vals:
+                continue
+            tot += 1
+            act = tseq[i + 1]
+            ok += 1 if act in vals else 0
+            detail.append({"期号": periods[i + 1], "推荐": "、".join(
+                label(v, tattr) for v in vals),
+                "实开": label(act, tattr), "命中": "★" if act in vals else ""})
+        if tot:
+            m1, m2 = st.columns(2)
+            m1.metric("命中率", f"{ok/tot*100:.1f}%", f"{ok}/{tot}")
+            m2.metric("随机基线",
+                      f"{min(1.0, int(kk)/max(1,len(uni)))*100:.1f}%")
+            st.dataframe(pd.DataFrame(detail[::-1][:300]),
+                         use_container_width=True, hide_index=True,
+                         height=300)
+
+    st.caption("说明：推荐值用目标属性表达；对应号码按球位区间换算，"
+               "最终仍可交给系统转成具体数字下注。")
+
+
+# =====================================================================
 # 保存 / 清理
 # =====================================================================
 def _save(loader, title, text):
@@ -3290,11 +3488,12 @@ def render(df_data, H):
             "**其它标签**：A 单条件杀号 / B 组合池 / C 数字串匹配，"
             "都是独立实验，互不影响。")
 
-    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tab4, tab3 = st.tabs(
+    tabd, tab2, tabh, tabi, tabj, tabk, tabl, tabm, tabn, tabo, tabq, tab4, tab3 = st.tabs(
         ["📖 说明书", "实验B 组合池", "实验H 六码中三",
          "实验I 加注模拟", "实验J 属性杀号", "实验K 追热追冷",
          "实验L 简单版", "实验M 跨球联动", "实验N 自由联动",
-         "实验O 融合评分", "结论档案", "清理"])
+         "实验O 融合评分", "实验Q 属性推荐", "结论档案",
+         "清理"])
     with tabd:
         _exp_docs()
     with tab2:
@@ -3315,6 +3514,8 @@ def render(df_data, H):
         _exp_flex(H)
     with tabo:
         _exp_fusion(H)
+    with tabq:
+        _exp_attr_fusion(H)
     # 实验P 已独立成「🎯 精准选号」页
     with tab4:
         _archive()
