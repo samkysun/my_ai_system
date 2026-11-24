@@ -3750,7 +3750,19 @@ def _exp_attr_fusion(loader):
     for _a in ATTRS:
         _pp = _probs_all.get(_a)
         if not _pp:
-            continue
+            # 兜底：该属性没有缓存时，现场算一次
+            _s9 = [v_at(i, tb, _a) for i in range(n)]
+            _cur9 = _s9[idx0] if idx0 < len(_s9) else ""
+            _c9 = _C()
+            for _j9 in range(max(0, idx0 - 3000), idx0):
+                if _s9[_j9] == _cur9:
+                    _c9[_s9[_j9 + 1]] += 1
+            if not _c9:
+                continue
+            _tt9 = sum(_c9.values())
+            _u9 = sorted({x for x in _s9 if x})
+            _pp = {v: (_c9.get(v, 0) + 0.5) / (_tt9 + 0.5 * len(_u9))
+                   for v in _u9}
         _kkx = int(_kmap.get(_a, 3))
         for _v, _ in sorted(_pp.items(), key=lambda z: -z[1])[:_kkx]:
             _val_opts.append(f"{_a}|{_v}")
