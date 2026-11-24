@@ -246,6 +246,11 @@ except Exception:
     render_roulette = None
 
 try:
+    from fusion_attr_page import render as render_fusion_attr
+except Exception:
+    render_fusion_attr = None
+
+try:
     from combo8_page import render as render_combo8
 except Exception:
     render_combo8 = None
@@ -6093,7 +6098,7 @@ def main_app():
         st.divider()
 
         menu_options = ["📊 主控台"]
-        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统", "🎯 精准选号", "🎯 8码复式"])
+        if is_admin or is_vip: menu_options.extend(["📐 多维分析", "🔗 深度联动", "🧠 AI推演", "📉 遗漏统计", "🧮 计算中心", "🔀 升降交集", "🎯 三码组合池", "🤖 全自动智能分析", "🔬 研究中心", "🎡 轮盘系统", "🎯 精准选号", "🎯 8码复式", "🧬 属性融合"])
         if is_admin: menu_options.append("⚙️ 后台管理")
 
         page = st.radio("导航菜单", menu_options)
@@ -6109,6 +6114,15 @@ def main_app():
                                        "supabase": get_supabase_client})
         else:
             st.error("roulette_page.py 未找到")
+    elif page == "🧬 属性融合":
+        if render_fusion_attr is None:
+            st.error("fusion_attr_page.py 未找到")
+        else:
+            render_fusion_attr(df_data, {"load_excel_data": load_excel_data,
+                                            "board_add": _board_add,
+                                            "gh_read": _gh_read_text,
+                                            "gh_write": _gh_write_text,
+                                            "supabase": get_supabase_client})
     elif page == "🎯 8码复式":
         if render_combo8 is None:
             st.error("combo8_page.py 未找到")
