@@ -3275,6 +3275,18 @@ def _exp_attr_fusion(loader):
     st.markdown("### 多属性推荐叠加（逐个属性出报告，最后汇总）")
     multi_attrs = st.multiselect("要逐个测的属性", ATTRS,
                                  default=[tattr], key="lab_q_multi")
+    _kmap = {}
+    if multi_attrs:
+        st.caption("各属性推荐个数（可分别设置）")
+        _cols = st.columns(min(4, len(multi_attrs)))
+        for _i2, _a2 in enumerate(multi_attrs):
+            with _cols[_i2 % len(_cols)]:
+                _kmap[_a2] = st.number_input(
+                    f"{_a2} 推荐几个", 1, 8,
+                    3 if _a2 in ("生肖", "尾数", "数字合") else 2,
+                    1, key=f"lab_q_k_{_a2}")
+        _final_n = st.number_input("最终号码个数", 1, 12, 5, 1,
+                                   key="lab_q_finaln")
     if multi_attrs and st.button("▶ 生成叠加报告", key="lab_q_multi_run"):
         acc_num = {}
         acc_val = []
@@ -3292,11 +3304,12 @@ def _exp_attr_fusion(loader):
                 for v in _uni:
                     _sc[v] += _m.log((_c.get(v, 0) + 0.5)
                                      / (_tt + 0.5 * len(_uni)))
-            _rk = sorted(_sc.items(), key=lambda z: -z[1])[:int(kk)]
+            _kk2 = int(_kmap.get(_a, int(kk)))
+            _rk = sorted(_sc.items(), key=lambda z: -z[1])[:_kk2]
             st.markdown(f"#### ========= {periods[idx0]}期 升序 第{tb}球 "
                         f"{_a} 推荐 =========")
             st.write("推荐：" + "、".join(label(v, _a) for v, _ in _rk)
-                     + f"　（取前 {int(kk)} 个）")
+                     + f"　（取前 {_kk2} 个）")
             _rows = []
             for v, s in _rk:
                 if _a == "生肖":
@@ -3334,7 +3347,7 @@ def _exp_attr_fusion(loader):
                 [{"号码": x, "被推荐次数": c,
                   "覆盖属性数": len(multi_attrs)} for x, c in rank]),
                 use_container_width=True, hide_index=True)
-            top_n = rank[:int(kk)]
+            top_n = rank[:int(_final_n)]
             st.success("最终号码（推荐次数最多）："
                        + "、".join(str(x) for x, _ in top_n))
             _pkg["号码累计"] = {str(x): c for x, c in rank}
